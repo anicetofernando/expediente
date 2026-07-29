@@ -1,0 +1,292 @@
+"use client";
+
+import * as React from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import {
+  ArrowLeft,
+  ArrowRight,
+  CheckCircle2,
+  FilePlus2,
+  FileStack,
+  FolderOpen,
+  Save,
+  Send,
+  X,
+} from "lucide-react";
+import { PageHeader } from "@/components/shared/page-header";
+import { Stepper } from "@/components/shared/stepper";
+import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/shared/confirm-dialog";
+import { useToast } from "@/hooks/use-toast";
+import { useCatalogs } from "@/lib/catalogs";
+import type { Confidentiality, Priority } from "@/types";
+import {
+  initialWizardState,
+  type StampChoice,
+  type WizardState,
+} from "@/components/expedients/wizard/types";
+import { StepBasicInfo } from "@/components/expedients/wizard/step-basic-info";
+import { StepDocumentOrigin } from "@/components/expedients/wizard/step-document-origin";
+import { StepDocument } from "@/components/expedients/wizard/step-document";
+import { StepAttachments } from "@/components/expedients/wizard/step-attachments";
+import { StepStampSignature } from "@/components/expedients/wizard/step-stamp-signature";
+import { StepReview } from "@/components/expedients/wizard/step-review";
+
+const STEPS = [
+  { label: "Dados", description: "Dados gerais" },
+  { label: "Origem", description: "Origem do documento" },
+  { label: "Documento", description: "Documento principal" },
+  { label: "Anexos", description: "Documentos anexos" },
+  { label: "Assinatura", description: "Carimbo e assinatura" },
+  { label: "Revisão", description: "Revisão dos dados" },
+  { label: "Concluir", description: "Confirmação" },
+];
+
+function canProceed(step: number, state: WizardState) {
+  switch (step) {
+    case 0:
+      return !!(
+        state.tipo &&
+        state.unidadeOrigem &&
+        state.remetente &&
+        state.destinatario &&
+        state.assunto &&
+        state.prioridade &&
+        state.confidencialidade &&
+        state.prazo
+      );
+    case 1:
+      return !!state.origemDocumento;
+    case 2:
+      if (state.origemDocumento === "sistema") return !!state.modeloId;
+      if (state.origemDocumento === "importado" || state.origemDocumento === "digitalizado") {
+        return !!state.ficheiroNome;
+      }
+      return state.origemDocumento === "apenas-processo";
+    case 4:
+      return !!state.carimbo && (state.carimbo !== "escolher" || !!state.carimboId);
+    default:
+      return true;
+  }
+}
+
+function WizardProgress({
+  current,
+  onStepChange,
+}: {
+  current: number;
+  onStepChange?: (index: number) => void;
+}) {
+  return (
+    <div className="border-b border-graphite-200 bg-graphite-50 px-4 py-3 sm:px-5 lg:px-7">
+      <Stepper steps={STEPS} current={current} onStepChange={onStepChange} />
+    </div>
+  );
+}
+
+export default function NovoExpedientePage() {
+  const router = useRouter();
+  const { toast } = useToast();
+  const {
+    catalogReady,
+    organizationalUnits,
+    priorities,
+    confidentialities,
+    stampChoices,
+  } = useCatalogs();
+  const [step, setStep] = React.useState(0);
+  const [state, setState] = React.useState<WizardState>(initialWizardState);
+  const [cancelOpen, setCancelOpen] = React.useState(false);
+  const [submitted, setSubmitted] = React.useState<null | { protocolo: string; rascunho: boolean }>(null);
+  const defaultsApplied = React.useRef(false);
+
+  const createInitialState = React.useCallback((): WizardState => {
+    const priority =
+      priorities.find((item) => item.active && item.isDefault) ??
+      priorities.find((item) => item.active);
+    const confidentiality =
+      confidentialities.find((item) => item.active && item.isDefault) ??
+      confidentialities.find((item) => item.active);
+    const stampChoice =
+      stampChoices.find((item) => item.active && item.isDefault) ??
+      stampChoices.find((item) => item.active);
+
+    return {
+      ...initialWizardState,
+      prioridade: (priority?.code ?? "") as Priority | "",
+      confidencialidade: (confidentiality?.code ?? "") as Confidentiality | "",
+      carimbo: (stampChoice?.code ?? "") as StampChoice | "",
+    };
+  }, [confidentialities, priorities, stampChoices]);
+
+  React.useEffect(() => {
+    if (!catalogReady || defaultsApplied.current) return;
+    defaultsApplied.current = true;
+    setState((current) => {
+      const defaults = createInitialState();
+      return {
+        ...current,
+        prioridade: current.prioridade || defaults.prioridade,
+        confidencialidade: current.confidencialidade || defaults.confidencialidade,
+        carimbo: current.carimbo || defaults.carimbo,
+      };
+    });
+  }, [catalogReady, createInitialState]);
+
+  function update(patch: Partial<WizardState>) {
+    setState((previous) => ({ ...previous, ...patch }));
+  }
+
+  function generateProtocolo() {
+    const sigla =
+      organizationalUnits.find((unit) => unit.id === state.unidadeOrigem)?.sigla ||
+      "SG";
+    const number = Math.floor(500 + Math.random() * 400);
+    return `CFM/${sigla}/2026/${String(number).padStart(4, "0")}`;
+  }
+
+  function handleSaveDraft() {
+    toast({ title: "Rascunho guardado", variant: "success" });
+    setSubmitted({ protocolo: generateProtocolo(), rascunho: true });
+    setStep(6);
+  }
+
+  function handleSubmit() {
+    toast({ title: "Expediente submetido", variant: "success" });
+    setSubmitted({ protocolo: generateProtocolo(), rascunho: false });
+    setStep(6);
+  }
+
+  if (submitted) {
+    return (
+      <div className="flex min-h-full flex-col">
+        <PageHeader
+          title="Novo expediente"
+          breadcrumb={[{ label: "Expediente" }, { label: "Novo expediente" }]}
+        />
+
+        <div className="mx-auto flex w-full max-w-[1600px] flex-1 px-3 py-3 sm:px-4 lg:px-5 lg:py-4 2xl:px-6">
+          <section className="flex min-h-[520px] w-full flex-col border border-graphite-300 bg-white">
+            <WizardProgress current={6} />
+
+            <div className="flex flex-1 items-center justify-center px-5 py-10">
+              <div className="w-full max-w-xl text-center">
+                <div className="mx-auto mb-4 flex size-12 items-center justify-center border border-navy-200 bg-navy-50 text-navy-800">
+                  <CheckCircle2 className="size-6" />
+                </div>
+                <h2 className="text-lg font-semibold text-graphite-900">
+                  {submitted.rascunho ? "Rascunho guardado" : "Expediente submetido"}
+                </h2>
+                <p className="mt-1.5 text-[13px] text-graphite-500">
+                  {submitted.rascunho
+                    ? "Pode continuar a edição em Meus expedientes."
+                    : "O processo foi encaminhado para recepção e protocolo."}
+                </p>
+                <div className="mx-auto mt-5 inline-flex items-center gap-2 border border-graphite-200 bg-graphite-50 px-4 py-2.5">
+                  <FileStack className="size-4 text-graphite-500" />
+                  <span className="text-[13px] font-semibold tabular-nums text-graphite-800">
+                    {submitted.protocolo}
+                  </span>
+                </div>
+                <div className="mt-7 flex flex-col justify-center gap-2 sm:flex-row">
+                  <Button
+                    variant="secondary"
+                    onClick={() => {
+                      setState(createInitialState());
+                      setSubmitted(null);
+                      setStep(0);
+                    }}
+                  >
+                    <FilePlus2 className="size-3.5" />
+                    Criar outro
+                  </Button>
+                  <Button asChild>
+                    <Link href="/expedientes/meus">
+                      <FolderOpen className="size-3.5" />
+                      Meus expedientes
+                    </Link>
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex min-h-full flex-col">
+      <PageHeader
+        title="Novo expediente"
+        breadcrumb={[{ label: "Expediente" }, { label: "Novo expediente" }]}
+        actions={
+          <Button variant="toolbar" size="sm" onClick={() => setCancelOpen(true)}>
+            <X className="size-3.5" />
+            Cancelar
+          </Button>
+        }
+      />
+
+      <div className="mx-auto flex w-full max-w-[1600px] flex-1 px-3 py-3 sm:px-4 lg:px-5 lg:py-4 2xl:px-6">
+        <section className="flex min-h-[520px] w-full flex-col border border-graphite-300 bg-white">
+          <WizardProgress current={step} onStepChange={setStep} />
+
+          <div className="flex-1 px-5 py-5 sm:px-6 lg:px-8 lg:py-6 xl:px-10">
+            {step === 0 && <StepBasicInfo state={state} update={update} />}
+            {step === 1 && <StepDocumentOrigin state={state} update={update} />}
+            {step === 2 && <StepDocument state={state} update={update} />}
+            {step === 3 && <StepAttachments state={state} update={update} />}
+            {step === 4 && <StepStampSignature state={state} update={update} />}
+            {step === 5 && <StepReview state={state} update={update} />}
+          </div>
+
+          <footer className="sticky bottom-0 z-10 flex flex-col-reverse gap-2 border-t border-graphite-200 bg-white/95 px-5 py-3 backdrop-blur-sm sm:flex-row sm:items-center sm:justify-between lg:px-8">
+            <Button
+              variant="secondary"
+              disabled={step === 0}
+              onClick={() => setStep((current) => Math.max(0, current - 1))}
+            >
+              <ArrowLeft className="size-3.5" />
+              Anterior
+            </Button>
+
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              {step === 5 ? (
+                <>
+                  <Button variant="secondary" onClick={handleSaveDraft}>
+                    <Save className="size-3.5" />
+                    Guardar rascunho
+                  </Button>
+                  <Button onClick={handleSubmit}>
+                    <Send className="size-3.5" />
+                    Submeter expediente
+                  </Button>
+                </>
+              ) : (
+                <Button
+                  disabled={!canProceed(step, state)}
+                  onClick={() => setStep((current) => Math.min(5, current + 1))}
+                >
+                  Seguinte
+                  <ArrowRight className="size-3.5" />
+                </Button>
+              )}
+            </div>
+          </footer>
+        </section>
+      </div>
+
+      <ConfirmDialog
+        open={cancelOpen}
+        onOpenChange={setCancelOpen}
+        title="Cancelar novo expediente"
+        description="Os dados não guardados serão perdidos."
+        confirmLabel="Cancelar expediente"
+        destructive
+        onConfirm={() => router.push("/expedientes")}
+      />
+    </div>
+  );
+}

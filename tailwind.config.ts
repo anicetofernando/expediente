@@ -1,0 +1,155 @@
+import type { Config } from "tailwindcss";
+
+const config: Config = {
+  darkMode: "class",
+  content: [
+    "./app/**/*.{ts,tsx}",
+    "./components/**/*.{ts,tsx}",
+    "./config/**/*.{ts,tsx}",
+    "./data/**/*.{ts,tsx}",
+    "./hooks/**/*.{ts,tsx}",
+    "./lib/**/*.{ts,tsx}",
+  ],
+  theme: {
+    extend: {
+      fontFamily: {
+        sans: ["var(--font-inter)", "Segoe UI", "system-ui", "sans-serif"],
+      },
+      colors: {
+        // Verde ferroviário CFM: marca, navegação e acções primárias.
+        cfm: {
+          50: "#eef8f2",
+          100: "#d7efe0",
+          200: "#adddc0",
+          300: "#7bc49a",
+          400: "#419f6a",
+          500: "#278b57",
+          600: "#197144",
+          700: "#105b36",
+          800: "#0b472a",
+          900: "#073620",
+          950: "#041f13",
+        },
+        // Azul profundo de apoio: hierarquia, informação e contexto.
+        navy: {
+          50: "#f0f4f8",
+          100: "#dfe8f1",
+          200: "#bed0e1",
+          300: "#92aec8",
+          400: "#6288ac",
+          500: "#456b91",
+          600: "#355576",
+          700: "#263f60",
+          800: "#18304f",
+          900: "#0d2038",
+          950: "#071321",
+        },
+        // Neutros frios: canvas, superfícies, divisórias e texto.
+        graphite: {
+          25: "#fcfdfe",
+          50: "#f4f7f9",
+          100: "#eaf0f4",
+          150: "#e1e8ed",
+          200: "#d3dce3",
+          300: "#aab7c2",
+          400: "#63737f",
+          500: "#536471",
+          600: "#40515f",
+          700: "#30404d",
+          800: "#1f2d38",
+          900: "#111c25",
+          950: "#081119",
+        },
+        // Perigo, erro e acções destrutivas; não usar como cor de marca.
+        crimson: {
+          50: "#fff1f3",
+          100: "#ffe0e4",
+          200: "#f8bac3",
+          300: "#ec8795",
+          400: "#d44b5d",
+          500: "#b4253a",
+          600: "#a11f34",
+          700: "#931b2e",
+          800: "#751526",
+          900: "#5a111e",
+          950: "#3d0a13",
+        },
+        // Estados positivos, num verde-azulado distinto da marca.
+        success: {
+          50: "#edf9f7",
+          100: "#d5f0ec",
+          200: "#abe1d8",
+          300: "#75c9bc",
+          400: "#3fa99a",
+          500: "#238b7e",
+          600: "#196f66",
+          700: "#155952",
+          800: "#12463f",
+          900: "#0d352f",
+        },
+        // Alertas e pendências.
+        amber: {
+          50: "#fff8e8",
+          100: "#fcebc4",
+          200: "#f5d486",
+          300: "#eab84c",
+          400: "#d29422",
+          500: "#a6630e",
+          600: "#874d0b",
+          700: "#6a3b09",
+          800: "#512e08",
+          900: "#3b2207",
+        },
+        // Azul corporativo: informação e processos em curso.
+        info: {
+          50: "#eff6fc",
+          100: "#ddecf8",
+          200: "#b9d8f0",
+          300: "#89bce2",
+          400: "#579dd3",
+          500: "#337ebb",
+          600: "#25679e",
+          700: "#1e507d",
+          800: "#193f63",
+          900: "#14324f",
+        },
+      },
+      boxShadow: {
+        xs: "none",
+        sm: "none",
+        card: "none",
+        popover: "none",
+        modal: "none",
+      },
+      borderRadius: {
+        sm: "2px",
+        DEFAULT: "2px",
+        md: "3px",
+        lg: "3px",
+        xl: "3px",
+        "2xl": "3px",
+        "3xl": "3px",
+      },
+      fontSize: {
+        "2xs": ["0.6875rem", { lineHeight: "1rem" }],
+      },
+      keyframes: {
+        "fade-in": { from: { opacity: "0" }, to: { opacity: "1" } },
+        "slide-in-right": { from: { transform: "translateX(100%)" }, to: { transform: "translateX(0)" } },
+        "slide-in-top": { from: { opacity: "0", transform: "translateY(-4px)" }, to: { opacity: "1", transform: "translateY(0)" } },
+        "accordion-down": { from: { height: "0" }, to: { height: "var(--radix-accordion-content-height)" } },
+        "accordion-up": { from: { height: "var(--radix-accordion-content-height)" }, to: { height: "0" } },
+      },
+      animation: {
+        "fade-in": "fade-in 0.15s ease-out",
+        "slide-in-right": "slide-in-right 0.22s cubic-bezier(0.16, 1, 0.3, 1)",
+        "slide-in-top": "slide-in-top 0.15s ease-out",
+        "accordion-down": "accordion-down 0.2s ease-out",
+        "accordion-up": "accordion-up 0.2s ease-out",
+      },
+    },
+  },
+  plugins: [],
+};
+
+export default config;

@@ -1,0 +1,93 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: light;
+    accent-color: theme("colors.cfm.700");
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    min-height: 100%;
+    background: theme("colors.graphite.50");
+    scrollbar-color: theme("colors.graphite.300") transparent;
+    scrollbar-width: thin;
+  }
+
+  body {
+    @apply bg-graphite-50 text-graphite-900 antialiased;
+    min-height: 100vh;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    font-synthesis: none;
+    text-rendering: optimizeLegibility;
+  }
+
+  ::selection {
+    @apply bg-cfm-200 text-cfm-950;
+  }
+
+  ::-moz-selection {
+    @apply bg-cfm-200 text-cfm-950;
+  }
+
+  * {
+    @apply border-graphite-200;
+    scrollbar-color: theme("colors.graphite.300") transparent;
+    scrollbar-width: thin;
+  }
+
+  :focus-visible {
+    outline: 2px solid theme("colors.cfm.400") !important;
+    outline-offset: 2px !important;
+  }
+
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    min-height: 32px;
+    border: 2px solid transparent;
+    border-radius: 3px;
+    background-color: theme("colors.graphite.300");
+    background-clip: content-box;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: theme("colors.graphite.400");
+  }
+
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      scroll-behavior: auto !important;
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+@layer utilities {
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+  .scrollbar-none {
+    scrollbar-width: none;
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+}
