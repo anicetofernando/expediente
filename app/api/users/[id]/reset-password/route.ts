@@ -1,0 +1,5 @@
+import { NextResponse } from "next/server";
+import { audit,getCurrentSession } from "@/lib/auth";
+import { query } from "@/lib/db";
+import { hashPassword } from "@/lib/password";
+export async function POST(_:Request,{params}:{params:{id:string}}){const session=await getCurrentSession();if(!session||session.perfilNavegacao!=="administracao")return NextResponse.json({error:"Acesso negado."},{status:403});const hash=await hashPassword("CFM@2026!");await query("UPDATE users SET password_hash=$2,must_change_password=true,failed_login_attempts=0,locked_until=NULL WHERE id=$1",[params.id,hash]);await audit({userId:session.user.id,action:"Palavra-passe redefinida",entityType:"Utilizador",entityId:params.id});return NextResponse.json({ok:true});}

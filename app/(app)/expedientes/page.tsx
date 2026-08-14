@@ -1,6 +1,4 @@
-import { PageHeader } from "@/components/shared/page-header";
-import { ExpedientTable } from "@/components/expedients/expedient-table";
-import { allExpedients } from "@/data/expedients";
+import { PersistentExpedientList } from "@/components/expedients/persistent-expedient-list";
 
 export const metadata = { title: "Todos os expedientes" };
 
@@ -11,13 +9,5 @@ export default function ExpedientesPage({
 }) {
   const initialSearch = Array.isArray(searchParams?.q) ? searchParams?.q[0] ?? "" : searchParams?.q ?? "";
 
-  return (
-    <div className="flex h-full min-h-0 flex-col">
-      <PageHeader
-        title="Todos os expedientes"
-        description={`${allExpedients.length} processos registados no sistema`}
-      />
-      <ExpedientTable data={allExpedients} initialSearch={initialSearch} />
-    </div>
-  );
+  return <PersistentExpedientList view="all" title="Todos os expedientes" description="{count} processos registados no sistema" initialSearch={initialSearch} breadcrumb={false} />;
 }

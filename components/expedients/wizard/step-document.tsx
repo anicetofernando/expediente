@@ -1,11 +1,12 @@
 "use client";
 
 import { UploadCloud, ScanLine, FileText, CheckCircle2, FolderOpen, RefreshCw } from "lucide-react";
-import { Label, Textarea } from "@/components/ui/input";
+import { Label } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { useCatalogs } from "@/lib/catalogs";
 import type { StepProps } from "./types";
+import { LetterEditor } from "@/components/documents/letter-editor";
 
 export function StepDocument({ state, update }: StepProps) {
   const { documentTemplates } = useCatalogs();
@@ -27,13 +28,8 @@ export function StepDocument({ state, update }: StepProps) {
           {template && <p className="mt-1.5 text-2xs text-graphite-500">{template.descricao} · {template.camposCount} campos</p>}
 
           <div className="mt-3.5">
-            <Label>Conteúdo do documento</Label>
-            <Textarea
-              className="min-h-[360px] resize-y"
-              placeholder="Escreva ou edite o conteúdo do documento…"
-              value={state.conteudo}
-              onChange={(e) => update({ conteudo: e.target.value })}
-            />
+            <Label required>Conteúdo da carta</Label>
+            <LetterEditor value={state.conteudo} onChange={(conteudo) => update({ conteudo })} title={template?.nome} />
           </div>
         </section>
 
@@ -43,9 +39,7 @@ export function StepDocument({ state, update }: StepProps) {
             <div className="mx-auto min-h-full max-w-[390px] border border-graphite-200 bg-white px-7 py-6 text-2xs">
               <p className="text-center text-[11px] font-semibold uppercase tracking-wide text-navy-800">CFM — Portos e Caminhos de Ferro de Moçambique</p>
               <p className="mt-1 text-center text-2xs text-graphite-400">{template?.nome ?? "Modelo de documento"}</p>
-              <div className="mt-6 whitespace-pre-wrap text-[11px] leading-relaxed text-graphite-700">
-                {state.conteudo || "O conteúdo do documento será apresentado nesta área."}
-              </div>
+              {state.conteudo ? <div className="mt-6 text-[11px] leading-relaxed text-graphite-700" dangerouslySetInnerHTML={{ __html: state.conteudo }} /> : <div className="mt-6 text-[11px] text-graphite-400">O conteúdo do documento será apresentado nesta área.</div>}
             </div>
           </div>
         </section>
@@ -69,7 +63,7 @@ export function StepDocument({ state, update }: StepProps) {
               accept=".pdf,.docx,image/*"
               onChange={(e) => {
                 const file = e.target.files?.[0];
-                if (file) update({ ficheiroNome: file.name, numPaginas: Math.max(1, Math.round(file.size / 90000)) });
+                if (file) update({ ficheiro: file, ficheiroNome: file.name, numPaginas: Math.max(1, Math.round(file.size / 90000)) });
               }}
             />
           </label>
@@ -91,7 +85,7 @@ export function StepDocument({ state, update }: StepProps) {
               <span className="inline-flex items-center gap-1.5 text-xs text-graphite-600">
                 <CheckCircle2 className="size-3.5 text-navy-700" /> Validado
               </span>
-              <Button variant="secondary" size="sm" className="justify-self-start sm:justify-self-end" onClick={() => update({ ficheiroNome: "", numPaginas: 0 })}>
+              <Button variant="secondary" size="sm" className="justify-self-start sm:justify-self-end" onClick={() => update({ ficheiro: undefined, ficheiroNome: "", numPaginas: 0 })}>
                 <RefreshCw className="size-3.5" /> Substituir
               </Button>
             </div>
@@ -110,9 +104,12 @@ export function StepDocument({ state, update }: StepProps) {
               <ScanLine className="size-5" />
             </span>
             <p className="text-[13px] font-medium text-graphite-800">Digitalizador disponível</p>
-            <p className="text-xs text-graphite-500">Coloque o documento no equipamento e inicie a captura.</p>
-            <Button variant="secondary" onClick={() => update({ ficheiroNome: "Digitalização_" + new Date().toISOString().slice(0, 10) + ".pdf", numPaginas: 2 })}>
-              <ScanLine className="size-3.5" /> Iniciar digitalização
+            <p className="text-xs text-graphite-500">Seleccione o PDF ou imagem produzido pelo digitalizador.</p>
+            <Button asChild variant="secondary">
+              <label className="cursor-pointer">
+                <ScanLine className="size-3.5" /> Importar digitalização
+                <input type="file" className="hidden" accept=".pdf,image/jpeg,image/png" onChange={(event) => { const file=event.target.files?.[0]; if(file) update({ficheiro:file,ficheiroNome:file.name,numPaginas:Math.max(1,Math.round(file.size/90000))}); }} />
+              </label>
             </Button>
           </div>
         ) : (
@@ -133,7 +130,7 @@ export function StepDocument({ state, update }: StepProps) {
               <span className="inline-flex items-center gap-1.5 text-xs text-graphite-600">
                 <CheckCircle2 className="size-3.5 text-navy-700" /> Concluído
               </span>
-              <Button variant="secondary" size="sm" className="justify-self-start sm:justify-self-end" onClick={() => update({ ficheiroNome: "", numPaginas: 0 })}>
+              <Button variant="secondary" size="sm" className="justify-self-start sm:justify-self-end" onClick={() => update({ ficheiro: undefined, ficheiroNome: "", numPaginas: 0 })}>
                 <RefreshCw className="size-3.5" /> Digitalizar novamente
               </Button>
             </div>

@@ -92,7 +92,7 @@ export function ProtocolarDialog({
               {expedient.remetente.nome} · {expedient.unidadeOrigem} · Entrada em {formatDate(expedient.dataEntrada)}
             </p>
             <p className="mt-2 flex items-center gap-1.5 font-medium text-cfm-800">
-              <Stamp className="size-3.5" /> Número simulado: <span className="font-semibold">{numero}</span>
+              <Stamp className="size-3.5" /> Número previsto: <span className="font-semibold">{numero}</span>
             </p>
           </div>
 

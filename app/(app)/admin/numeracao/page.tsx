@@ -44,6 +44,7 @@ import {
 } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
 import { formatDate } from "@/lib/utils";
+import { useDatabaseSetting } from "@/lib/use-database-setting";
 
 interface NumberingSequence {
   id: string;
@@ -155,8 +156,7 @@ function formatNumber(sequence: NumberingSequence, value = sequence.actual) {
 
 export default function NumeracaoPage() {
   const { toast } = useToast();
-  const [sequences, setSequences] =
-    React.useState<NumberingSequence[]>(INITIAL_SEQUENCES);
+  const [sequences, setSequences] = useDatabaseSetting<NumberingSequence[]>("numbering", INITIAL_SEQUENCES);
   const [search, setSearch] = React.useState("");
   const [status, setStatus] = React.useState("todas");
   const [open, setOpen] = React.useState(false);
@@ -238,7 +238,7 @@ export default function NumeracaoPage() {
       description: `${formatNumber(
         sequence,
         next
-      )} foi reservado para demonstração.`,
+      )} foi reservado e guardado no PostgreSQL.`,
       variant: "success",
     });
   }

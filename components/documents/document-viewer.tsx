@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Image from "next/image";
 import {
   ZoomIn, ZoomOut, RotateCw, Download, Printer, Maximize2, FileText, Layers, ChevronLeft, ChevronRight,
 } from "lucide-react";
@@ -8,14 +9,11 @@ import type { ExpedientDocument } from "@/types";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useToast } from "@/hooks/use-toast";
-import { cn } from "@/lib/utils";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 
 type VersionView = "original" | "carimbado" | "final";
 
 export function DocumentViewer({ document: doc }: { document: ExpedientDocument }) {
-  const { toast } = useToast();
   const [zoom, setZoom] = React.useState(100);
   const [rotation, setRotation] = React.useState(0);
   const [page, setPage] = React.useState(1);
@@ -28,8 +26,17 @@ export function DocumentViewer({ document: doc }: { document: ExpedientDocument 
     ...(doc.assinado ? [{ value: "final" as VersionView, label: "Versão final assinada" }] : []),
   ];
 
-  function notImplemented(action: string) {
-    toast({ title: action, description: `${doc.nome} — acção simulada nesta fase de demonstração.` });
+  function printDocument() {
+    if (doc.conteudoHtml) {
+      const popup = window.open("", "_blank", "noopener,noreferrer");
+      if (!popup) return;
+      popup.document.write(`<!doctype html><html><head><title>${doc.nome}</title><style>body{font:12pt Arial;max-width:190mm;margin:15mm auto;line-height:1.5}@media print{body{margin:0}}</style></head><body>${doc.conteudoHtml}</body></html>`);
+      popup.document.close();
+      popup.focus();
+      popup.print();
+      return;
+    }
+    if (doc.downloadUrl) window.open(doc.downloadUrl, "_blank", "noopener,noreferrer");
   }
 
   const Toolbar = (
@@ -78,17 +85,17 @@ export function DocumentViewer({ document: doc }: { document: ExpedientDocument 
           </Select>
         )}
         <SimpleTooltip label="Comparar versões">
-          <Button variant="ghost" size="icon" className="size-7" onClick={() => notImplemented("Comparação de versões")}>
+          <Button variant="ghost" size="icon" className="size-7" disabled={availableVersions.length < 2}>
             <Layers className="size-3.5" />
           </Button>
         </SimpleTooltip>
         <SimpleTooltip label="Descarregar">
-          <Button variant="ghost" size="icon" className="size-7" onClick={() => notImplemented("Descarregamento iniciado")}>
-            <Download className="size-3.5" />
+          <Button asChild variant="ghost" size="icon" className="size-7" disabled={!doc.downloadUrl}>
+            <a href={doc.downloadUrl ?? "#"} download={doc.nome}><Download className="size-3.5" /></a>
           </Button>
         </SimpleTooltip>
         <SimpleTooltip label="Imprimir">
-          <Button variant="ghost" size="icon" className="size-7" onClick={() => notImplemented("Impressão enviada")}>
+          <Button variant="ghost" size="icon" className="size-7" onClick={printDocument} disabled={!doc.downloadUrl && !doc.conteudoHtml}>
             <Printer className="size-3.5" />
           </Button>
         </SimpleTooltip>
@@ -104,12 +111,22 @@ export function DocumentViewer({ document: doc }: { document: ExpedientDocument 
   const Canvas = (
     <div className="flex flex-1 items-center justify-center overflow-auto bg-graphite-100 p-6">
       <div
-        className="flex aspect-[210/297] w-full max-w-md shrink-0 flex-col items-center justify-center gap-3 border border-graphite-300 bg-white p-8 text-center shadow-card transition-transform"
+        className="relative flex aspect-[210/297] w-full max-w-md shrink-0 flex-col overflow-hidden border border-graphite-300 bg-white shadow-card transition-transform"
         style={{ transform: `scale(${zoom / 100}) rotate(${rotation}deg)` }}
       >
-        <FileText className="size-10 text-graphite-300" />
-        <p className="text-[13px] font-medium text-graphite-600">{doc.nome}</p>
-        <p className="text-2xs text-graphite-400">Pré-visualização simulada · Página {page} de {doc.paginas}</p>
+        {doc.conteudoHtml ? (
+          <article className="h-full overflow-auto p-10 text-left text-[11px] leading-relaxed text-graphite-800" dangerouslySetInnerHTML={{ __html: doc.conteudoHtml }} />
+        ) : doc.mimeType?.startsWith("image/") && doc.downloadUrl ? (
+          <Image src={doc.downloadUrl} alt={doc.nome} fill unoptimized sizes="448px" className="object-contain" />
+        ) : doc.mimeType === "application/pdf" && doc.downloadUrl ? (
+          <iframe title={doc.nome} src={`${doc.downloadUrl}#page=${page}&toolbar=0`} className="h-full w-full border-0" />
+        ) : (
+          <div className="flex h-full flex-col items-center justify-center gap-3 p-8 text-center">
+            <FileText className="size-10 text-graphite-300" />
+            <p className="text-[13px] font-medium text-graphite-600">{doc.nome}</p>
+            <p className="text-2xs text-graphite-400">A pré-visualização deste formato não está disponível. Utilize Descarregar.</p>
+          </div>
+        )}
         {version === "carimbado" && (
           <span className="absolute mt-24 rotate-[-8deg] rounded border-2 border-navy-700 px-3 py-1 text-2xs font-bold uppercase tracking-wide text-navy-700">
             Protocolo Geral

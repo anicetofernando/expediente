@@ -1,11 +1,12 @@
+"use client";
+
 import { PageHeader } from "@/components/shared/page-header";
 import { TemplateGallery } from "@/components/documents/template-gallery";
 import { NewTemplateButton } from "@/components/documents/new-template-button";
-import { documentTemplates } from "@/data/workflows";
-
-export const metadata = { title: "Modelos" };
+import { useCatalogs } from "@/lib/catalogs";
 
 export default function ModelosPage() {
+  const { documentTemplates } = useCatalogs();
   return (
     <div>
       <PageHeader

@@ -1,5 +1,6 @@
 import { PageHeader } from "@/components/shared/page-header";
-import { allExpedients } from "@/data/expedients";
+import { requireSession } from "@/lib/auth";
+import { listExpedients } from "@/lib/expedients-db";
 import type { ExpedientStatus } from "@/types";
 import { LivroBoard, type LivroRow } from "@/components/secretariat/livro-board";
 import { LivroHeaderActions } from "@/components/secretariat/livro-header-actions";
@@ -27,7 +28,7 @@ const ESTADOS_COM_SAIDA: ExpedientStatus[] = [
 // pelo que se preenche a coluna "Recebido por" com o responsável actual.
 const ESTADOS_COM_RECEBIMENTO: ExpedientStatus[] = ["disponivel_remetente", "recebimento_confirmado"];
 
-function buildLivroRows(): LivroRow[] {
+function buildLivroRows(allExpedients: Awaited<ReturnType<typeof listExpedients>>): LivroRow[] {
   const ordenados = [...allExpedients].sort((a, b) => new Date(a.dataEntrada).getTime() - new Date(b.dataEntrada).getTime());
 
   return ordenados.map((exp, index) => ({
@@ -46,8 +47,8 @@ function buildLivroRows(): LivroRow[] {
   }));
 }
 
-export default function LivroPage() {
-  const rows = buildLivroRows();
+export default async function LivroPage() {
+  const rows = buildLivroRows(await listExpedients(await requireSession(), "all"));
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -55,7 +56,7 @@ export default function LivroPage() {
         title="Livro digital de expediente"
         description="Registo sequencial e cronológico de toda a correspondência recebida e expedida pela instituição, nos termos do regulamento interno de expediente."
         breadcrumb={[{ label: "Livro de expediente" }]}
-        actions={<LivroHeaderActions />}
+        actions={<LivroHeaderActions rows={rows} />}
       />
       <LivroBoard rows={rows} />
     </div>

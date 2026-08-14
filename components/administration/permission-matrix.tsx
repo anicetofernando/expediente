@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { CheckSquare, Square, GitCompare, Check, X } from "lucide-react";
+import { CheckSquare, Square, GitCompare, Check, X, Save } from "lucide-react";
 import type { Profile } from "@/types";
 import { permissionModules } from "@/data/permissions";
 import { PageHeader } from "@/components/shared/page-header";
@@ -35,6 +35,8 @@ export function PermissionMatrix({ profiles }: { profiles: Profile[] }) {
   const [compareOpen, setCompareOpen] = React.useState(false);
   const [profileAId, setProfileAId] = React.useState(profiles[0]?.id ?? "");
   const [profileBId, setProfileBId] = React.useState(profiles[1]?.id ?? profiles[0]?.id ?? "");
+  const [changed, setChanged] = React.useState(false);
+  const [saving, setSaving] = React.useState(false);
 
   const filteredModules = React.useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -47,6 +49,7 @@ export function PermissionMatrix({ profiles }: { profiles: Profile[] }) {
   const filteredIds = React.useMemo(() => filteredModules.flatMap((m) => m.permissoes.map((p) => p.id)), [filteredModules]);
 
   function toggle(profileId: string, permissionId: string) {
+    setChanged(true);
     setPermMap((prev) => {
       const next = { ...prev, [profileId]: new Set(prev[profileId]) };
       if (next[profileId].has(permissionId)) next[profileId].delete(permissionId);
@@ -56,6 +59,7 @@ export function PermissionMatrix({ profiles }: { profiles: Profile[] }) {
   }
 
   function selectAllFiltered() {
+    setChanged(true);
     setPermMap((prev) => {
       const next: PermMap = {};
       for (const pid of Object.keys(prev)) {
@@ -68,6 +72,7 @@ export function PermissionMatrix({ profiles }: { profiles: Profile[] }) {
   }
 
   function clearFiltered() {
+    setChanged(true);
     setPermMap((prev) => {
       const next: PermMap = {};
       for (const pid of Object.keys(prev)) {
@@ -88,6 +93,24 @@ export function PermissionMatrix({ profiles }: { profiles: Profile[] }) {
 
   const profileA = profiles.find((p) => p.id === profileAId);
   const profileB = profiles.find((p) => p.id === profileBId);
+
+  async function savePermissions() {
+    setSaving(true);
+    const payload = Object.fromEntries(Object.entries(permMap).map(([id, values]) => [id, Array.from(values)]));
+    const response = await fetch("/api/profiles/permissions", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ profiles: payload }),
+    });
+    setSaving(false);
+    if (!response.ok) {
+      const result = await response.json().catch(() => ({}));
+      toast({ title: "Não foi possível guardar", description: result.error ?? "Tente novamente.", variant: "destructive" });
+      return;
+    }
+    setChanged(false);
+    toast({ title: "Permissões guardadas", description: "A matriz foi actualizada no PostgreSQL.", variant: "success" });
+  }
 
   return (
     <div>
@@ -117,6 +140,9 @@ export function PermissionMatrix({ profiles }: { profiles: Profile[] }) {
               </Button>
               <Button variant="outline" size="sm" onClick={() => setCompareOpen(true)}>
                 <GitCompare className="size-3.5" /> Comparar perfis
+              </Button>
+              <Button size="sm" disabled={!changed || saving} onClick={savePermissions}>
+                <Save className="size-3.5" /> {saving ? "A guardar…" : "Guardar matriz"}
               </Button>
             </div>
           </CardHeader>

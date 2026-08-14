@@ -5,18 +5,17 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableContainer, TableHead, TableBody, TableRow, TableHeaderCell, TableCell } from "@/components/ui/table";
 import { PriorityBadge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
-import { allExpedients } from "@/data/expedients";
 import { organizationalUnits } from "@/data/organization";
+import { requireSession } from "@/lib/auth";
+import { listExpedients } from "@/lib/expedients-db";
 import { formatDate } from "@/lib/utils";
 import { CheckCircle2 } from "lucide-react";
 
 export const metadata = { title: "Processos atrasados" };
 
 // Data de referência para o cálculo de dias de atraso — corresponde ao dia corrente do sistema.
-const REFERENCE = new Date("2026-07-25T23:59:59");
-
 function diasAtraso(prazo: string): number {
-  const diff = (REFERENCE.getTime() - new Date(prazo).getTime()) / 86400000;
+  const diff = (Date.now() - new Date(prazo).getTime()) / 86400000;
   return Math.max(0, Math.floor(diff));
 }
 
@@ -35,7 +34,8 @@ function unidadeMaisFrequente(unidades: string[]): string {
   return best;
 }
 
-export default function ProcessosAtrasadosPage() {
+export default async function ProcessosAtrasadosPage() {
+  const allExpedients = await listExpedients(await requireSession(), "all");
   const atrasados = allExpedients
     .filter((e) => e.atrasado === true || e.estado === "atrasado" || e.estado === "expirado")
     .map((e) => ({ ...e, dias: diasAtraso(e.prazo) }))

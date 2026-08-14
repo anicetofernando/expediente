@@ -51,6 +51,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
+import { useDatabaseSetting } from "@/lib/use-database-setting";
 
 type NotificationCategory =
   | "Expedientes"
@@ -155,8 +156,19 @@ const CATEGORIES: NotificationCategory[] = [
   "Sistema",
 ];
 
+interface NotificationConfiguration {
+  rules: NotificationRule[];
+  digest: string;
+  quietHours: boolean;
+  quietStart: string;
+  quietEnd: string;
+}
+
+const DEFAULT_CONFIGURATION: NotificationConfiguration = { rules: INITIAL_RULES, digest: "diario", quietHours: true, quietStart: "20:00", quietEnd: "07:00" };
+
 export default function NotificacoesPage() {
   const { toast } = useToast();
+  const [storedConfiguration, setStoredConfiguration, configurationReady] = useDatabaseSetting<NotificationConfiguration>("notification-rules", DEFAULT_CONFIGURATION);
   const [rules, setRules] = React.useState(INITIAL_RULES);
   const [search, setSearch] = React.useState("");
   const [category, setCategory] = React.useState("todas");
@@ -175,6 +187,15 @@ export default function NotificacoesPage() {
   const [channelEmail, setChannelEmail] = React.useState(true);
   const [channelSms, setChannelSms] = React.useState(false);
   const [urgent, setUrgent] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!configurationReady) return;
+    setRules(storedConfiguration.rules);
+    setDigest(storedConfiguration.digest);
+    setQuietHours(storedConfiguration.quietHours);
+    setQuietStart(storedConfiguration.quietStart);
+    setQuietEnd(storedConfiguration.quietEnd);
+  }, [configurationReady, storedConfiguration]);
 
   const filtered = React.useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -246,6 +267,7 @@ export default function NotificacoesPage() {
   }
 
   function saveChanges() {
+    setStoredConfiguration({ rules, digest, quietHours, quietStart, quietEnd });
     setChanged(false);
     toast({
       title: "Definições guardadas",
@@ -490,13 +512,10 @@ export default function NotificacoesPage() {
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() =>
-                            toast({
-                              title: "Notificação de teste enviada",
-                              description: `A regra “${rule.nome}” foi simulada nos canais configurados.`,
-                              variant: "success",
-                            })
-                          }
+                          onClick={async () => {
+                            const response = await fetch("/api/admin/notifications/test", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ rule }) });
+                            toast(response.ok ? { title: "Notificação de teste criada", description: `A regra “${rule.nome}” gerou uma notificação real no sistema.`, variant: "success" } : { title: "Falha no teste", variant: "destructive" });
+                          }}
                         >
                           <Send className="size-3.5" />
                           Testar

@@ -22,6 +22,11 @@ yarn-error.log*
 # local env files
 .env*.local
 
+# local document storage and interrupted dependency installs
+storage/uploads/
+node_modules.incomplete-*/
+.next-*.log
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

@@ -18,13 +18,16 @@ export function ProfilePermissionsDrawer({
   profile,
   users,
   onOpenChange,
+  onSave,
 }: {
   profile: Profile | null;
   users: User[];
   onOpenChange: (open: boolean) => void;
+  onSave: (profileId: string, permissions: string[]) => Promise<void>;
 }) {
   const [checkedIds, setCheckedIds] = React.useState<Set<string>>(new Set());
   const [usersPopoverOpen, setUsersPopoverOpen] = React.useState(false);
+  const [saving, setSaving] = React.useState(false);
 
   React.useEffect(() => {
     if (profile) {
@@ -83,9 +86,7 @@ export function ProfilePermissionsDrawer({
               </Popover>
             </div>
 
-            <p className="text-2xs text-graphite-400">
-              As alterações abaixo servem apenas para demonstração e não são persistidas. Para aplicar permissões de forma definitiva, utilize a Matriz de Permissões.
-            </p>
+            <p className="text-2xs text-graphite-400">As alterações são aplicadas ao perfil e registadas no PostgreSQL.</p>
 
             {permissionModules.map((mod, idx) => (
               <div key={mod.modulo}>
@@ -108,6 +109,11 @@ export function ProfilePermissionsDrawer({
           <DrawerFooter>
             {profile.permissoes.includes("*") && <Badge variant="crimson" className="mr-auto">Acesso total (*)</Badge>}
             <Button variant="secondary" onClick={() => onOpenChange(false)}>Fechar</Button>
+            <Button disabled={saving} onClick={async () => {
+              setSaving(true);
+              await onSave(profile.id, checkedIds.size === ALL_PERMISSION_IDS.length ? ["*"] : Array.from(checkedIds));
+              setSaving(false);
+            }}>{saving ? "A guardar…" : "Guardar permissões"}</Button>
           </DrawerFooter>
         </DrawerContent>
       )}

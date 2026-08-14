@@ -1,8 +1,9 @@
 import { ProfileManagement } from "@/components/administration/profile-management";
-import { profiles, users } from "@/data/organization";
+import { listProfiles, listUsers } from "@/lib/admin-db";
 
 export const metadata = { title: "Perfis" };
 
-export default function PerfisPage() {
+export default async function PerfisPage() {
+  const [profiles, users] = await Promise.all([listProfiles(), listUsers()]);
   return <ProfileManagement initialProfiles={profiles} users={users} />;
 }

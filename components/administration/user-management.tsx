@@ -23,8 +23,6 @@ import { useToast } from "@/hooks/use-toast";
 import { formatDate } from "@/lib/utils";
 import { UserFormDialog, type UserFormValues } from "@/components/administration/user-form-dialog";
 
-const AVATAR_COLORS = ["navy", "info", "success", "amber", "crimson", "graphite"];
-
 function nivelVariant(nivel: Profile["nivel"]): "neutral" | "info" | "navy" | "crimson" {
   switch (nivel) {
     case "operacional": return "neutral";
@@ -89,25 +87,18 @@ export function UserManagement({
     return { total: users.length, activos, inactivosOuSuspensos, perfisDistintos };
   }, [users]);
 
-  function handleCreate(values: UserFormValues) {
-    const novo: User = {
-      id: `usr-${Date.now()}`,
-      nome: values.nome,
-      email: values.email,
-      cargo: values.cargo,
-      unidadeId: values.unidadeId,
-      perfilIds: [values.perfilId],
-      avatarColor: AVATAR_COLORS[users.length % AVATAR_COLORS.length],
-      estado: values.estado,
-      telefone: values.telefone || undefined,
-    };
-    setUsers((prev) => [novo, ...prev]);
-    setCreateOpen(false);
-    toast({ title: "Utilizador criado", description: `A conta de ${novo.nome} foi criada com sucesso.`, variant: "success" });
+  async function handleCreate(values: UserFormValues) {
+    try {
+      const response=await fetch("/api/users",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(values)});const result=await response.json();if(!response.ok)throw new Error(result.error??"Não foi possível criar o utilizador.");
+      setUsers((prev) => [result.user, ...prev]);
+      setCreateOpen(false);
+      toast({ title: "Utilizador criado", description: `A conta de ${result.user.nome} foi criada com palavra-passe temporária.`, variant: "success" });
+    } catch(error) { toast({title:"Utilizador não criado",description:error instanceof Error?error.message:"Erro inesperado.",variant:"destructive"}); }
   }
 
-  function handleEdit(values: UserFormValues) {
+  async function handleEdit(values: UserFormValues) {
     if (!editingUser) return;
+    const response=await fetch(`/api/users/${editingUser.id}`,{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify(values)});const result=await response.json();if(!response.ok){toast({title:"Alterações não guardadas",description:result.error,variant:"destructive"});return;}
     setUsers((prev) =>
       prev.map((u) =>
         u.id === editingUser.id
@@ -119,17 +110,20 @@ export function UserManagement({
     setEditingUser(null);
   }
 
-  function handleResetPassword(u: User) {
-    toast({ title: "Palavra-passe redefinida", description: `Foi enviado um e-mail de redefinição para ${u.email}.` });
+  async function handleResetPassword(u: User) {
+    const response=await fetch(`/api/users/${u.id}/reset-password`,{method:"POST"});const result=await response.json();
+    toast(response.ok?{ title: "Palavra-passe redefinida", description: `${u.nome} deverá alterar a palavra-passe temporária no próximo acesso.`,variant:"success" }:{title:"Redefinição falhou",description:result.error,variant:"destructive"});
   }
 
-  function handleActivate(u: User) {
+  async function handleActivate(u: User) {
+    const response=await fetch(`/api/users/${u.id}`,{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({estado:"activo"})});if(!response.ok){const result=await response.json();toast({title:"Activação falhou",description:result.error,variant:"destructive"});return;}
     setUsers((prev) => prev.map((x) => (x.id === u.id ? { ...x, estado: "activo" } : x)));
     toast({ title: "Utilizador activado", description: `${u.nome} pode agora aceder ao sistema.`, variant: "success" });
   }
 
-  function handleDeactivateConfirmed() {
+  async function handleDeactivateConfirmed() {
     if (!deactivateTarget) return;
+    const response=await fetch(`/api/users/${deactivateTarget.id}`,{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({estado:"inactivo"})});if(!response.ok){const result=await response.json();toast({title:"Desactivação falhou",description:result.error,variant:"destructive"});return;}
     setUsers((prev) => prev.map((x) => (x.id === deactivateTarget.id ? { ...x, estado: "inactivo" } : x)));
     toast({ title: "Utilizador desactivado", description: `${deactivateTarget.nome} perdeu o acesso ao sistema.`, variant: "warning" });
     setDeactivateTarget(null);

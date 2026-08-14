@@ -863,7 +863,7 @@ function UnitDetailsDrawer({
       </DrawerBody>
       <DrawerFooter className="justify-between">
         <p className="hidden text-2xs text-graphite-400 sm:block">
-          Edição local de demonstração
+          Edição sincronizada com o PostgreSQL
         </p>
         <div className="flex items-center gap-2">
           <Button variant="secondary" onClick={() => onOpenChange(false)}>

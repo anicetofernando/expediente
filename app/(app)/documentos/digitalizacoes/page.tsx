@@ -6,13 +6,14 @@ import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/ca
 import { Table, TableBody, TableCell, TableContainer, TableHead, TableHeaderCell, TableRow } from "@/components/ui/table";
 import { EmptyState } from "@/components/ui/empty-state";
 import { formatDate } from "@/lib/utils";
-import { allExpedients } from "@/data/expedients";
+import { requireSession } from "@/lib/auth";
+import { listDocuments } from "@/lib/expedients-db";
 
 export const metadata = { title: "Digitalizações" };
 
-export default function DigitalizacoesPage() {
-  const digitalizados = allExpedients
-    .flatMap((e) => e.documentos.filter((d) => d.origem === "digitalizado").map((d) => ({ ...d, protocolo: e.protocolo, expedienteId: e.id })))
+export default async function DigitalizacoesPage() {
+  const digitalizados = (await listDocuments(await requireSession()))
+    .filter((document) => document.origem === "digitalizado")
     .sort((a, b) => new Date(b.criadoEm).getTime() - new Date(a.criadoEm).getTime());
 
   return (

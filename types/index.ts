@@ -100,6 +100,19 @@ export interface ExpedientDocument {
   assinado: boolean;
   versao: number;
   origem: "sistema" | "importado" | "digitalizado";
+  conteudoHtml?: string;
+  mimeType?: string;
+  downloadUrl?: string;
+}
+
+export interface Delegation {
+  id: string;
+  delegante: User;
+  delegado: User;
+  ambito: string;
+  dataInicio: string;
+  dataFim: string;
+  estado: "activa" | "agendada" | "terminada";
 }
 
 export interface TimelineEvent {
@@ -190,7 +203,6 @@ export interface Signature {
   validadeFim: string;
   documentosPermitidos: string[];
   requerPin: boolean;
-  requer2FA: boolean;
   estado: "activa" | "revogada" | "expirada";
   utilizacoes: number;
   ultimaUtilizacao?: string;

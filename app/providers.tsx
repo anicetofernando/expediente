@@ -5,10 +5,11 @@ import { CatalogsProvider } from "@/lib/catalogs";
 import { ToastProvider } from "@/hooks/use-toast";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/toast";
+import type { AuthSession } from "@/lib/session-types";
 
-export function Providers({ children }: { children: React.ReactNode }) {
+export function Providers({ children, initialSession }: { children: React.ReactNode; initialSession: AuthSession }) {
   return (
-    <SessionProvider>
+    <SessionProvider initialSession={initialSession}>
       <CatalogsProvider>
         <ToastProvider>
           <TooltipProvider delayDuration={200}>

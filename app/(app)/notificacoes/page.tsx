@@ -16,8 +16,10 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { EmptyState } from "@/components/ui/empty-state";
-import { notifications as initialNotifications } from "@/data/notifications";
 import { cn, formatRelativeTime } from "@/lib/utils";
+import type { Notification } from "@/types";
+
+type NotificationItem = Notification & { expedientId?: string };
 
 const TYPE_ICON: Record<string, React.ComponentType<{ className?: string }>> = {
   tarefa: ListChecks,
@@ -36,14 +38,19 @@ const TYPE_LABEL: Record<string, string> = {
 };
 
 export default function NotificacoesPage() {
-  const [items, setItems] = React.useState(initialNotifications);
+  const [items, setItems] = React.useState<NotificationItem[]>([]);
   const [filter, setFilter] = React.useState<"todas" | "nao-lidas" | "urgentes">("todas");
 
   const filtered = items.filter((n) => (filter === "nao-lidas" ? !n.lida : filter === "urgentes" ? n.urgente : true));
 
+  React.useEffect(()=>{fetch("/api/notifications").then((response)=>response.json()).then((result)=>setItems(result.items??[])).catch(()=>setItems([]));},[]);
+
   function markRead(id: string) {
     setItems((prev) => prev.map((n) => (n.id === id ? { ...n, lida: true } : n)));
+    void fetch("/api/notifications",{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({id})});
   }
+
+  function markAllRead(){setItems((prev)=>prev.map((n)=>({...n,lida:true})));void fetch("/api/notifications",{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({all:true})});}
 
   return (
     <div>
@@ -52,7 +59,7 @@ export default function NotificacoesPage() {
         description="Alertas de tarefas, aprovações, prazos e actividade do sistema"
         breadcrumb={[{ label: "Notificações" }]}
         actions={
-          <Button variant="secondary" size="sm" onClick={() => setItems((prev) => prev.map((n) => ({ ...n, lida: true })))}>
+          <Button variant="secondary" size="sm" onClick={markAllRead}>
             <CheckCheck className="size-3.5" /> Marcar todas como lidas
           </Button>
         }
@@ -90,7 +97,7 @@ export default function NotificacoesPage() {
                     </>
                   );
                   const rowClass = cn("flex gap-3.5 px-5 py-4 transition-colors hover:bg-graphite-50 w-full text-left", !n.lida && "bg-navy-50/40");
-                  const expedienteId = n.protocolo ? protocoloToId(n.protocolo) : "";
+                  const expedienteId = n.expedientId ?? "";
                   if (expedienteId) {
                     return (
                       <Link key={n.id} href={`/expedientes/${expedienteId}`} onClick={() => markRead(n.id)} className={rowClass}>
@@ -111,16 +118,4 @@ export default function NotificacoesPage() {
       </div>
     </div>
   );
-}
-
-function protocoloToId(protocolo: string) {
-  // As notificações de demonstração referem-se a processos já existentes nos dados simulados.
-  const map: Record<string, string> = {
-    "CFM/DOC/2026/0412": "exp-2026-0412",
-    "CFM/DAP/2026/0455": "exp-2026-0455",
-    "CFM/DOF/2026/0522": "exp-2026-0522",
-    "CFM/DMC/2026/0398": "exp-2026-0398",
-    "CFM/DJU/2026/0387": "exp-2026-0387",
-  };
-  return map[protocolo] ?? "";
 }

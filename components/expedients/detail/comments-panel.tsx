@@ -10,24 +10,31 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { EmptyState } from "@/components/ui/empty-state";
 import { MessageSquare } from "lucide-react";
 import { formatRelativeTime } from "@/lib/utils";
-import { useSession } from "@/lib/session";
 import { useToast } from "@/hooks/use-toast";
 
-export function CommentsPanel({ initialComments }: { initialComments: Comment[] }) {
-  const { user } = useSession();
+export function CommentsPanel({ initialComments, expedientId }: { initialComments: Comment[]; expedientId: string }) {
   const { toast } = useToast();
   const [comments, setComments] = React.useState(initialComments);
   const [text, setText] = React.useState("");
   const [internal, setInternal] = React.useState(true);
 
-  function submit() {
+  const [submitting, setSubmitting] = React.useState(false);
+
+  async function submit() {
     if (!text.trim()) return;
-    setComments((prev) => [
-      ...prev,
-      { id: `c-${Date.now()}`, autor: user.nome, cargo: user.cargo, data: new Date().toISOString(), texto: text, interno: internal },
-    ]);
-    setText("");
-    toast({ title: "Comentário adicionado", variant: "success" });
+    setSubmitting(true);
+    try {
+      const response = await fetch(`/api/expedients/${expedientId}/comments`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ body: text, internal }) });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error ?? "Não foi possível adicionar o comentário.");
+      setComments((prev) => [...prev, result.comment]);
+      setText("");
+      toast({ title: "Comentário adicionado", variant: "success" });
+    } catch (error) {
+      toast({ title: "Comentário não guardado", description: error instanceof Error ? error.message : "Erro inesperado.", variant: "destructive" });
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   return (
@@ -39,7 +46,7 @@ export function CommentsPanel({ initialComments }: { initialComments: Comment[] 
             <Checkbox checked={internal} onCheckedChange={(v) => setInternal(!!v)} />
             Comentário interno (não visível ao remetente)
           </label>
-          <Button size="sm" disabled={!text.trim()} onClick={submit}>
+          <Button size="sm" disabled={!text.trim() || submitting} onClick={submit} loading={submitting}>
             <Send className="size-3.5" /> Comentar
           </Button>
         </div>

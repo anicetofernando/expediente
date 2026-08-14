@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   Bell,
   Building2,
@@ -11,10 +11,8 @@ import {
   ChevronDown,
   LogOut,
   Settings,
-  ShieldCheck,
   UserCircle2,
 } from "lucide-react";
-import { perfisNavegacao, type PerfilNavegacao } from "@/config/navigation";
 import { MobileNav } from "@/components/layout/mobile-nav";
 import {
   getActiveGroup,
@@ -162,13 +160,10 @@ function NotificationLink() {
 }
 
 function CompactUserMenu({ desktop = false }: { desktop?: boolean }) {
-  const {
-    user,
-    profile,
-    perfilNavegacao,
-    setPerfilNavegacao,
-  } = useSession();
+  const { user, profile, perfilNavegacao } = useSession();
+  const router = useRouter();
   const [open, setOpen] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
 
@@ -192,6 +187,16 @@ function CompactUserMenu({ desktop = false }: { desktop?: boolean }) {
       document.removeEventListener("keydown", closeOnEscape);
     };
   }, [open]);
+
+  async function handleLogout() {
+    setLoggingOut(true);
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+    } finally {
+      router.replace("/login");
+      router.refresh();
+    }
+  }
 
   return (
     <div ref={containerRef} className="relative h-full border-l border-white/10">
@@ -228,26 +233,6 @@ function CompactUserMenu({ desktop = false }: { desktop?: boolean }) {
             <p className="mt-1 truncate text-2xs text-cfm-700">{profile.nome}</p>
           </div>
 
-          <label className="flex h-9 items-center gap-2 border-b border-graphite-150 px-2.5">
-            <ShieldCheck className="size-3.5 shrink-0 text-graphite-500" aria-hidden />
-            <span className="sr-only">Perfil de demonstração</span>
-            <select
-              value={perfilNavegacao}
-              onChange={(event) => {
-                setPerfilNavegacao(event.target.value as PerfilNavegacao);
-                setOpen(false);
-              }}
-              className="h-7 min-w-0 flex-1 border-0 bg-transparent text-[11px] font-medium text-graphite-700 outline-none"
-              aria-label="Perfil de demonstração"
-            >
-              {perfisNavegacao.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.label}
-                </option>
-              ))}
-            </select>
-          </label>
-
           <div className="py-1">
             <Link
               href="/perfil"
@@ -271,15 +256,16 @@ function CompactUserMenu({ desktop = false }: { desktop?: boolean }) {
             )}
           </div>
 
-          <Link
-            href="/login"
+          <button
+            type="button"
             role="menuitem"
-            onClick={() => setOpen(false)}
-            className="mt-1 flex h-8 items-center gap-2 px-2.5 text-xs text-crimson-700 hover:bg-crimson-50"
+            onClick={handleLogout}
+            disabled={loggingOut}
+            className="mt-1 flex h-8 w-full items-center gap-2 px-2.5 text-left text-xs text-crimson-700 hover:bg-crimson-50 disabled:opacity-60"
           >
             <LogOut className="size-3.5" aria-hidden />
-            Terminar sessão
-          </Link>
+            {loggingOut ? "A terminar…" : "Terminar sessão"}
+          </button>
         </div>
       )}
     </div>

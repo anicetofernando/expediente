@@ -54,6 +54,7 @@ import {
 } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
 import { formatDate } from "@/lib/utils";
+import { useDatabaseSetting } from "@/lib/use-database-setting";
 
 const STATUS_LABEL: Record<WorkflowType["estado"], string> = {
   publicado: "Publicado",
@@ -72,8 +73,7 @@ const STATUS_VARIANT: Record<
 
 export default function FluxosPage() {
   const { toast } = useToast();
-  const [items, setItems] =
-    React.useState<WorkflowType[]>(initialWorkflows);
+  const [items, setItems] = useDatabaseSetting<WorkflowType[]>("workflows-ui", initialWorkflows);
   const [search, setSearch] = React.useState("");
   const [status, setStatus] = React.useState("todos");
   const [documentType, setDocumentType] = React.useState("todos");

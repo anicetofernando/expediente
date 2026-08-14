@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useRouter } from "next/navigation";
 import {
   Archive,
   CheckCircle2,
@@ -31,6 +32,7 @@ import { organizationalUnits } from "@/data/organization";
 import { stamps } from "@/data/stamps";
 import { signatures } from "@/data/signatures";
 import { cn } from "@/lib/utils";
+import { useSession } from "@/lib/session";
 
 const ACTION_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   Archive,
@@ -51,16 +53,37 @@ const ACTION_ICONS: Record<string, React.ComponentType<{ className?: string }>> 
   XCircle,
 };
 
-type ActionExpedient = Pick<Expedient, "estado" | "protocolo" | "assunto">;
+type ActionExpedient = Pick<Expedient, "id" | "estado" | "protocolo" | "assunto">;
+
+const PROFILE_ACTIONS: Record<string, Set<string>> = {
+  remetente: new Set(["resposta", "confirmar", "arquivar"]),
+  secretaria: new Set(["receber", "protocolar", "encaminhar", "carimbo", "disponibilizar", "arquivar", "notificar"]),
+  superior: new Set(["encaminhar", "parecer", "esclarecimento", "aprovar", "rejeitar", "devolver", "resposta", "assinatura", "disponibilizar", "retomar", "escalar"]),
+  administracao: new Set(Object.values(ACTIONS_BY_STATUS).flat().map((action) => action.key)),
+};
 
 export function ActionPanel({ expedient }: { expedient: ActionExpedient }) {
   const { toast } = useToast();
-  const actions = ACTIONS_BY_STATUS[expedient.estado] ?? [];
+  const { perfilNavegacao } = useSession();
+  const router = useRouter();
+  const actions = (ACTIONS_BY_STATUS[expedient.estado] ?? []).filter((action) => PROFILE_ACTIONS[perfilNavegacao]?.has(action.key));
   const [activeAction, setActiveAction] = React.useState<ActionDef | null>(null);
 
-  function complete(action: ActionDef, message: string) {
-    toast({ title: `${action.label} registado`, description: message, variant: "success" });
-    setActiveAction(null);
+  async function complete(action: ActionDef, message: string, target?: string) {
+    try {
+      const response = await fetch(`/api/expedients/${expedient.id}/actions`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: action.key, note: message, target }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error ?? "Não foi possível registar a acção.");
+      toast({ title: `${action.label} registado`, description: message, variant: "success" });
+      setActiveAction(null);
+      router.refresh();
+    } catch (error) {
+      toast({ title: "Acção não registada", description: error instanceof Error ? error.message : "Erro inesperado.", variant: "destructive" });
+    }
   }
 
   if (actions.length === 0) {
@@ -89,7 +112,7 @@ export function ActionPanel({ expedient }: { expedient: ActionExpedient }) {
           action={activeAction}
           expedient={expedient}
           onClose={() => setActiveAction(null)}
-          onComplete={(msg) => complete(activeAction, msg)}
+          onComplete={(msg, target) => complete(activeAction, msg, target)}
         />
       )}
     </div>
@@ -105,7 +128,7 @@ function ActionDialog({
   action: ActionDef;
   expedient: ActionExpedient;
   onClose: () => void;
-  onComplete: (message: string) => void;
+  onComplete: (message: string, target?: string) => void;
 }) {
   const [note, setNote] = React.useState("");
   const [target, setTarget] = React.useState("");
@@ -188,7 +211,7 @@ function ActionDialog({
           </DialogBody>
           <DialogFooter>
             <Button variant="secondary" onClick={onClose}>Cancelar</Button>
-            <Button disabled={!target} onClick={() => onComplete(`Encaminhado para ${organizationalUnits.find((u) => u.id === target)?.nome}.`)}>
+            <Button disabled={!target} onClick={() => onComplete(`Encaminhado para ${organizationalUnits.find((u) => u.id === target)?.nome}.`, target)}>
               {action.label}
             </Button>
           </DialogFooter>

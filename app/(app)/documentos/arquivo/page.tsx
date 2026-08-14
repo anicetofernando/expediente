@@ -1,12 +1,13 @@
 import { PageHeader } from "@/components/shared/page-header";
 import { ExpedientTable } from "@/components/expedients/expedient-table";
 import { Alert } from "@/components/ui/alert";
-import { allExpedients } from "@/data/expedients";
+import { requireSession } from "@/lib/auth";
+import { listExpedients } from "@/lib/expedients-db";
 
 export const metadata = { title: "Arquivo" };
 
-export default function ArquivoPage() {
-  const data = allExpedients.filter((e) => e.estado === "arquivado");
+export default async function ArquivoPage() {
+  const data = (await listExpedients(await requireSession(), "all")).filter((e) => e.estado === "arquivado");
   return (
     <div className="flex h-full min-h-0 flex-col">
       <PageHeader

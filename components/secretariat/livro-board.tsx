@@ -75,9 +75,11 @@ export function LivroBoard({ rows }: { rows: LivroRow[] }) {
     setPage(1);
   }
 
-  function handleFechoMensal() {
+  async function handleFechoMensal() {
     setFechoLoading(true);
-    setTimeout(() => {
+    const period=new Date().toISOString().slice(0,7);
+    const response=await fetch("/api/book/close",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({period})});
+    if(response.ok){
       toast({
         title: "Mês encerrado",
         description: "Os registos do período ficaram disponíveis apenas para consulta.",
@@ -85,7 +87,10 @@ export function LivroBoard({ rows }: { rows: LivroRow[] }) {
       });
       setFechoLoading(false);
       setFechoOpen(false);
-    }, 500);
+    }else{
+      setFechoLoading(false);
+      toast({title:"Não foi possível encerrar o mês",variant:"destructive"});
+    }
   }
 
   return (

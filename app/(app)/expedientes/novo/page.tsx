@@ -59,7 +59,7 @@ function canProceed(step: number, state: WizardState) {
     case 1:
       return !!state.origemDocumento;
     case 2:
-      if (state.origemDocumento === "sistema") return !!state.modeloId;
+      if (state.origemDocumento === "sistema") return !!state.modeloId && !!state.conteudo.replace(/<[^>]*>/g, "").trim();
       if (state.origemDocumento === "importado" || state.origemDocumento === "digitalizado") {
         return !!state.ficheiroNome;
       }
@@ -90,7 +90,6 @@ export default function NovoExpedientePage() {
   const { toast } = useToast();
   const {
     catalogReady,
-    organizationalUnits,
     priorities,
     confidentialities,
     stampChoices,
@@ -98,7 +97,8 @@ export default function NovoExpedientePage() {
   const [step, setStep] = React.useState(0);
   const [state, setState] = React.useState<WizardState>(initialWizardState);
   const [cancelOpen, setCancelOpen] = React.useState(false);
-  const [submitted, setSubmitted] = React.useState<null | { protocolo: string; rascunho: boolean }>(null);
+  const [submitted, setSubmitted] = React.useState<null | { id: string; protocolo: string; rascunho: boolean }>(null);
+  const [saving, setSaving] = React.useState(false);
   const defaultsApplied = React.useRef(false);
 
   const createInitialState = React.useCallback((): WizardState => {
@@ -138,24 +138,25 @@ export default function NovoExpedientePage() {
     setState((previous) => ({ ...previous, ...patch }));
   }
 
-  function generateProtocolo() {
-    const sigla =
-      organizationalUnits.find((unit) => unit.id === state.unidadeOrigem)?.sigla ||
-      "SG";
-    const number = Math.floor(500 + Math.random() * 400);
-    return `CFM/${sigla}/2026/${String(number).padStart(4, "0")}`;
-  }
-
-  function handleSaveDraft() {
-    toast({ title: "Rascunho guardado", variant: "success" });
-    setSubmitted({ protocolo: generateProtocolo(), rascunho: true });
-    setStep(6);
-  }
-
-  function handleSubmit() {
-    toast({ title: "Expediente submetido", variant: "success" });
-    setSubmitted({ protocolo: generateProtocolo(), rascunho: false });
-    setStep(6);
+  async function persist(rascunho: boolean) {
+    setSaving(true);
+    try {
+      const form = new FormData();
+      const { ficheiro, anexos, ...fields } = state;
+      form.set("data", JSON.stringify({ ...fields, rascunho, anexos: anexos.map(({ ficheiro: _file, ...meta }) => meta) }));
+      if (ficheiro) form.set("mainFile", ficheiro);
+      anexos.forEach((anexo) => { if (anexo.ficheiro) form.append("attachments", anexo.ficheiro); });
+      const response = await fetch("/api/expedients", { method: "POST", body: form });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error ?? "Não foi possível guardar o expediente.");
+      toast({ title: rascunho ? "Rascunho guardado" : "Expediente submetido", variant: "success" });
+      setSubmitted({ id: result.id, protocolo: result.protocolo, rascunho });
+      setStep(6);
+    } catch (error) {
+      toast({ title: "Expediente não guardado", description: error instanceof Error ? error.message : "Erro inesperado.", variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
   }
 
   if (submitted) {
@@ -255,11 +256,11 @@ export default function NovoExpedientePage() {
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
               {step === 5 ? (
                 <>
-                  <Button variant="secondary" onClick={handleSaveDraft}>
+                  <Button variant="secondary" onClick={() => persist(true)} loading={saving} disabled={saving}>
                     <Save className="size-3.5" />
                     Guardar rascunho
                   </Button>
-                  <Button onClick={handleSubmit}>
+                  <Button onClick={() => persist(false)} loading={saving} disabled={saving}>
                     <Send className="size-3.5" />
                     Submeter expediente
                   </Button>

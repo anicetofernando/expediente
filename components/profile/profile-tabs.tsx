@@ -2,10 +2,10 @@
 
 import * as React from "react";
 import {
-  Mail, Phone, Building2, IdCard, ShieldCheck, KeyRound, Smartphone, Monitor, LogOut, Bell, Globe, Moon,
+  Mail, Phone, Building2, IdCard, KeyRound, Smartphone, Bell, Globe, Moon,
 } from "lucide-react";
 import { useSession } from "@/lib/session";
-import { unitById } from "@/data/organization";
+import { useCatalogs } from "@/lib/catalogs";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { UserAvatar } from "@/components/ui/avatar";
@@ -16,15 +16,26 @@ import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import { Timeline } from "@/components/shared/timeline";
 import { useToast } from "@/hooks/use-toast";
-import { allExpedients } from "@/data/expedients";
+import type { TimelineEvent } from "@/types";
 
 export function ProfileTabs() {
   const { user, profile, unitName } = useSession();
+  const { organizationalUnits } = useCatalogs();
   const { toast } = useToast();
-  const unit = unitById(user.unidadeId);
+  const [currentPassword, setCurrentPassword] = React.useState("");
+  const [newPassword, setNewPassword] = React.useState("");
+  const [confirmPassword, setConfirmPassword] = React.useState("");
+  const [changingPassword, setChangingPassword] = React.useState(false);
+  const unit = organizationalUnits.find((item) => item.id === user.unidadeId);
+  const [allActivity, setAllActivity] = React.useState<TimelineEvent[]>([]);
 
-  const activity = allExpedients
-    .flatMap((e) => e.timeline.map((t) => ({ ...t, expedienteId: e.id })))
+  React.useEffect(() => {
+    void fetch("/api/activity", { cache: "no-store" }).then(async (response) => {
+      if (response.ok) setAllActivity((await response.json()).items ?? []);
+    });
+  }, []);
+
+  const activity = allActivity
     .filter((t) => t.utilizador === user.nome)
     .sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime())
     .slice(0, 8);
@@ -82,39 +93,26 @@ export function ProfileTabs() {
           <Card>
             <CardHeader><CardTitle>Palavra-passe</CardTitle></CardHeader>
             <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div><Label>Palavra-passe actual</Label><Input type="password" placeholder="••••••••" /></div>
+              <div><Label>Palavra-passe actual</Label><Input type="password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} placeholder="••••••••" /></div>
               <div />
-              <div><Label>Nova palavra-passe</Label><Input type="password" placeholder="••••••••" /></div>
-              <div><Label>Confirmar nova palavra-passe</Label><Input type="password" placeholder="••••••••" /></div>
+              <div><Label>Nova palavra-passe</Label><Input type="password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} placeholder="••••••••" /></div>
+              <div><Label>Confirmar nova palavra-passe</Label><Input type="password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} placeholder="••••••••" /></div>
             </CardContent>
             <CardFooter>
-              <Button onClick={() => toast({ title: "Palavra-passe actualizada", variant: "success" })}>
-                <KeyRound className="size-3.5" /> Actualizar palavra-passe
+              <Button disabled={changingPassword || !currentPassword || newPassword.length < 8 || newPassword !== confirmPassword} onClick={async () => {
+                setChangingPassword(true);
+                const response = await fetch("/api/auth/change-password", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ currentPassword, newPassword }) });
+                const result = await response.json().catch(() => ({}));
+                setChangingPassword(false);
+                if (!response.ok) return toast({ title: "Não foi possível actualizar", description: result.error, variant: "destructive" });
+                setCurrentPassword(""); setNewPassword(""); setConfirmPassword("");
+                toast({ title: "Palavra-passe actualizada", variant: "success" });
+              }}>
+                <KeyRound className="size-3.5" /> {changingPassword ? "A actualizar…" : "Actualizar palavra-passe"}
               </Button>
             </CardFooter>
           </Card>
 
-          <Card>
-            <CardHeader><CardTitle>Verificação em dois passos</CardTitle></CardHeader>
-            <CardContent className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <span className="flex size-9 items-center justify-center rounded-md bg-success-50 text-success-600"><ShieldCheck className="size-[18px]" /></span>
-                <div>
-                  <p className="text-[13px] font-medium text-graphite-800">Activa via SMS</p>
-                  <p className="text-2xs text-graphite-500">Dispositivo terminado em •• 88</p>
-                </div>
-              </div>
-              <Button variant="secondary" size="sm">Reconfigurar</Button>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader><CardTitle>Sessões activas</CardTitle></CardHeader>
-            <CardContent className="space-y-3">
-              <SessionRow icon={Monitor} device="Windows · Chrome" location="Maputo, Moçambique" current />
-              <SessionRow icon={Smartphone} device="Android · Aplicação móvel" location="Maputo, Moçambique" lastSeen="há 2 dias" />
-            </CardContent>
-          </Card>
         </TabsContent>
 
         <TabsContent value="preferencias" className="pt-5 space-y-5">
@@ -147,19 +145,6 @@ export function ProfileTabs() {
           </Card>
         </TabsContent>
       </Tabs>
-    </div>
-  );
-}
-
-function SessionRow({ icon: Icon, device, location, current, lastSeen }: { icon: React.ComponentType<{ className?: string }>; device: string; location: string; current?: boolean; lastSeen?: string }) {
-  return (
-    <div className="flex items-center gap-3 rounded-md border border-graphite-150 px-3.5 py-2.5">
-      <Icon className="size-4 shrink-0 text-graphite-400" />
-      <div className="min-w-0 flex-1">
-        <p className="text-[13px] font-medium text-graphite-800">{device}</p>
-        <p className="text-2xs text-graphite-400">{location}{lastSeen ? ` · Última actividade ${lastSeen}` : ""}</p>
-      </div>
-      {current ? <Badge variant="success">Sessão actual</Badge> : <Button variant="ghost" size="sm" className="text-crimson-700 hover:bg-crimson-50"><LogOut className="size-3.5" /> Terminar</Button>}
     </div>
   );
 }

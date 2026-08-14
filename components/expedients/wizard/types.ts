@@ -9,6 +9,7 @@ export interface WizardAttachment {
   tamanho: string;
   descricao: string;
   confidencialidade: Confidentiality | "";
+  ficheiro?: File;
 }
 
 export interface WizardState {
@@ -25,6 +26,7 @@ export interface WizardState {
   conteudo: string;
   ficheiroNome: string;
   numPaginas: number;
+  ficheiro?: File;
   anexos: WizardAttachment[];
   carimbo: StampChoice | "";
   carimboId: string;

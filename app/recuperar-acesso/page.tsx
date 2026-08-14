@@ -12,11 +12,12 @@ export default function RecoverAccessPage() {
   const [sent, setSent] = React.useState(false);
   const [loading, setLoading] = React.useState(false);
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!email) return;
     setLoading(true);
-    setSent(true);
+    const response = await fetch("/api/auth/recover", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email }) });
+    if (response.ok) setSent(true);
     setLoading(false);
   }
 
@@ -40,7 +41,7 @@ export default function RecoverAccessPage() {
             </div>
             <Button type="submit" className="w-full" size="lg" loading={loading}>
               {!loading && <Send className="size-3.5" aria-hidden />}
-              {loading ? "A enviar…" : "Enviar ligação"}
+              {loading ? "A enviar…" : "Solicitar recuperação"}
             </Button>
           </form>
         </>
@@ -49,9 +50,9 @@ export default function RecoverAccessPage() {
           <div className="mx-auto mb-4 flex size-12 items-center justify-center rounded-full bg-success-50 text-success-600">
             <CheckCircle2 className="size-6" />
           </div>
-          <h1 className="text-[19px] font-semibold text-graphite-900">Verifique o seu e-mail</h1>
+          <h1 className="text-[19px] font-semibold text-graphite-900">Pedido registado</h1>
           <p className="mt-2 text-[13px] leading-relaxed text-graphite-500">
-            Se a conta existir, as instruções foram enviadas para <span className="font-medium text-graphite-700">{email}</span>.
+            Se a conta <span className="font-medium text-graphite-700">{email}</span> existir, a Administração do sistema foi notificada para repor o acesso com segurança.
           </p>
           <Button variant="secondary" className="mt-6 w-full" asChild>
             <Link href="/login"><ArrowLeft className="size-3.5" aria-hidden /> Voltar ao início de sessão</Link>

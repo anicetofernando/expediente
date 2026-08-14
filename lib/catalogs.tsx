@@ -5,8 +5,7 @@ import type { DocumentTemplate, OrganizationalUnit, Stamp } from "@/types";
 import { organizationalUnits as defaultOrganizationalUnits } from "@/data/organization";
 import { documentTemplates as defaultDocumentTemplates, documentTypes as defaultDocumentTypesRaw } from "@/data/workflows";
 import { stamps as defaultStamps } from "@/data/stamps";
-
-const STORAGE_KEY = "cfm-sge-catalogs-v1";
+import { useSession } from "@/lib/session";
 
 export interface CatalogOption {
   id: string;
@@ -29,11 +28,7 @@ export interface DocumentTypeConfig {
   ordem: number;
 }
 
-const defaultDocumentTypes: DocumentTypeConfig[] = defaultDocumentTypesRaw.map((item, index) => ({
-  ...item,
-  activo: true,
-  ordem: index + 1,
-}));
+const defaultDocumentTypes: DocumentTypeConfig[] = defaultDocumentTypesRaw.map((item, index) => ({ ...item, activo: true, ordem: index + 1 }));
 
 const defaultPriorities: CatalogOption[] = [
   { id: "prio-baixa", code: "baixa", label: "Baixa", description: "Sem impacto directo em prazos operacionais.", order: 1, active: true, isDefault: false },
@@ -50,9 +45,9 @@ const defaultConfidentialities: CatalogOption[] = [
 ];
 
 const defaultDocumentOrigins: CatalogOption[] = [
-  { id: "orig-sistema", code: "sistema", label: "Criar dentro do sistema", description: "Preencher um modelo institucional directamente no sistema.", order: 1, active: true, isDefault: true },
+  { id: "orig-sistema", code: "sistema", label: "Criar dentro do sistema", description: "Redigir uma carta directamente no editor institucional.", order: 1, active: true, isDefault: true },
   { id: "orig-importado", code: "importado", label: "Importar documento", description: "Carregar um ficheiro PDF, DOCX ou imagem já existente.", order: 2, active: true, isDefault: false },
-  { id: "orig-digitalizado", code: "digitalizado", label: "Digitalizar documento", description: "Obter o documento a partir de digitalização física.", order: 3, active: true, isDefault: false },
+  { id: "orig-digitalizado", code: "digitalizado", label: "Digitalizar documento", description: "Carregar o resultado da digitalização de um documento físico.", order: 3, active: true, isDefault: false },
   { id: "orig-processo", code: "apenas-processo", label: "Criar apenas o processo", description: "Abrir o processo e anexar o documento principal mais tarde.", order: 4, active: true, isDefault: false },
 ];
 
@@ -74,16 +69,7 @@ interface CatalogsSnapshot {
 }
 
 function buildDefaults(): CatalogsSnapshot {
-  return {
-    organizationalUnits: defaultOrganizationalUnits,
-    priorities: defaultPriorities,
-    confidentialities: defaultConfidentialities,
-    documentOrigins: defaultDocumentOrigins,
-    stampChoices: defaultStampChoices,
-    documentTypes: defaultDocumentTypes,
-    documentTemplates: defaultDocumentTemplates,
-    stamps: defaultStamps,
-  };
+  return { organizationalUnits: defaultOrganizationalUnits, priorities: defaultPriorities, confidentialities: defaultConfidentialities, documentOrigins: defaultDocumentOrigins, stampChoices: defaultStampChoices, documentTypes: defaultDocumentTypes, documentTemplates: defaultDocumentTemplates, stamps: defaultStamps };
 }
 
 interface CatalogsContextValue extends CatalogsSnapshot {
@@ -102,6 +88,7 @@ interface CatalogsContextValue extends CatalogsSnapshot {
 const CatalogsContext = React.createContext<CatalogsContextValue | null>(null);
 
 export function CatalogsProvider({ children }: { children: React.ReactNode }) {
+  const { perfilNavegacao } = useSession();
   const defaults = React.useMemo(buildDefaults, []);
   const [organizationalUnits, setOrganizationalUnits] = React.useState(defaults.organizationalUnits);
   const [priorities, setPriorities] = React.useState(defaults.priorities);
@@ -112,47 +99,44 @@ export function CatalogsProvider({ children }: { children: React.ReactNode }) {
   const [documentTemplates, setDocumentTemplates] = React.useState(defaults.documentTemplates);
   const [stamps, setStamps] = React.useState(defaults.stamps);
   const [catalogReady, setCatalogReady] = React.useState(false);
+  const persistedSnapshot = React.useRef("");
 
   React.useEffect(() => {
-    try {
-      const saved = window.localStorage.getItem(STORAGE_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved) as Partial<CatalogsSnapshot>;
-        if (parsed.organizationalUnits) setOrganizationalUnits(parsed.organizationalUnits);
-        if (parsed.priorities) setPriorities(parsed.priorities);
-        if (parsed.confidentialities) setConfidentialities(parsed.confidentialities);
-        if (parsed.documentOrigins) setDocumentOrigins(parsed.documentOrigins);
-        if (parsed.stampChoices) setStampChoices(parsed.stampChoices);
-        if (parsed.documentTypes) setDocumentTypes(parsed.documentTypes);
-        if (parsed.documentTemplates) setDocumentTemplates(parsed.documentTemplates);
-        if (parsed.stamps) setStamps(parsed.stamps);
-      }
-    } catch {
-      // Utiliza os catálogos predefinidos quando o armazenamento não está disponível.
-    } finally {
-      setCatalogReady(true);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    let cancelled = false;
+    void fetch("/api/settings/catalogs", { cache: "no-store" })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("Nao foi possivel carregar os catalogos.");
+        return response.json() as Promise<{ catalogs: Partial<CatalogsSnapshot> | null }>;
+      })
+      .then(({ catalogs: parsed }) => {
+        if (cancelled || !parsed) return;
+        const snapshot: CatalogsSnapshot = { ...defaults, ...parsed };
+        setOrganizationalUnits(snapshot.organizationalUnits);
+        setPriorities(snapshot.priorities);
+        setConfidentialities(snapshot.confidentialities);
+        setDocumentOrigins(snapshot.documentOrigins);
+        setStampChoices(snapshot.stampChoices);
+        setDocumentTypes(snapshot.documentTypes);
+        setDocumentTemplates(snapshot.documentTemplates);
+        setStamps(snapshot.stamps);
+        persistedSnapshot.current = JSON.stringify(snapshot);
+      })
+      .catch(() => undefined)
+      .finally(() => { if (!cancelled) setCatalogReady(true); });
+    return () => { cancelled = true; };
+  }, [defaults]);
 
   React.useEffect(() => {
-    if (!catalogReady) return;
-    const snapshot: CatalogsSnapshot = {
-      organizationalUnits,
-      priorities,
-      confidentialities,
-      documentOrigins,
-      stampChoices,
-      documentTypes,
-      documentTemplates,
-      stamps,
-    };
-    try {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
-    } catch {
-      // A sessão continua funcional quando o armazenamento do browser está indisponível.
-    }
-  }, [catalogReady, organizationalUnits, priorities, confidentialities, documentOrigins, stampChoices, documentTypes, documentTemplates, stamps]);
+    if (!catalogReady || perfilNavegacao !== "administracao") return;
+    const snapshot: CatalogsSnapshot = { organizationalUnits, priorities, confidentialities, documentOrigins, stampChoices, documentTypes, documentTemplates, stamps };
+    const serialized = JSON.stringify(snapshot);
+    if (serialized === persistedSnapshot.current) return;
+    const timer = window.setTimeout(() => {
+      void fetch("/api/settings/catalogs", { method: "PUT", headers: { "Content-Type": "application/json" }, body: serialized })
+        .then((response) => { if (response.ok) persistedSnapshot.current = serialized; });
+    }, 500);
+    return () => window.clearTimeout(timer);
+  }, [catalogReady, perfilNavegacao, organizationalUnits, priorities, confidentialities, documentOrigins, stampChoices, documentTypes, documentTemplates, stamps]);
 
   const resetCatalogs = React.useCallback(() => {
     const fresh = buildDefaults();
@@ -164,41 +148,13 @@ export function CatalogsProvider({ children }: { children: React.ReactNode }) {
     setDocumentTypes(fresh.documentTypes);
     setDocumentTemplates(fresh.documentTemplates);
     setStamps(fresh.stamps);
-    try {
-      window.localStorage.removeItem(STORAGE_KEY);
-    } catch {
-      // Ignora quando o armazenamento não está disponível.
-    }
   }, []);
 
-  const value: CatalogsContextValue = {
-    catalogReady,
-    organizationalUnits,
-    priorities,
-    confidentialities,
-    documentOrigins,
-    stampChoices,
-    documentTypes,
-    documentTemplates,
-    stamps,
-    setOrganizationalUnits,
-    setPriorities,
-    setConfidentialities,
-    setDocumentOrigins,
-    setStampChoices,
-    setDocumentTypes,
-    setDocumentTemplates,
-    setStamps,
-    resetCatalogs,
-  };
-
-  return <CatalogsContext.Provider value={value}>{children}</CatalogsContext.Provider>;
+  return <CatalogsContext.Provider value={{ catalogReady, organizationalUnits, priorities, confidentialities, documentOrigins, stampChoices, documentTypes, documentTemplates, stamps, setOrganizationalUnits, setPriorities, setConfidentialities, setDocumentOrigins, setStampChoices, setDocumentTypes, setDocumentTemplates, setStamps, resetCatalogs }}>{children}</CatalogsContext.Provider>;
 }
 
 export function useCatalogs() {
   const context = React.useContext(CatalogsContext);
-  if (!context) {
-    throw new Error("useCatalogs deve ser utilizado dentro de CatalogsProvider");
-  }
+  if (!context) throw new Error("useCatalogs deve ser utilizado dentro de CatalogsProvider");
   return context;
 }

@@ -11,11 +11,14 @@ import {
   DeadlineComplianceChart,
 } from "@/components/dashboard/charts";
 import { ExportReportButton, PeriodSelect } from "@/components/reports/report-controls";
+import { requireSession } from "@/lib/auth";
+import { listReportExpedients } from "@/lib/expedients-db";
 
 export const metadata = { title: "Visão estatística" };
 
-export default function RelatoriosPage() {
-  const stats = coreStats();
+export default async function RelatoriosPage() {
+  const expedients = await listReportExpedients(await requireSession());
+  const stats = coreStats(expedients);
 
   return (
     <div>
@@ -60,7 +63,7 @@ export default function RelatoriosPage() {
                 </div>
               </CardHeader>
               <CardContent>
-                <StatusDistributionChart height={260} />
+                <StatusDistributionChart height={260} expedients={expedients} />
               </CardContent>
             </Card>
 
@@ -72,7 +75,7 @@ export default function RelatoriosPage() {
                 </div>
               </CardHeader>
               <CardContent>
-                <TypeDistributionChart height={260} />
+                <TypeDistributionChart height={260} expedients={expedients} />
               </CardContent>
             </Card>
 
@@ -84,7 +87,7 @@ export default function RelatoriosPage() {
                 </div>
               </CardHeader>
               <CardContent>
-                <SectorDistributionChart height={260} />
+                <SectorDistributionChart height={260} expedients={expedients} />
               </CardContent>
             </Card>
 
@@ -96,7 +99,7 @@ export default function RelatoriosPage() {
                 </div>
               </CardHeader>
               <CardContent>
-                <MonthlyTrendChart height={260} />
+                <MonthlyTrendChart height={260} expedients={expedients} />
               </CardContent>
             </Card>
 
@@ -108,7 +111,7 @@ export default function RelatoriosPage() {
                 </div>
               </CardHeader>
               <CardContent>
-                <StageAvgTimeChart height={260} />
+                <StageAvgTimeChart height={260} expedients={expedients} />
               </CardContent>
             </Card>
 
@@ -120,7 +123,7 @@ export default function RelatoriosPage() {
                 </div>
               </CardHeader>
               <CardContent>
-                <DeadlineComplianceChart height={260} />
+                <DeadlineComplianceChart height={260} expedients={expedients} />
               </CardContent>
             </Card>
           </div>

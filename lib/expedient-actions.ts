@@ -11,6 +11,7 @@ export interface ActionDef {
 }
 
 const A = {
+  submeter: { key: "submeter", label: "Submeter", icon: "Send", variant: "primary", kind: "confirm" } as ActionDef,
   receber: { key: "receber", label: "Receber", icon: "Inbox", variant: "primary", kind: "confirm" } as ActionDef,
   protocolar: { key: "protocolar", label: "Protocolar", icon: "Stamp", variant: "primary", kind: "confirm" } as ActionDef,
   encaminhar: { key: "encaminhar", label: "Encaminhar", icon: "Forward", variant: "primary", kind: "forward" } as ActionDef,
@@ -31,7 +32,7 @@ const A = {
 };
 
 export const ACTIONS_BY_STATUS: Record<ExpedientStatus, ActionDef[]> = {
-  rascunho: [A.protocolar],
+  rascunho: [A.submeter],
   submetido: [A.receber],
   recebido: [A.protocolar],
   protocolado: [A.encaminhar, A.carimbo],

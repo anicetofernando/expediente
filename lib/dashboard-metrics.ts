@@ -1,11 +1,10 @@
-import { allExpedients } from "@/data/expedients";
-import { unitById, userById } from "@/data/organization";
+import { unitById, userById, users } from "@/data/organization";
 import type { Expedient, ExpedientStatus } from "@/types";
 
 const CONCLUDED: ExpedientStatus[] = ["arquivado", "aprovado", "recebimento_confirmado"];
 const PENDING: ExpedientStatus[] = ["submetido", "recebido", "protocolado", "encaminhado", "em_analise", "aguardando_parecer", "aguardando_esclarecimento"];
 
-export function coreStats(data: Expedient[] = allExpedients) {
+export function coreStats(data: Expedient[]) {
   const recebidos = data.length;
   const pendentes = data.filter((e) => PENDING.includes(e.estado)).length;
   const aguardandoAprovacao = data.filter((e) => e.estado === "em_analise" || e.estado === "aguardando_parecer").length;
@@ -61,7 +60,7 @@ const GROUP_COLOR: Record<string, string> = {
   Atrasado: "#8a1f2b",
 };
 
-export function statusDistribution(data: Expedient[] = allExpedients) {
+export function statusDistribution(data: Expedient[]) {
   const counts = new Map<string, number>();
   data.forEach((e) => {
     const group = STATUS_GROUP[e.estado];
@@ -70,7 +69,7 @@ export function statusDistribution(data: Expedient[] = allExpedients) {
   return Array.from(counts.entries()).map(([name, value]) => ({ name, value, color: GROUP_COLOR[name] }));
 }
 
-export function typeDistribution(data: Expedient[] = allExpedients) {
+export function typeDistribution(data: Expedient[]) {
   const counts = new Map<string, number>();
   data.forEach((e) => counts.set(e.tipo, (counts.get(e.tipo) ?? 0) + 1));
   return Array.from(counts.entries())
@@ -79,7 +78,7 @@ export function typeDistribution(data: Expedient[] = allExpedients) {
     .slice(0, 7);
 }
 
-export function sectorDistribution(data: Expedient[] = allExpedients) {
+export function sectorDistribution(data: Expedient[]) {
   const counts = new Map<string, number>();
   data.forEach((e) => counts.set(e.unidadeOrigem, (counts.get(e.unidadeOrigem) ?? 0) + 1));
   return Array.from(counts.entries())
@@ -88,44 +87,50 @@ export function sectorDistribution(data: Expedient[] = allExpedients) {
     .slice(0, 8);
 }
 
-const MESES = ["Fev", "Mar", "Abr", "Mai", "Jun", "Jul"];
-export function monthlyTrend() {
-  // Série de demonstração com tendência realista de crescimento sazonal.
-  return [
-    { name: "Fev", recebidos: 58, concluidos: 49 },
-    { name: "Mar", recebidos: 64, concluidos: 55 },
-    { name: "Abr", recebidos: 71, concluidos: 60 },
-    { name: "Mai", recebidos: 69, concluidos: 64 },
-    { name: "Jun", recebidos: 78, concluidos: 68 },
-    { name: "Jul", recebidos: 56, concluidos: 41 },
-  ];
+export function monthlyTrend(data: Expedient[]) {
+  const now = new Date();
+  return Array.from({ length: 6 }, (_, index) => {
+    const date = new Date(now.getFullYear(), now.getMonth() - (5 - index), 1);
+    const sameMonth = (value: string) => { const item = new Date(value); return item.getFullYear() === date.getFullYear() && item.getMonth() === date.getMonth(); };
+    return {
+      name: new Intl.DateTimeFormat("pt-PT", { month: "short" }).format(date).replace(".", ""),
+      recebidos: data.filter((item) => sameMonth(item.dataEntrada)).length,
+      concluidos: data.filter((item) => CONCLUDED.includes(item.estado) && sameMonth(item.ultimaActualizacao)).length,
+    };
+  });
 }
 
-export function stageAvgTime() {
-  return [
-    { name: "Recepção", dias: 0.6 },
-    { name: "Protocolo", dias: 0.4 },
-    { name: "Análise", dias: 3.2 },
-    { name: "Parecer", dias: 4.8 },
-    { name: "Aprovação", dias: 2.1 },
-    { name: "Entrega", dias: 1.1 },
-  ];
+export function stageAvgTime(data: Expedient[]) {
+  const labels: Record<string,string> = { recepcao:"Recepção",protocolo:"Protocolo",encaminhamento:"Encaminhamento",aprovacao:"Aprovação",assinatura:"Assinatura",entrega:"Entrega",confirmacao:"Confirmação" };
+  const durations = new Map<string, number[]>();
+  for (const expedient of data) {
+    const events = [...expedient.timeline].sort((a,b) => new Date(a.data).getTime()-new Date(b.data).getTime());
+    events.forEach((event,index) => {
+      const label = labels[event.tipo];
+      const next = events[index+1];
+      if (!label || !next) return;
+      const days = Math.max(0, (new Date(next.data).getTime()-new Date(event.data).getTime())/86400000);
+      durations.set(label, [...(durations.get(label)??[]), days]);
+    });
+  }
+  return Object.values(labels).map((name) => {
+    const values=durations.get(name)??[];
+    return { name, dias: Number((values.reduce((sum,value)=>sum+value,0)/(values.length||1)).toFixed(2)) };
+  });
 }
 
-export function deadlineCompliance() {
-  return [
-    { name: "Fev", noPrazo: 88, atrasado: 12 },
-    { name: "Mar", noPrazo: 85, atrasado: 15 },
-    { name: "Abr", noPrazo: 90, atrasado: 10 },
-    { name: "Mai", noPrazo: 82, atrasado: 18 },
-    { name: "Jun", noPrazo: 87, atrasado: 13 },
-    { name: "Jul", noPrazo: 79, atrasado: 21 },
-  ];
+export function deadlineCompliance(data: Expedient[]) {
+  return monthlyTrend(data).map((month) => {
+    const terminal = data.filter((item) => CONCLUDED.includes(item.estado) && new Intl.DateTimeFormat("pt-PT", { month:"short" }).format(new Date(item.ultimaActualizacao)).replace(".", "") === month.name);
+    const late = terminal.filter((item) => new Date(item.ultimaActualizacao) > new Date(item.prazo)).length;
+    const total = terminal.length;
+    return { name: month.name, noPrazo: total ? Math.round(((total-late)/total)*100) : 0, atrasado: total ? Math.round((late/total)*100) : 0 };
+  });
 }
 
 // Tempo médio de resposta por unidade de origem, considerando apenas processos concluídos
 // (arquivado, aprovado ou com recepção confirmada). Ordenado da unidade mais lenta para a mais rápida.
-export function avgResponseTimeByUnit(data: Expedient[] = allExpedients) {
+export function avgResponseTimeByUnit(data: Expedient[]) {
   const byUnit = new Map<string, Expedient[]>();
   data
     .filter((e) => CONCLUDED.includes(e.estado))
@@ -149,7 +154,7 @@ export function avgResponseTimeByUnit(data: Expedient[] = allExpedients) {
 
 // Produtividade por utilizador responsável actual: processos concluídos, em curso e tempo médio de
 // resolução. Cruza com data/organization.ts para obter cargo, unidade e cor de avatar.
-export function productivityByUser(data: Expedient[] = allExpedients) {
+export function productivityByUser(data: Expedient[]) {
   const byUser = new Map<string, Expedient[]>();
   data.forEach((e) => {
     if (!e.responsavelActualId) return;
@@ -167,7 +172,7 @@ export function productivityByUser(data: Expedient[] = allExpedients) {
           return sum + Math.max(diff, 0.5);
         }, 0) / (concluded.length || 1);
 
-      const user = userById(userId);
+      const user = userById(userId) ?? users.find((item) => item.nome === items[0].responsavelActual);
       const unidade = user ? unitById(user.unidadeId)?.nome ?? "—" : "—";
 
       return {

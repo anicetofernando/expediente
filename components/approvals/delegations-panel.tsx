@@ -2,8 +2,7 @@
 
 import * as React from "react";
 import { Plus, Users2, X, XCircle } from "lucide-react";
-import type { User } from "@/types";
-import { users } from "@/data/organization";
+import type { Delegation, User } from "@/types";
 import { Button } from "@/components/ui/button";
 import { UserAvatar } from "@/components/ui/avatar";
 import { Table, TableBody, TableCell, TableContainer, TableHead, TableHeaderCell, TableRow } from "@/components/ui/table";
@@ -15,82 +14,34 @@ import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { formatDate } from "@/lib/utils";
 
-type DelegationState = "activa" | "agendada" | "terminada";
-
-interface Delegation {
-  id: string;
-  delegante: User;
-  delegado: User;
-  ambito: string;
-  dataInicio: string;
-  dataFim: string;
-  estado: DelegationState;
-}
-
-const userByIdSafe = (id: string) => users.find((u) => u.id === id)!;
-
-const INITIAL_DELEGATIONS: Delegation[] = [
-  {
-    id: "del-1",
-    delegante: userByIdSafe("usr-amelia-nhaca"),
-    delegado: userByIdSafe("usr-carlos-machava"),
-    ambito: "Aprovação de todos os expedientes remetidos à Direcção Geral durante o período de férias.",
-    dataInicio: "2026-07-20",
-    dataFim: "2026-08-03",
-    estado: "activa",
-  },
-  {
-    id: "del-2",
-    delegante: userByIdSafe("usr-eduardo-macuacua"),
-    delegado: userByIdSafe("usr-fatima-momade"),
-    ambito: "Aprovações correntes da Direcção de Infra-estruturas durante deslocação de serviço a Nampula.",
-    dataInicio: "2026-07-27",
-    dataFim: "2026-08-05",
-    estado: "agendada",
-  },
-  {
-    id: "del-3",
-    delegante: userByIdSafe("usr-armando-bila"),
-    delegado: userByIdSafe("usr-graca-muianga"),
-    ambito: "Aprovação de requisições de material de valor até 2.000.000,00 MT.",
-    dataInicio: "2026-07-10",
-    dataFim: "2026-07-31",
-    estado: "activa",
-  },
-  {
-    id: "del-4",
-    delegante: userByIdSafe("usr-lidia-chissano"),
-    delegado: userByIdSafe("usr-noemia-machel"),
-    ambito: "Aprovação de processos de férias e ausências de pessoal.",
-    dataInicio: "2026-06-01",
-    dataFim: "2026-06-15",
-    estado: "terminada",
-  },
-];
-
-const STATE_META: Record<DelegationState, { label: string; dot: string }> = {
+const STATE_META: Record<Delegation["estado"], { label: string; dot: string }> = {
   activa: { label: "Activa", dot: "bg-success-500" },
   agendada: { label: "Agendada", dot: "bg-info-500" },
   terminada: { label: "Terminada", dot: "bg-graphite-400" },
 };
 
-export function DelegationsPanel() {
+export function DelegationsPanel({ initialDelegations, users }: { initialDelegations: Delegation[]; users: User[] }) {
   const { toast } = useToast();
-  const [delegations, setDelegations] = React.useState<Delegation[]>(INITIAL_DELEGATIONS);
+  const [delegations, setDelegations] = React.useState<Delegation[]>(initialDelegations);
   const [newOpen, setNewOpen] = React.useState(false);
   const [closingId, setClosingId] = React.useState<string | null>(null);
 
-  function endDelegation(id: string) {
+  async function endDelegation(id: string) {
+    const response = await fetch(`/api/delegations/${id}`, { method: "PATCH" });
+    if (!response.ok) return toast({ title: "Não foi possível encerrar", variant: "destructive" });
     setDelegations((prev) => prev.map((d) => (d.id === id ? { ...d, estado: "terminada" } : d)));
     const target = delegations.find((d) => d.id === id);
     toast({ title: "Delegação encerrada", description: target ? `A delegação de ${target.delegante.nome} para ${target.delegado.nome} foi encerrada.` : undefined, variant: "success" });
     setClosingId(null);
   }
 
-  function createDelegation(d: Omit<Delegation, "id" | "estado">) {
+  async function createDelegation(d: Omit<Delegation, "id" | "estado">) {
+    const response = await fetch("/api/delegations", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ delegatorId: d.delegante.id, delegateId: d.delegado.id, startsOn: d.dataInicio, endsOn: d.dataFim, reason: d.ambito }) });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) return toast({ title: "Não foi possível criar", description: result.error, variant: "destructive" });
     const today = new Date().toISOString().slice(0, 10);
-    const estado: DelegationState = d.dataInicio > today ? "agendada" : "activa";
-    setDelegations((prev) => [{ id: `del-${prev.length + 1}-${Date.now()}`, estado, ...d }, ...prev]);
+    const estado: Delegation["estado"] = d.dataInicio > today ? "agendada" : "activa";
+    setDelegations((prev) => [{ id: result.id, estado, ...d }, ...prev]);
     toast({ title: "Delegação criada", description: `${d.delegante.nome} delegou poderes de aprovação a ${d.delegado.nome}.`, variant: "success" });
     setNewOpen(false);
   }
@@ -179,7 +130,7 @@ export function DelegationsPanel() {
         )}
       </div>
 
-      <NewDelegationDialog open={newOpen} onOpenChange={setNewOpen} onCreate={createDelegation} />
+      <NewDelegationDialog open={newOpen} onOpenChange={setNewOpen} onCreate={createDelegation} users={users} />
 
       <ConfirmDialog
         open={closingId !== null}
@@ -188,7 +139,7 @@ export function DelegationsPanel() {
         description="A delegação será encerrada imediatamente."
         confirmLabel="Encerrar delegação"
         destructive
-        onConfirm={() => closingId && endDelegation(closingId)}
+        onConfirm={() => { if (closingId) void endDelegation(closingId); }}
       />
     </div>
   );
@@ -198,10 +149,12 @@ function NewDelegationDialog({
   open,
   onOpenChange,
   onCreate,
+  users,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
-  onCreate: (d: { delegante: User; delegado: User; ambito: string; dataInicio: string; dataFim: string }) => void;
+  onCreate: (d: { delegante: User; delegado: User; ambito: string; dataInicio: string; dataFim: string }) => void | Promise<void>;
+  users: User[];
 }) {
   const [delegante, setDelegante] = React.useState("");
   const [delegado, setDelegado] = React.useState("");
@@ -273,7 +226,7 @@ function NewDelegationDialog({
             onClick={() => {
               const dObj = users.find((u) => u.id === delegante)!;
               const gObj = users.find((u) => u.id === delegado)!;
-              onCreate({ delegante: dObj, delegado: gObj, ambito, dataInicio, dataFim });
+              void onCreate({ delegante: dObj, delegado: gObj, ambito, dataInicio, dataFim });
               reset();
             }}
           >

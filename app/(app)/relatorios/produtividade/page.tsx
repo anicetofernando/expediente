@@ -5,11 +5,14 @@ import { Table, TableContainer, TableHead, TableBody, TableRow, TableHeaderCell,
 import { UserAvatar } from "@/components/ui/avatar";
 import { TopProductivityChart } from "@/components/dashboard/charts";
 import { productivityByUser } from "@/lib/dashboard-metrics";
+import { requireSession } from "@/lib/auth";
+import { listExpedients } from "@/lib/expedients-db";
 
 export const metadata = { title: "Produtividade" };
 
-export default function ProdutividadePage() {
-  const linhas = productivityByUser();
+export default async function ProdutividadePage() {
+  const expedients = await listExpedients(await requireSession(), "all");
+  const linhas = productivityByUser(expedients);
   const maxConcluidos = Math.max(1, ...linhas.map((l) => l.concluidos));
 
   const totalConcluidos = linhas.reduce((sum, l) => sum + l.concluidos, 0);
@@ -40,7 +43,7 @@ export default function ProdutividadePage() {
             </div>
           </CardHeader>
           <CardContent>
-            <TopProductivityChart height={260} />
+            <TopProductivityChart height={260} expedients={expedients} />
           </CardContent>
         </Card>
 

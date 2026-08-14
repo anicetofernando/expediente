@@ -1,14 +1,13 @@
 import { PageHeader } from "@/components/shared/page-header";
 import { StatCard } from "@/components/shared/stat-card";
 import { DocumentLibrary, type FlatDocument } from "@/components/documents/document-library";
-import { allExpedients } from "@/data/expedients";
+import { requireSession } from "@/lib/auth";
+import { listDocuments } from "@/lib/expedients-db";
 
 export const metadata = { title: "Documentos" };
 
-export default function DocumentosPage() {
-  const documents: FlatDocument[] = allExpedients.flatMap((e) =>
-    e.documentos.map((d) => ({ ...d, protocolo: e.protocolo, expedienteId: e.id, assunto: e.assunto }))
-  );
+export default async function DocumentosPage() {
+  const documents: FlatDocument[] = await listDocuments(await requireSession());
 
   const total = documents.length;
   const carimbados = documents.filter((d) => d.carimbado).length;

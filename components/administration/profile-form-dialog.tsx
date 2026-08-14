@@ -18,23 +18,25 @@ export function ProfileFormDialog({
   open,
   onOpenChange,
   onSubmit,
+  initialProfile,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSubmit: (values: ProfileFormValues) => void;
+  onSubmit: (values: ProfileFormValues) => void | Promise<void>;
+  initialProfile?: Profile | null;
 }) {
   const [values, setValues] = React.useState<ProfileFormValues>({ nome: "", descricao: "", nivel: "operacional", ambito: "unidade" });
 
   React.useEffect(() => {
-    if (open) setValues({ nome: "", descricao: "", nivel: "operacional", ambito: "unidade" });
-  }, [open]);
+    if (open) setValues(initialProfile ? { nome: initialProfile.nome, descricao: initialProfile.descricao, nivel: initialProfile.nivel, ambito: initialProfile.ambito } : { nome: "", descricao: "", nivel: "operacional", ambito: "unidade" });
+  }, [open, initialProfile]);
 
   const isValid = values.nome.trim().length > 0 && values.descricao.trim().length > 0;
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!isValid) return;
-    onSubmit(values);
+    void onSubmit(values);
   }
 
   return (
@@ -42,8 +44,8 @@ export function ProfileFormDialog({
       <DialogContent size="md">
         <form onSubmit={handleSubmit}>
           <DialogHeader>
-            <DialogTitle>Novo perfil</DialogTitle>
-            <DialogDescription>Defina um novo perfil de acesso. As permissões podem ser configuradas de seguida na matriz de permissões.</DialogDescription>
+            <DialogTitle>{initialProfile ? "Editar perfil" : "Novo perfil"}</DialogTitle>
+            <DialogDescription>{initialProfile ? "Actualize os dados do perfil de acesso." : "Defina um novo perfil de acesso. As permissões podem ser configuradas de seguida na matriz."}</DialogDescription>
           </DialogHeader>
           <DialogBody className="space-y-4">
             <div>
@@ -94,7 +96,7 @@ export function ProfileFormDialog({
           </DialogBody>
           <DialogFooter>
             <Button type="button" variant="secondary" onClick={() => onOpenChange(false)}>Cancelar</Button>
-            <Button type="submit" disabled={!isValid}>Criar perfil</Button>
+            <Button type="submit" disabled={!isValid}>{initialProfile ? "Guardar alterações" : "Criar perfil"}</Button>
           </DialogFooter>
         </form>
       </DialogContent>

@@ -4,14 +4,16 @@ import { PageHeader } from "@/components/shared/page-header";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { StatusBadge, PriorityBadge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
-import { caixaEntrada } from "@/lib/expedient-filters";
+import { requireSession } from "@/lib/auth";
+import { listExpedients } from "@/lib/expedients-db";
 import { formatDate } from "@/lib/utils";
 import type { Expedient } from "@/types";
 
 export const metadata = { title: "Tarefas pendentes" };
 
 function groupByUrgency(data: Expedient[]) {
-  const today = new Date("2026-07-25T00:00:00");
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
   const in7 = new Date(today.getTime() + 7 * 86400000);
   const atrasadas: Expedient[] = [];
   const hoje: Expedient[] = [];
@@ -29,8 +31,8 @@ function groupByUrgency(data: Expedient[]) {
   return { atrasadas, hoje, semana, outras };
 }
 
-export default function TarefasPage() {
-  const data = caixaEntrada();
+export default async function TarefasPage() {
+  const data = await listExpedients(await requireSession(), "inbox");
   const { atrasadas, hoje, semana, outras } = groupByUrgency(data);
 
   return (

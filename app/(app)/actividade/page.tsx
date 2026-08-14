@@ -9,9 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { SearchInput } from "@/components/ui/input";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Pagination } from "@/components/ui/pagination";
-import { Timeline } from "@/components/shared/timeline";
-import { allExpedients } from "@/data/expedients";
-import { organizationalUnits } from "@/data/organization";
+import { useCatalogs } from "@/lib/catalogs";
 import type { TimelineEvent } from "@/types";
 
 const EVENT_TYPE_LABEL: Record<string, string> = {
@@ -22,16 +20,18 @@ const EVENT_TYPE_LABEL: Record<string, string> = {
 };
 
 export default function ActividadePage() {
+  const { organizationalUnits } = useCatalogs();
   const [search, setSearch] = React.useState("");
   const [unit, setUnit] = React.useState("todas");
   const [tipo, setTipo] = React.useState("todos");
   const [page, setPage] = React.useState(1);
   const pageSize = 15;
 
-  const allEvents = React.useMemo(() => {
-    return allExpedients
-      .flatMap((e) => e.timeline.map((t) => ({ ...t, protocolo: e.protocolo, expedienteId: e.id })))
-      .sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime());
+  const [allEvents, setAllEvents] = React.useState<(TimelineEvent & { protocolo: string; expedienteId: string })[]>([]);
+  React.useEffect(() => {
+    void fetch("/api/activity", { cache: "no-store" }).then(async (response) => {
+      if (response.ok) setAllEvents((await response.json()).items ?? []);
+    });
   }, []);
 
   const filtered = allEvents.filter((e) => {

@@ -1,5 +1,10 @@
 import { redirect } from "next/navigation";
+import { getCurrentSession } from "@/lib/auth";
+import { getProfileLandingHref } from "@/components/layout/navigation-model";
 
-export default function RootPage() {
-  redirect("/login");
+export const dynamic = "force-dynamic";
+
+export default async function RootPage() {
+  const session = await getCurrentSession();
+  redirect(session ? getProfileLandingHref(session.perfilNavegacao) : "/login");
 }

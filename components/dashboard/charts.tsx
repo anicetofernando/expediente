@@ -10,6 +10,7 @@ import {
   statusDistribution, typeDistribution, sectorDistribution, monthlyTrend, stageAvgTime, deadlineCompliance,
   productivityByUser,
 } from "@/lib/dashboard-metrics";
+import type { Expedient } from "@/types";
 
 const axisStyle = { fontSize: 11, fill: CHART_MUTED_TEXT };
 const tickLine = false;
@@ -30,8 +31,8 @@ function ChartTooltip({ active, payload, label, suffix = "" }: any) {
   );
 }
 
-export function StatusDistributionChart({ height = 220 }: { height?: number }) {
-  const data = statusDistribution();
+export function StatusDistributionChart({ height = 220, expedients }: { height?: number; expedients: Expedient[] }) {
+  const data = statusDistribution(expedients);
   return (
     <ResponsiveContainer width="100%" height={height}>
       <PieChart>
@@ -54,8 +55,8 @@ export function StatusDistributionChart({ height = 220 }: { height?: number }) {
   );
 }
 
-export function TypeDistributionChart({ height = 220 }: { height?: number }) {
-  const data = typeDistribution();
+export function TypeDistributionChart({ height = 220, expedients }: { height?: number; expedients: Expedient[] }) {
+  const data = typeDistribution(expedients);
   return (
     <ResponsiveContainer width="100%" height={height}>
       <BarChart data={data} layout="vertical" margin={{ left: 8, right: 16, top: 4, bottom: 4 }} barCategoryGap={10}>
@@ -69,8 +70,8 @@ export function TypeDistributionChart({ height = 220 }: { height?: number }) {
   );
 }
 
-export function SectorDistributionChart({ height = 220 }: { height?: number }) {
-  const data = sectorDistribution();
+export function SectorDistributionChart({ height = 220, expedients }: { height?: number; expedients: Expedient[] }) {
+  const data = sectorDistribution(expedients);
   return (
     <ResponsiveContainer width="100%" height={height}>
       <BarChart data={data} layout="vertical" margin={{ left: 8, right: 16, top: 4, bottom: 4 }} barCategoryGap={8}>
@@ -84,8 +85,8 @@ export function SectorDistributionChart({ height = 220 }: { height?: number }) {
   );
 }
 
-export function MonthlyTrendChart({ height = 220 }: { height?: number }) {
-  const data = monthlyTrend();
+export function MonthlyTrendChart({ height = 220, expedients }: { height?: number; expedients: Expedient[] }) {
+  const data = monthlyTrend(expedients);
   return (
     <ResponsiveContainer width="100%" height={height}>
       <AreaChart data={data} margin={{ left: -16, right: 8, top: 8, bottom: 0 }}>
@@ -107,8 +108,8 @@ export function MonthlyTrendChart({ height = 220 }: { height?: number }) {
   );
 }
 
-export function StageAvgTimeChart({ height = 220 }: { height?: number }) {
-  const data = stageAvgTime();
+export function StageAvgTimeChart({ height = 220, expedients }: { height?: number; expedients: Expedient[] }) {
+  const data = stageAvgTime(expedients);
   return (
     <ResponsiveContainer width="100%" height={height}>
       <BarChart data={data} margin={{ left: -16, right: 8, top: 4, bottom: 0 }} barCategoryGap={16}>
@@ -122,8 +123,8 @@ export function StageAvgTimeChart({ height = 220 }: { height?: number }) {
   );
 }
 
-export function DeadlineComplianceChart({ height = 220 }: { height?: number }) {
-  const data = deadlineCompliance();
+export function DeadlineComplianceChart({ height = 220, expedients }: { height?: number; expedients: Expedient[] }) {
+  const data = deadlineCompliance(expedients);
   return (
     <ResponsiveContainer width="100%" height={height}>
       <BarChart data={data} margin={{ left: -16, right: 8, top: 4, bottom: 0 }} barCategoryGap={14}>
@@ -139,8 +140,8 @@ export function DeadlineComplianceChart({ height = 220 }: { height?: number }) {
   );
 }
 
-export function TopProductivityChart({ height = 220 }: { height?: number }) {
-  const data = productivityByUser()
+export function TopProductivityChart({ height = 220, expedients }: { height?: number; expedients: Expedient[] }) {
+  const data = productivityByUser(expedients)
     .slice(0, 6)
     .map((u) => ({ name: u.nome, value: u.concluidos }));
   return (

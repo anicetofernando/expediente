@@ -3,12 +3,15 @@ import { StatCard } from "@/components/shared/stat-card";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { StageAvgTimeChart } from "@/components/dashboard/charts";
 import { avgResponseTimeByUnit, coreStats } from "@/lib/dashboard-metrics";
+import { requireSession } from "@/lib/auth";
+import { listReportExpedients } from "@/lib/expedients-db";
 
 export const metadata = { title: "Tempos de resposta" };
 
-export default function TemposRespostaPage() {
-  const stats = coreStats();
-  const porUnidade = avgResponseTimeByUnit();
+export default async function TemposRespostaPage() {
+  const expedients = await listReportExpedients(await requireSession());
+  const stats = coreStats(expedients);
+  const porUnidade = avgResponseTimeByUnit(expedients);
   const maisLenta = porUnidade[0];
   const maisRapida = porUnidade[porUnidade.length - 1];
   const maiorMedia = maisLenta?.mediaDias ?? 1;
@@ -48,7 +51,7 @@ export default function TemposRespostaPage() {
             </div>
           </CardHeader>
           <CardContent>
-            <StageAvgTimeChart height={320} />
+            <StageAvgTimeChart height={320} expedients={expedients} />
             <p className="mt-4 max-w-3xl text-[13px] leading-relaxed text-graphite-600">
               A fase de <span className="font-medium text-graphite-800">parecer técnico</span> concentra o maior tempo médio de
               permanência do processo, reflectindo a necessidade de coordenação entre unidades para emissão de pareceres

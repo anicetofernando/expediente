@@ -1,16 +1,13 @@
 import { PageHeader } from "@/components/shared/page-header";
 import { AttachmentsTable } from "@/components/documents/attachments-table";
 import type { FlatDocument } from "@/components/documents/document-library";
-import { allExpedients } from "@/data/expedients";
+import { requireSession } from "@/lib/auth";
+import { listDocuments } from "@/lib/expedients-db";
 
 export const metadata = { title: "Anexos" };
 
-export default function AnexosPage() {
-  const anexos: FlatDocument[] = allExpedients.flatMap((e) =>
-    e.documentos
-      .filter((d) => d.tipo === "anexo")
-      .map((d) => ({ ...d, protocolo: e.protocolo, expedienteId: e.id, assunto: e.assunto }))
-  );
+export default async function AnexosPage() {
+  const anexos: FlatDocument[] = (await listDocuments(await requireSession())).filter((document) => document.tipo === "anexo");
 
   return (
     <div className="flex h-full min-h-0 flex-col">

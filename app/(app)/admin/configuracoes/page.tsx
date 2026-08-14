@@ -13,7 +13,6 @@ import {
   Save,
   Send,
   Settings2,
-  ShieldCheck,
 } from "lucide-react";
 import { CatalogSettings } from "@/components/administration/catalog-settings";
 import { PageHeader } from "@/components/shared/page-header";
@@ -38,6 +37,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
+import { useDatabaseSetting } from "@/lib/use-database-setting";
 
 interface SystemSettings {
   institutionName: string;
@@ -46,11 +46,8 @@ interface SystemSettings {
   timezone: string;
   locale: string;
   protocolPrefix: string;
-  sessionMinutes: string;
   passwordDays: string;
   maxAttempts: string;
-  require2FAAdmins: boolean;
-  require2FAAll: boolean;
   auditYears: string;
   defaultDeadlineDays: string;
   deadlineWarningHours: string;
@@ -72,11 +69,8 @@ const DEFAULT_SETTINGS: SystemSettings = {
   timezone: "Africa/Maputo",
   locale: "pt-MZ",
   protocolPrefix: "CFM",
-  sessionMinutes: "30",
   passwordDays: "90",
   maxAttempts: "5",
-  require2FAAdmins: true,
-  require2FAAll: false,
   auditYears: "10",
   defaultDeadlineDays: "5",
   deadlineWarningHours: "24",
@@ -122,10 +116,12 @@ function SettingRow({
 
 export default function ConfiguracoesPage() {
   const { toast } = useToast();
-  const [settings, setSettings] =
-    React.useState<SystemSettings>(DEFAULT_SETTINGS);
+  const [storedSettings, setStoredSettings, settingsReady] = useDatabaseSetting<SystemSettings>("general-configuration", DEFAULT_SETTINGS);
+  const [settings, setSettings] = React.useState<SystemSettings>(DEFAULT_SETTINGS);
   const [changed, setChanged] = React.useState(false);
   const [lastSaved, setLastSaved] = React.useState("25/07/2026, 09:30");
+
+  React.useEffect(() => { if (settingsReady) setSettings(storedSettings); }, [settingsReady, storedSettings]);
 
   function update<K extends keyof SystemSettings>(
     key: K,
@@ -136,6 +132,7 @@ export default function ConfiguracoesPage() {
   }
 
   function save() {
+    setStoredSettings(settings);
     setChanged(false);
     const savedAt = new Date().toLocaleString("pt-PT", {
       day: "2-digit",
@@ -207,7 +204,7 @@ export default function ConfiguracoesPage() {
           }
         >
           {changed
-            ? "As alterações permanecem apenas nesta sessão até seleccionar “Guardar alterações”."
+            ? "As alterações permanecem apenas neste formulário até seleccionar “Guardar alterações”."
             : `Última gravação confirmada em ${lastSaved}.`}
         </Alert>
 
@@ -363,30 +360,12 @@ export default function ConfiguracoesPage() {
                   <div>
                     <CardTitle>Políticas de acesso</CardTitle>
                     <CardDescription>
-                      Sessões, palavras-passe e autenticação multifactor.
+                      Regras de palavra-passe aplicadas aos utilizadores.
                     </CardDescription>
                   </div>
-                  <ShieldCheck className="size-5 text-success-600" />
+                  <KeyRound className="size-5 text-success-600" />
                 </CardHeader>
                 <CardContent className="py-0">
-                  <SettingRow
-                    icon={Clock3}
-                    title="Duração máxima da sessão"
-                    description="Termina sessões sem actividade após o período definido."
-                  >
-                    <div className="flex items-center gap-2">
-                      <Input
-                        type="number"
-                        min="5"
-                        max="480"
-                        value={settings.sessionMinutes}
-                        onChange={(event) =>
-                          update("sessionMinutes", event.target.value)
-                        }
-                      />
-                      <span className="text-xs text-graphite-500">minutos</span>
-                    </div>
-                  </SettingRow>
                   <SettingRow
                     icon={KeyRound}
                     title="Validade da palavra-passe"
@@ -402,34 +381,6 @@ export default function ConfiguracoesPage() {
                         }
                       />
                       <span className="text-xs text-graphite-500">dias</span>
-                    </div>
-                  </SettingRow>
-                  <SettingRow
-                    icon={ShieldCheck}
-                    title="2FA para administradores"
-                    description="Exige um segundo factor em todos os perfis administrativos."
-                  >
-                    <div className="flex justify-end">
-                      <Switch
-                        checked={settings.require2FAAdmins}
-                        onCheckedChange={(checked) =>
-                          update("require2FAAdmins", checked)
-                        }
-                      />
-                    </div>
-                  </SettingRow>
-                  <SettingRow
-                    icon={ShieldCheck}
-                    title="2FA para todos os utilizadores"
-                    description="Aplica autenticação multifactor a qualquer perfil."
-                  >
-                    <div className="flex justify-end">
-                      <Switch
-                        checked={settings.require2FAAll}
-                        onCheckedChange={(checked) =>
-                          update("require2FAAll", checked)
-                        }
-                      />
                     </div>
                   </SettingRow>
                 </CardContent>

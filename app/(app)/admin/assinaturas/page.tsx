@@ -54,6 +54,7 @@ import {
 } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
 import { formatDate } from "@/lib/utils";
+import { useDatabaseSetting } from "@/lib/use-database-setting";
 
 const STATUS_LABEL: Record<Signature["estado"], string> = {
   activa: "Activa",
@@ -72,7 +73,7 @@ const STATUS_VARIANT: Record<
 
 export default function AssinaturasPage() {
   const { toast } = useToast();
-  const [items, setItems] = React.useState<Signature[]>(initialSignatures);
+  const [items, setItems] = useDatabaseSetting<Signature[]>("signatures", initialSignatures);
   const [search, setSearch] = React.useState("");
   const [status, setStatus] = React.useState("todos");
   const [open, setOpen] = React.useState(false);
@@ -96,7 +97,7 @@ export default function AssinaturasPage() {
 
   const activeCount = items.filter((item) => item.estado === "activa").length;
   const protectedCount = items.filter(
-    (item) => item.requerPin || item.requer2FA
+    (item) => item.requerPin
   ).length;
   const expiringCount = items.filter((item) => item.estado !== "activa").length;
   const usageCount = items.reduce((total, item) => total + item.utilizacoes, 0);
@@ -118,7 +119,6 @@ export default function AssinaturasPage() {
       validadeFim,
       documentosPermitidos: ["Despacho", "Ofício"],
       requerPin: true,
-      requer2FA: true,
       estado: "activa",
       utilizacoes: 0,
     };
@@ -195,7 +195,7 @@ export default function AssinaturasPage() {
             tone="success"
           />
           <StatCard
-            label="Com PIN ou 2FA"
+            label="Protegidas por PIN"
             value={protectedCount}
             icon="ShieldCheck"
             tone="navy"
@@ -287,10 +287,7 @@ export default function AssinaturasPage() {
                               <KeyRound className="size-3" /> PIN
                             </Badge>
                           )}
-                          {item.requer2FA && (
-                            <Badge variant="info">2FA</Badge>
-                          )}
-                          {!item.requerPin && !item.requer2FA && (
+                          {!item.requerPin && (
                             <span className="text-graphite-400">—</span>
                           )}
                         </div>

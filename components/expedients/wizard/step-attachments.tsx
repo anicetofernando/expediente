@@ -1,6 +1,6 @@
 "use client";
 
-import { Paperclip, ScanLine, Trash2, FileText } from "lucide-react";
+import { Paperclip, Trash2, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -25,23 +25,9 @@ export function StepAttachments({ state, update }: StepProps) {
       tamanho: `${(f.size / 1024).toFixed(0)} KB`,
       descricao: "",
       confidencialidade: (defaultConfidentiality?.code ?? "") as Confidentiality | "",
+      ficheiro: f,
     }));
     update({ anexos: [...state.anexos, ...novos] });
-  }
-
-  function addScan() {
-    update({
-      anexos: [
-        ...state.anexos,
-        {
-          id: `att-scan-${Date.now()}`,
-          nome: `Anexo_digitalizado_${state.anexos.length + 1}.pdf`,
-          tamanho: "640 KB",
-          descricao: "",
-          confidencialidade: (defaultConfidentiality?.code ?? "") as Confidentiality | "",
-        },
-      ],
-    });
   }
 
   function updateAnexo(id: string, patch: Partial<WizardAttachment>) {
@@ -62,9 +48,6 @@ export function StepAttachments({ state, update }: StepProps) {
               <Paperclip className="size-3.5" /> Adicionar ficheiros
               <input type="file" multiple className="hidden" onChange={(e) => addFiles(e.target.files)} />
             </label>
-          </Button>
-          <Button variant="secondary" onClick={addScan}>
-            <ScanLine className="size-3.5" /> Digitalizar anexo
           </Button>
         </div>
       </div>

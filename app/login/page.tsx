@@ -19,11 +19,7 @@ export default function LoginPage() {
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState("");
 
-  React.useEffect(() => {
-    router.prefetch("/verificacao-2fa");
-  }, [router]);
-
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!email.trim() || !password) {
       setError("Introduza o e-mail e a palavra-passe.");
@@ -31,7 +27,24 @@ export default function LoginPage() {
     }
     setError("");
     setLoading(true);
-    router.replace("/verificacao-2fa");
+    try {
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email, password, persistent: keepSignedIn }),
+      });
+      const result = await response.json();
+      if (!response.ok) {
+        setError(result.error ?? "Não foi possível iniciar sessão.");
+        return;
+      }
+      router.replace(result.redirectTo ?? "/painel");
+      router.refresh();
+    } catch {
+      setError("Não foi possível ligar ao servidor.");
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
@@ -91,7 +104,7 @@ export default function LoginPage() {
 
       <div className="mt-5 flex items-start gap-2 rounded-md border border-graphite-150 bg-graphite-25 px-3 py-2.5 text-2xs leading-relaxed text-graphite-500">
         <ShieldCheck className="mt-0.5 size-3.5 shrink-0 text-graphite-400" aria-hidden />
-        Ligação encriptada. Após a palavra-passe, ser-lhe-á pedido um código de verificação em duas etapas.
+        Ligação protegida. Utilize apenas as suas credenciais institucionais.
       </div>
 
       <p className="mt-4 text-center text-2xs text-graphite-400">Versão 1.0.0 · Sistema de Gestão de Expediente</p>

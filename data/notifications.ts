@@ -11,7 +11,7 @@ export const notifications: Notification[] = [
 ];
 
 export const auditEntries: AuditEntry[] = [
-  { id: "a1", data: "2026-07-25T08:41:00", utilizador: "Armando Bila", accao: "Sessão iniciada", entidade: "Sessão", entidadeId: "sess-8841", detalhes: "Autenticação com 2FA bem-sucedida.", ip: "196.28.10.44", resultado: "sucesso" },
+  { id: "a1", data: "2026-07-25T08:41:00", utilizador: "Armando Bila", accao: "Acesso autenticado", entidade: "Acesso", entidadeId: "access-8841", detalhes: "Autenticação por palavra-passe bem-sucedida.", ip: "196.28.10.44", resultado: "sucesso" },
   { id: "a2", data: "2026-07-24T11:32:00", utilizador: "Fátima Momade", accao: "Comentário adicionado", entidade: "Expediente", entidadeId: "CFM/DOC/2026/0412", detalhes: "Comentário interno adicionado ao processo.", ip: "196.28.10.51", resultado: "sucesso" },
   { id: "a3", data: "2026-07-23T14:10:00", utilizador: "Graça Muianga", accao: "Parecer solicitado", entidade: "Expediente", entidadeId: "CFM/DAP/2026/0455", detalhes: "Parecer orçamental solicitado à DFA.", ip: "196.28.10.22", resultado: "sucesso" },
   { id: "a4", data: "2026-07-22T09:05:00", utilizador: "Carlos Machava", accao: "Comentário adicionado", entidade: "Expediente", entidadeId: "CFM/DMC/2026/0398", detalhes: "Registo de escalonamento por atraso.", ip: "196.28.10.19", resultado: "sucesso" },

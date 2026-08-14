@@ -3,8 +3,6 @@ import type { Expedient } from "@/types";
 import {
   User, Building2, CalendarClock, FileText, History as HistoryIcon,
 } from "lucide-react";
-import { expedientById, allExpedients } from "@/data/expedients";
-import { auditEntries } from "@/data/notifications";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { Badge, StatusBadge, PriorityBadge, ConfidentialityBadge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -16,17 +14,18 @@ import { Timeline } from "@/components/shared/timeline";
 import { ActionPanel } from "@/components/expedients/detail/action-panel";
 import { CommentsPanel } from "@/components/expedients/detail/comments-panel";
 import { DocumentViewer } from "@/components/documents/document-viewer";
+import { requireSession } from "@/lib/auth";
+import { getExpedient } from "@/lib/expedients-db";
 
-export function generateStaticParams() {
-  return allExpedients.slice(0, 12).map((e) => ({ id: e.id }));
-}
+export const dynamic = "force-dynamic";
 
-export default function ExpedientDetailPage({ params }: { params: { id: string } }) {
-  const expedient = expedientById(params.id);
-  if (!expedient) notFound();
+export default async function ExpedientDetailPage({ params }: { params: { id: string } }) {
+  const session = await requireSession();
+  const result = await getExpedient(session, params.id);
+  if (!result) notFound();
+  const { expedient, audit } = result;
 
   const principal = expedient.documentos.find((d) => d.tipo === "principal") ?? expedient.documentos[0];
-  const audit = auditEntries.filter((a) => a.entidadeId === expedient.protocolo);
 
   return (
     <div>
@@ -119,7 +118,7 @@ export default function ExpedientDetailPage({ params }: { params: { id: string }
             </TabsContent>
 
             <TabsContent value="comentarios" className="pt-5">
-              <CommentsPanel initialComments={expedient.comentarios} />
+              <CommentsPanel initialComments={expedient.comentarios} expedientId={expedient.id} />
             </TabsContent>
 
             <TabsContent value="auditoria" className="pt-5">
@@ -161,6 +160,7 @@ export default function ExpedientDetailPage({ params }: { params: { id: string }
             <CardContent>
               <ActionPanel
                 expedient={{
+                  id: expedient.id,
                   estado: expedient.estado,
                   protocolo: expedient.protocolo,
                   assunto: expedient.assunto,

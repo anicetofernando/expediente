@@ -3,10 +3,14 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "next lint"
+    "dev": "node node_modules/next/dist/bin/next dev",
+    "build": "node node_modules/next/dist/bin/next build",
+    "start": "node node_modules/next/dist/bin/next start",
+    "lint": "node node_modules/next/dist/bin/next lint",
+    "typecheck": "node node_modules/typescript/bin/tsc --noEmit",
+    "db:migrate": "node --env-file=.env.local scripts/migrate.mjs",
+    "db:test": "node --env-file=.env.local scripts/test-db.mjs",
+    "test:e2e": "node --env-file=.env.local scripts/e2e.mjs"
   },
   "dependencies": {
     "next": "14.2.35",
@@ -33,6 +37,7 @@
     "@radix-ui/react-slot": "1.1.0",
     "@radix-ui/react-toast": "1.2.1",
     "@radix-ui/react-visually-hidden": "1.1.0"
+    ,"pg": "8.13.1"
   },
   "devDependencies": {
     "typescript": "5.5.4",
@@ -44,5 +49,6 @@
     "autoprefixer": "10.4.20",
     "eslint": "8.57.0",
     "eslint-config-next": "14.2.35"
+    ,"@types/pg": "8.11.10"
   }
 }

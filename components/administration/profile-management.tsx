@@ -37,30 +37,51 @@ export function ProfileManagement({ initialProfiles, users }: { initialProfiles:
   const { toast } = useToast();
   const [profiles, setProfiles] = React.useState<Profile[]>(initialProfiles);
   const [createOpen, setCreateOpen] = React.useState(false);
+  const [editingProfile, setEditingProfile] = React.useState<Profile | null>(null);
   const [permissionsProfile, setPermissionsProfile] = React.useState<Profile | null>(null);
 
-  function handleCreate(values: ProfileFormValues) {
-    const novo: Profile = {
-      id: `p-${values.nome.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")}-${Date.now().toString(36).slice(-4)}`,
-      nome: values.nome,
-      descricao: values.descricao,
-      nivel: values.nivel,
-      ambito: values.ambito,
-      utilizadoresCount: 0,
-      permissoes: [],
-      estado: "activo",
-    };
-    setProfiles((prev) => [...prev, novo]);
+  async function saveProfile(values: ProfileFormValues) {
+    const response = await fetch(editingProfile ? `/api/profiles/${editingProfile.id}` : "/api/profiles", {
+      method: editingProfile ? "PATCH" : "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(values),
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      toast({ title: "Não foi possível guardar", description: result.error ?? "Tente novamente.", variant: "destructive" });
+      return;
+    }
+    if (editingProfile) {
+      setProfiles((current) => current.map((profile) => profile.id === editingProfile.id ? { ...profile, ...values } : profile));
+    } else if (result.profile) {
+      setProfiles((current) => [...current, result.profile]);
+    }
     setCreateOpen(false);
-    toast({ title: "Perfil criado", description: `O perfil "${novo.nome}" foi criado. Configure as permissões na matriz de permissões.`, variant: "success" });
+    setEditingProfile(null);
+    toast({ title: editingProfile ? "Perfil actualizado" : "Perfil criado", description: `As alterações foram guardadas no PostgreSQL.`, variant: "success" });
   }
 
-  function handleDuplicate(p: Profile) {
-    toast({ title: "Perfil duplicado", description: `Foi criada uma cópia de "${p.nome}" para edição.` });
+  async function handleDuplicate(p: Profile) {
+    const response = await fetch("/api/profiles", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ nome: `${p.nome} (cópia)`, descricao: p.descricao, nivel: p.nivel, ambito: p.ambito }) });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok || !result.profile) return toast({ title: "Não foi possível duplicar", description: result.error ?? "Tente novamente.", variant: "destructive" });
+    await fetch(`/api/profiles/${result.profile.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ permissoes: p.permissoes }) });
+    const duplicate = { ...result.profile, permissoes: p.permissoes };
+    setProfiles((current) => [...current, duplicate]);
+    toast({ title: "Perfil duplicado", description: `Foi criada uma cópia persistente de "${p.nome}".`, variant: "success" });
   }
 
   function handleEdit(p: Profile) {
-    toast({ title: "Edição de perfil", description: `A abrir o formulário de edição de "${p.nome}".` });
+    setEditingProfile(p);
+    setCreateOpen(true);
+  }
+
+  async function savePermissions(profileId: string, permissions: string[]) {
+    const response = await fetch(`/api/profiles/${profileId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ permissoes: permissions }) });
+    if (!response.ok) return toast({ title: "Não foi possível guardar", variant: "destructive" });
+    setProfiles((current) => current.map((profile) => profile.id === profileId ? { ...profile, permissoes: permissions } : profile));
+    setPermissionsProfile((current) => current?.id === profileId ? { ...current, permissoes: permissions } : current);
+    toast({ title: "Permissões guardadas", variant: "success" });
   }
 
   return (
@@ -114,8 +135,8 @@ export function ProfileManagement({ initialProfiles, users }: { initialProfiles:
         ))}
       </div>
 
-      <ProfileFormDialog open={createOpen} onOpenChange={setCreateOpen} onSubmit={handleCreate} />
-      <ProfilePermissionsDrawer profile={permissionsProfile} users={users} onOpenChange={(open) => !open && setPermissionsProfile(null)} />
+      <ProfileFormDialog open={createOpen} onOpenChange={(open) => { setCreateOpen(open); if (!open) setEditingProfile(null); }} onSubmit={saveProfile} initialProfile={editingProfile} />
+      <ProfilePermissionsDrawer profile={permissionsProfile} users={users} onOpenChange={(open) => !open && setPermissionsProfile(null)} onSave={savePermissions} />
     </div>
   );
 }

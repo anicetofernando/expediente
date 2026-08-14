@@ -11,16 +11,18 @@ import {
   TableHeaderCell,
   TableRow,
 } from "@/components/ui/table";
-import { allExpedients } from "@/data/expedients";
 import { coreStats } from "@/lib/dashboard-metrics";
+import { requireSession } from "@/lib/auth";
+import { listExpedients } from "@/lib/expedients-db";
 import { cn, formatDate } from "@/lib/utils";
 
 export const metadata = { title: "Painel" };
 
 const TERMINAL_STATES = ["arquivado", "aprovado", "recebimento_confirmado", "cancelado", "rejeitado"];
 
-export default function PainelPage() {
-  const stats = coreStats();
+export default async function PainelPage() {
+  const allExpedients = await listExpedients(await requireSession(), "all");
+  const stats = coreStats(allExpedients);
 
   const prioritarios = [...allExpedients]
     .filter((expedient) => !TERMINAL_STATES.includes(expedient.estado))

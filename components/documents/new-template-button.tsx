@@ -7,11 +7,13 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input, Label, Textarea } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
+import { useCatalogs } from "@/lib/catalogs";
 
 const CATEGORIAS = ["Correspondência", "Aprovisionamento", "Técnico", "Decisão", "Relatório"];
 
 export function NewTemplateButton() {
   const { toast } = useToast();
+  const { setDocumentTemplates } = useCatalogs();
   const [open, setOpen] = React.useState(false);
   const [nome, setNome] = React.useState("");
   const [categoria, setCategoria] = React.useState("");
@@ -59,6 +61,7 @@ export function NewTemplateButton() {
             <Button
               disabled={!nome.trim() || !categoria}
               onClick={() => {
+                setDocumentTemplates((current) => [{ id: `tpl-${Date.now()}`, nome: nome.trim(), categoria, descricao: descricao.trim() || "Modelo institucional configurável.", camposCount: 0, utilizacoes: 0, actualizadoEm: new Date().toISOString(), estado: "activo" }, ...current]);
                 toast({ title: "Modelo criado", description: `O modelo "${nome}" foi criado e está disponível para configuração dos campos.`, variant: "success" });
                 setOpen(false);
                 reset();
