@@ -10,6 +10,8 @@ const STAMP_DEFAULT: FreePosition = { x: 10, y: 76, width: 28, height: 14 };
 const SIGNATURE_DEFAULT: FreePosition = { x: 62, y: 78, width: 28, height: 14 };
 const MIN_SIZE = 6;
 const MAX_SIZE = 60;
+const MAX_PREVIEW_WIDTH = 680;
+const MAX_PREVIEW_HEIGHT = 720;
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
@@ -19,6 +21,62 @@ interface PositionableItem {
   imageUrl: string;
   label: string;
   initialPosition?: FreePosition;
+}
+
+/**
+ * Renders the exact final page of the PDF to a canvas via pdf.js — pixel-accurate,
+ * unlike an <iframe> pointed at the browser's native PDF viewer, which adds its own
+ * chrome/padding that can't be measured, breaking the % coordinates dragged over it.
+ */
+function PdfPagePreview({ pdfUrl, onReady }: { pdfUrl: string; onReady: (canvas: HTMLCanvasElement) => void }) {
+  const canvasRef = React.useRef<HTMLCanvasElement>(null);
+  const [status, setStatus] = React.useState<"loading" | "ready" | "error">("loading");
+
+  React.useEffect(() => {
+    let cancelled = false;
+    setStatus("loading");
+    (async () => {
+      try {
+        const pdfjs = await import("pdfjs-dist");
+        pdfjs.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
+        const response = await fetch(pdfUrl);
+        if (!response.ok) throw new Error("Nao foi possivel carregar o documento.");
+        const bytes = await response.arrayBuffer();
+        const doc = await pdfjs.getDocument({ data: bytes }).promise;
+        const page = await doc.getPage(doc.numPages);
+        const base = page.getViewport({ scale: 1 });
+        const scale = Math.min(MAX_PREVIEW_WIDTH / base.width, MAX_PREVIEW_HEIGHT / base.height);
+        const viewport = page.getViewport({ scale });
+        const canvas = canvasRef.current;
+        const context = canvas?.getContext("2d");
+        if (!canvas || !context || cancelled) return;
+        const outputScale = window.devicePixelRatio || 1;
+        canvas.width = Math.floor(viewport.width * outputScale);
+        canvas.height = Math.floor(viewport.height * outputScale);
+        canvas.style.width = `${viewport.width}px`;
+        canvas.style.height = `${viewport.height}px`;
+        await page.render({
+          canvas,
+          canvasContext: context,
+          viewport,
+          transform: outputScale !== 1 ? [outputScale, 0, 0, outputScale, 0, 0] : undefined,
+        }).promise;
+        if (!cancelled) { setStatus("ready"); onReady(canvas); }
+      } catch {
+        if (!cancelled) setStatus("error");
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pdfUrl]);
+
+  return (
+    <>
+      {status === "loading" && <div className="flex h-64 w-[420px] items-center justify-center text-[13px] text-graphite-500">A carregar pré-visualização…</div>}
+      {status === "error" && <div className="flex h-64 w-[420px] items-center justify-center text-[13px] text-crimson-600">Não foi possível carregar a pré-visualização do documento.</div>}
+      <canvas ref={canvasRef} className={status === "ready" ? "block" : "hidden"} />
+    </>
+  );
 }
 
 function PositionableOverlay({
@@ -116,13 +174,15 @@ export function StampPositionPicker({
   const containerRef = React.useRef<HTMLDivElement>(null);
   const [stampPosition, setStampPosition] = React.useState<FreePosition>(stamp?.initialPosition ?? STAMP_DEFAULT);
   const [signaturePosition, setSignaturePosition] = React.useState<FreePosition>(signature?.initialPosition ?? SIGNATURE_DEFAULT);
+  const [previewReady, setPreviewReady] = React.useState(false);
 
   React.useEffect(() => {
     if (!open) return;
     setStampPosition(stamp?.initialPosition ?? STAMP_DEFAULT);
     setSignaturePosition(signature?.initialPosition ?? SIGNATURE_DEFAULT);
+    setPreviewReady(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
+  }, [open, pdfUrl]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -132,30 +192,22 @@ export function StampPositionPicker({
           <DialogDescription>Arraste cada elemento para o local exacto onde deve ficar, e use o ponto no canto inferior direito para ajustar o tamanho.</DialogDescription>
         </DialogHeader>
         <DialogBody className="flex flex-1 flex-col items-center">
-          <div
-            ref={containerRef}
-            className="relative mx-auto w-full max-w-[680px] overflow-hidden border border-graphite-300 bg-white shadow-sm"
-            style={{ aspectRatio: "210 / 297" }}
-          >
-            <iframe
-              title="Documento"
-              src={`${pdfUrl}#toolbar=0&navpanes=0&view=FitH&page=9999`}
-              className="pointer-events-none absolute inset-0 h-full w-full"
-            />
-            {stamp && (
+          <div ref={containerRef} className="relative mx-auto inline-block border border-graphite-300 bg-white shadow-sm">
+            <PdfPagePreview pdfUrl={pdfUrl} onReady={() => setPreviewReady(true)} />
+            {previewReady && stamp && (
               <PositionableOverlay containerRef={containerRef} item={stamp} position={stampPosition} onChange={setStampPosition} accent="#173f70" />
             )}
-            {signature && (
+            {previewReady && signature && (
               <PositionableOverlay containerRef={containerRef} item={signature} position={signaturePosition} onChange={setSignaturePosition} accent="#177047" />
             )}
           </div>
           <p className="mt-2 shrink-0 text-center text-2xs text-graphite-500">
-            Mostra a última página do documento. A posição de cada elemento fica guardada para as próximas vezes.
+            Mostra a última página do documento, à escala exacta. A posição de cada elemento fica guardada para as próximas vezes.
           </p>
         </DialogBody>
         <DialogFooter>
           <Button variant="secondary" onClick={() => onOpenChange(false)}>Cancelar</Button>
-          <Button onClick={() => onConfirm({ posicaoCarimbo: stamp ? stampPosition : undefined, posicaoAssinatura: signature ? signaturePosition : undefined })}>
+          <Button disabled={!previewReady} onClick={() => onConfirm({ posicaoCarimbo: stamp ? stampPosition : undefined, posicaoAssinatura: signature ? signaturePosition : undefined })}>
             Aplicar aqui
           </Button>
         </DialogFooter>
