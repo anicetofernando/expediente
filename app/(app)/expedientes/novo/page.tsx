@@ -24,7 +24,6 @@ import { useSession } from "@/lib/session";
 import type { Confidentiality, Priority } from "@/types";
 import {
   initialWizardState,
-  type StampChoice,
   type WizardState,
 } from "@/components/expedients/wizard/types";
 import { StepBasicInfo } from "@/components/expedients/wizard/step-basic-info";
@@ -67,8 +66,6 @@ function canProceed(step: number, state: WizardState) {
         return !!state.ficheiroNome;
       }
       return state.origemDocumento === "apenas-processo";
-    case 4:
-      return !!state.carimbo && (state.carimbo !== "escolher" || !!state.carimboId);
     default:
       return true;
   }
@@ -97,7 +94,6 @@ function NovoExpedienteContent() {
   const {
     priorities,
     confidentialities,
-    stampChoices,
   } = useCatalogs();
   const [step, setStep] = React.useState(0);
   const [state, setState] = React.useState<WizardState>(initialWizardState);
@@ -105,6 +101,7 @@ function NovoExpedienteContent() {
   const [submitted, setSubmitted] = React.useState<null | { id: string; protocolo: string; rascunho: boolean }>(null);
   const [saving, setSaving] = React.useState(false);
   const [draftLoading, setDraftLoading] = React.useState(Boolean(draftId));
+  const [effectiveDraftId, setEffectiveDraftId] = React.useState(draftId);
   const defaultsApplied = React.useRef(false);
 
   const createInitialState = React.useCallback((): WizardState => {
@@ -114,18 +111,14 @@ function NovoExpedienteContent() {
     const confidentiality =
       confidentialities.find((item) => item.active && item.isDefault) ??
       confidentialities.find((item) => item.active);
-    const stampChoice =
-      stampChoices.find((item) => item.active && item.isDefault) ??
-      stampChoices.find((item) => item.active);
 
     return {
       ...initialWizardState,
       remetente: user.nome,
       prioridade: (priority?.code ?? "") as Priority | "",
       confidencialidade: (confidentiality?.code ?? "") as Confidentiality | "",
-      carimbo: (stampChoice?.code ?? "") as StampChoice | "",
     };
-  }, [confidentialities, priorities, stampChoices, user.nome]);
+  }, [confidentialities, priorities, user.nome]);
 
   React.useEffect(() => {
     if (defaultsApplied.current) return;
@@ -137,7 +130,6 @@ function NovoExpedienteContent() {
         remetente: current.remetente || defaults.remetente,
         prioridade: current.prioridade || defaults.prioridade,
         confidencialidade: current.confidencialidade || defaults.confidencialidade,
-        carimbo: current.carimbo || defaults.carimbo,
       };
     });
   }, [createInitialState]);
@@ -172,9 +164,10 @@ function NovoExpedienteContent() {
       form.set("data", JSON.stringify({ ...fields, rascunho, anexos: anexos.map(({ ficheiro: _file, ...meta }) => meta) }));
       if (ficheiro) form.set("mainFile", ficheiro);
       anexos.forEach((anexo) => { if (anexo.ficheiro) form.append("attachments", anexo.ficheiro); });
-      const response = await fetch(draftId ? `/api/expedients/${draftId}/draft` : "/api/expedients", { method: draftId ? "PUT" : "POST", body: form });
+      const response = await fetch(effectiveDraftId ? `/api/expedients/${effectiveDraftId}/draft` : "/api/expedients", { method: effectiveDraftId ? "PUT" : "POST", body: form });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error ?? "Não foi possível guardar o expediente.");
+      if (!effectiveDraftId) setEffectiveDraftId(result.id);
       toast({ title: rascunho ? "Rascunho guardado" : "Expediente submetido", variant: "success" });
       setSubmitted({ id: result.id, protocolo: result.protocolo, rascunho });
       setStep(6);
@@ -182,6 +175,28 @@ function NovoExpedienteContent() {
       toast({ title: "Expediente não guardado", description: error instanceof Error ? error.message : "Erro inesperado.", variant: "destructive" });
     } finally {
       setSaving(false);
+    }
+  }
+
+  /**
+   * Guarda silenciosamente um rascunho (sem navegar nem mostrar "submetido") só para
+   * obter um PDF real do documento actual, usado pelo posicionador de carimbo/assinatura.
+   */
+  async function ensurePreview(): Promise<{ pdfUrl: string | null } | null> {
+    try {
+      const form = new FormData();
+      const { ficheiro, anexos, ...fields } = state;
+      form.set("data", JSON.stringify({ ...fields, rascunho: true, anexos: anexos.map(({ ficheiro: _file, ...meta }) => meta) }));
+      if (ficheiro) form.set("mainFile", ficheiro);
+      anexos.forEach((anexo) => { if (anexo.ficheiro) form.append("attachments", anexo.ficheiro); });
+      const response = await fetch(effectiveDraftId ? `/api/expedients/${effectiveDraftId}/draft` : "/api/expedients", { method: effectiveDraftId ? "PUT" : "POST", body: form });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error ?? "Não foi possível guardar o rascunho.");
+      if (!effectiveDraftId) setEffectiveDraftId(result.id);
+      return { pdfUrl: result.pdfUrl ?? null };
+    } catch (error) {
+      toast({ title: "Não foi possível pré-visualizar", description: error instanceof Error ? error.message : "Erro inesperado.", variant: "destructive" });
+      return null;
     }
   }
 
@@ -273,7 +288,7 @@ function NovoExpedienteContent() {
             {step === 1 && <StepDocumentOrigin state={state} update={update} />}
             {step === 2 && <StepDocument state={state} update={update} />}
             {step === 3 && <StepAttachments state={state} update={update} />}
-            {step === 4 && <StepStampSignature state={state} update={update} />}
+            {step === 4 && <StepStampSignature state={state} update={update} ensurePreview={ensurePreview} />}
             {step === 5 && <StepReview state={state} update={update} />}
           </div>
 
@@ -288,7 +303,7 @@ function NovoExpedienteContent() {
             </Button>
 
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-              {draftId && step < 5 && (
+              {effectiveDraftId && step < 5 && (
                 <Button variant="secondary" onClick={() => persist(true)} loading={saving} disabled={saving || !isValidFutureOrTodayDate(state.prazo)}>
                   <Save className="size-3.5" />
                   Guardar alterações

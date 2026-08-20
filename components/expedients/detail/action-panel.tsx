@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import type { Expedient, FreePosition, Signature, Stamp as StampDefinition } from "@/types";
 import { StampPositionPicker } from "@/components/documents/stamp-position-picker";
+import { DespachoDialog } from "@/components/expedients/detail/despacho-dialog";
 import { ACTIONS_BY_STATUS, type ActionDef } from "@/lib/expedient-actions";
 import { Button } from "@/components/ui/button";
 import { Textarea, Label } from "@/components/ui/input";
@@ -31,7 +32,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useCatalogs } from "@/lib/catalogs";
-import { cn } from "@/lib/utils";
 import { useSession } from "@/lib/session";
 
 const ACTION_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
@@ -57,8 +57,8 @@ type ActionExpedient = Pick<Expedient, "id" | "estado" | "protocolo" | "assunto"
 
 const PROFILE_ACTIONS: Record<string, Set<string>> = {
   remetente: new Set(["submeter", "resposta", "confirmar", "arquivar"]),
-  secretaria: new Set(["receber", "protocolar", "encaminhar", "carimbo", "disponibilizar", "arquivar", "notificar"]),
-  superior: new Set(["encaminhar", "parecer", "esclarecimento", "aprovar", "rejeitar", "devolver", "resposta", "carimbo", "assinatura", "disponibilizar", "retomar", "escalar"]),
+  secretaria: new Set(["receber", "protocolar", "encaminhar", "disponibilizar", "arquivar", "notificar"]),
+  superior: new Set(["encaminhar", "parecer", "esclarecimento", "aprovar", "rejeitar", "devolver", "resposta", "disponibilizar", "retomar", "escalar"]),
   administracao: new Set(Object.values(ACTIONS_BY_STATUS).flat().map((action) => action.key)),
 };
 
@@ -71,23 +71,13 @@ export function ActionPanel({ expedient, principalPdfUrl }: { expedient: ActionE
     .filter((action) => PROFILE_ACTIONS[perfilNavegacao]?.has(action.key))
     .filter((action) => !(blockDirectApproval && action.key === "aprovar"));
   const [activeAction, setActiveAction] = React.useState<ActionDef | null>(null);
-  const [authorizations, setAuthorizations] = React.useState<{stamps:StampDefinition[];signatures:Signature[]}>({stamps:[],signatures:[]});
 
-  React.useEffect(() => {
-    let cancelled = false;
-    void fetch("/api/document-authorizations", { cache: "no-store" })
-      .then(async (response) => response.ok ? response.json() : { stamps: [], signatures: [] })
-      .then((value) => { if (!cancelled) setAuthorizations(value); })
-      .catch(() => undefined);
-    return () => { cancelled = true; };
-  }, []);
-
-  async function complete(action: ActionDef, message: string, target?: string, posicao?: FreePosition) {
+  async function complete(action: ActionDef, message: string, target?: string, posicaoCarimbo?: FreePosition, posicaoAssinatura?: FreePosition) {
     try {
       const response = await fetch(`/api/expedients/${expedient.id}/actions`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ action: action.key, note: message, target, posicao }),
+        body: JSON.stringify({ action: action.key, note: message, target, posicaoCarimbo, posicaoAssinatura }),
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error ?? "Não foi possível registar a acção.");
@@ -138,9 +128,7 @@ export function ActionPanel({ expedient, principalPdfUrl }: { expedient: ActionE
           expedient={expedient}
           principalPdfUrl={principalPdfUrl}
           onClose={() => setActiveAction(null)}
-          onComplete={(msg, target, posicao) => complete(activeAction, msg, target, posicao)}
-          stamps={authorizations.stamps}
-          signatures={authorizations.signatures}
+          onComplete={(msg, target, posicaoCarimbo, posicaoAssinatura) => complete(activeAction, msg, target, posicaoCarimbo, posicaoAssinatura)}
         />
       )}
     </div>
@@ -153,29 +141,18 @@ function ActionDialog({
   principalPdfUrl,
   onClose,
   onComplete,
-  stamps,
-  signatures,
 }: {
   action: ActionDef;
   expedient: ActionExpedient;
   principalPdfUrl?: string;
   onClose: () => void;
-  onComplete: (message: string, target?: string, posicao?: FreePosition) => void;
-  stamps: StampDefinition[];
-  signatures: Signature[];
+  onComplete: (message: string, target?: string, posicaoCarimbo?: FreePosition, posicaoAssinatura?: FreePosition) => void;
 }) {
   const { organizationalUnits } = useCatalogs();
+  const { perfilNavegacao } = useSession();
+  const router = useRouter();
   const [note, setNote] = React.useState("");
   const [target, setTarget] = React.useState("");
-  const [stampId, setStampId] = React.useState(stamps[0]?.id ?? "");
-  const [signatureId, setSignatureId] = React.useState(signatures[0]?.id ?? "");
-  const [pin, setPin] = React.useState("");
-  const [positioning, setPositioning] = React.useState(false);
-
-  React.useEffect(() => {
-    if (!stamps.some((item) => item.id === stampId)) setStampId(stamps[0]?.id ?? "");
-    if (!signatures.some((item) => item.id === signatureId)) setSignatureId(signatures[0]?.id ?? "");
-  }, [signatureId, signatures, stampId, stamps]);
 
   if (action.kind === "confirm") {
     return (
@@ -261,170 +238,115 @@ function ActionDialog({
     );
   }
 
-  if (action.kind === "stamp") {
-    const selected = stamps.find((s) => s.id === stampId);
-    if (selected?.imagemUrl && principalPdfUrl) {
-      if (positioning) {
-        return (
-          <StampPositionPicker
-            open
-            onOpenChange={(v) => !v && setPositioning(false)}
-            pdfUrl={principalPdfUrl}
-            imageUrl={selected.imagemUrl}
-            itemName={selected.nome}
-            initialPosition={selected.posicaoLivre}
-            onConfirm={(posicao) => onComplete(`Carimbo "${selected.nome}" aplicado ao documento.`, stampId, posicao)}
-          />
-        );
-      }
-      return (
-        <Dialog open onOpenChange={(v) => !v && onClose()}>
-          <DialogContent size="sm">
-            <DialogHeader>
-              <DialogTitle>Aplicar carimbo</DialogTitle>
-              <DialogDescription>{expedient.protocolo} · {expedient.assunto}</DialogDescription>
-            </DialogHeader>
-            <DialogBody className="space-y-3.5">
-              <div>
-                <Label required>Carimbo</Label>
-                <Select value={stampId} onValueChange={setStampId}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {stamps.filter((s) => s.activo).map((s) => (
-                      <SelectItem key={s.id} value={s.id}>{s.nome}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </DialogBody>
-            <DialogFooter>
-              <Button variant="secondary" onClick={onClose}>Cancelar</Button>
-              <Button disabled={!selected} onClick={() => setPositioning(true)}>Continuar e posicionar</Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      );
-    }
+  if (action.kind === "protocolar") {
+    if (!principalPdfUrl) return null;
     return (
-      <Dialog open onOpenChange={(v) => !v && onClose()}>
-        <DialogContent size="md">
-          <DialogHeader>
-            <DialogTitle>Aplicar carimbo</DialogTitle>
-            <DialogDescription>{expedient.protocolo} · {expedient.assunto}</DialogDescription>
-          </DialogHeader>
-          <DialogBody className="grid grid-cols-2 gap-5">
-            <div className="space-y-3.5">
-              <div>
-                <Label required>Carimbo</Label>
-                <Select value={stampId} onValueChange={setStampId}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {stamps.filter((s) => s.activo).map((s) => (
-                      <SelectItem key={s.id} value={s.id}>{s.nome}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <p className="text-2xs leading-relaxed text-graphite-500">
-                Categoria: {selected?.categoria} · Posição: {selected?.posicao} · Tamanho: {selected?.tamanho}
-              </p>
-            </div>
-            <div className="flex items-center justify-center rounded-lg border border-dashed border-graphite-300 bg-graphite-50 p-4">
-              <div className="relative flex aspect-[210/297] w-full items-center justify-center border border-graphite-200 bg-white">
-                <span className="text-2xs text-graphite-300">Folha A4</span>
-                <span
-                  className={cn(
-                    "absolute rotate-[-8deg] rounded border-2 px-2 py-1 text-[10px] font-bold uppercase tracking-wide",
-                    "border-navy-700 text-navy-700",
-                    selected?.posicao.includes("superior") ? "top-3" : "bottom-3",
-                    selected?.posicao.includes("esquerda") ? "left-3" : selected?.posicao.includes("direita") ? "right-3" : ""
-                  )}
-                  style={{ opacity: 1 - (selected?.transparencia ?? 0) / 100 }}
-                >
-                  {selected?.nome}
-                </span>
-              </div>
-            </div>
-          </DialogBody>
-          <DialogFooter>
-            <Button variant="secondary" onClick={onClose}>Cancelar</Button>
-            <Button disabled={!selected} onClick={() => onComplete(`Carimbo "${selected?.nome}" aplicado ao documento.`, stampId)}>Aplicar carimbo</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <ProtocolarDialog
+        expedient={expedient}
+        principalPdfUrl={principalPdfUrl}
+        onClose={onClose}
+        onComplete={(posicaoCarimbo, posicaoAssinatura) => onComplete(`${expedient.protocolo} protocolado.`, undefined, posicaoCarimbo, posicaoAssinatura)}
+      />
     );
   }
 
-  if (action.kind === "signature") {
-    const selected = signatures.find((s) => s.id === signatureId);
-    const pinOk = !selected?.requerPin || pin.length >= 4;
-    const canPosition = Boolean(selected?.imagemUrl && principalPdfUrl);
-
-    if (positioning && selected?.imagemUrl && principalPdfUrl) {
+  if (action.kind === "resposta") {
+    if (perfilNavegacao === "superior" || perfilNavegacao === "administracao") {
       return (
-        <StampPositionPicker
-          open
-          onOpenChange={(v) => !v && setPositioning(false)}
-          pdfUrl={principalPdfUrl}
-          imageUrl={selected.imagemUrl}
-          itemName={selected.proprietario}
-          initialPosition={selected.posicaoLivre}
-          onConfirm={(posicao) => onComplete(`Documento assinado digitalmente por ${selected.proprietario}.`, signatureId, posicao)}
+        <DespachoDialog
+          expedientId={expedient.id}
+          protocolo={expedient.protocolo}
+          onClose={onClose}
+          onDone={() => { onClose(); router.refresh(); }}
         />
       );
     }
-
     return (
-      <Dialog open onOpenChange={(v) => !v && onClose()}>
-        <DialogContent size="sm">
-          <DialogHeader>
-            <DialogTitle>Aplicar assinatura digital</DialogTitle>
-            <DialogDescription>{expedient.protocolo} · {expedient.assunto}</DialogDescription>
-          </DialogHeader>
-          <DialogBody className="space-y-3.5">
-            {signatures.length === 0 && <p className="border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">Não existe uma assinatura activa associada ao seu utilizador. A Administração deve registá-la individualmente.</p>}
-            <div>
-              <Label required>Assinatura</Label>
-              <Select value={signatureId} onValueChange={setSignatureId}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {signatures.filter((s) => s.estado === "activa").map((s) => (
-                    <SelectItem key={s.id} value={s.id}>{s.proprietario} — {s.cargo}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            {selected?.requerPin && (
-              <div>
-                <Label required>PIN de assinatura</Label>
-                <input
-                  type="password"
-                  maxLength={6}
-                  value={pin}
-                  onChange={(e) => setPin(e.target.value)}
-                  className="flex h-9 w-full rounded-md border border-graphite-300 px-3 text-sm tracking-widest focus:border-navy-500 focus:outline-none focus:ring-2 focus:ring-navy-500/15"
-                  placeholder="••••••"
-                />
-              </div>
-            )}
-          </DialogBody>
-          <DialogFooter>
-            <Button variant="secondary" onClick={onClose}>Cancelar</Button>
-            <Button
-              disabled={!selected || !pinOk}
-              onClick={() =>
-                canPosition
-                  ? setPositioning(true)
-                  : onComplete(`Documento assinado digitalmente por ${selected?.proprietario}.`, signatureId)
-              }
-            >
-              {canPosition ? "Continuar e posicionar" : "Assinar documento"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <ConfirmDialog
+        open
+        onOpenChange={(v) => !v && onClose()}
+        title={`${action.label} — ${expedient.protocolo}`}
+        description={`Confirma a acção "${action.label}" sobre este expediente? Esta acção ficará registada no histórico e na auditoria do processo.`}
+        confirmLabel={action.label}
+        onConfirm={() => onComplete(`"${action.label}" aplicado a ${expedient.protocolo}.`)}
+      />
     );
   }
 
   return null;
+}
+
+function ProtocolarDialog({
+  expedient,
+  principalPdfUrl,
+  onClose,
+  onComplete,
+}: {
+  expedient: ActionExpedient;
+  principalPdfUrl: string;
+  onClose: () => void;
+  onComplete: (posicaoCarimbo?: FreePosition, posicaoAssinatura?: FreePosition) => void;
+}) {
+  const [authorization, setAuthorization] = React.useState<{ stamp: StampDefinition | null; signature: Signature | null; loading: boolean }>({ stamp: null, signature: null, loading: true });
+  const [positioning, setPositioning] = React.useState(false);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    void fetch("/api/document-authorizations", { cache: "no-store" })
+      .then((response) => response.json())
+      .then((data) => { if (!cancelled) setAuthorization({ stamp: data.stamp ?? null, signature: data.signature ?? null, loading: false }); })
+      .catch(() => { if (!cancelled) setAuthorization({ stamp: null, signature: null, loading: false }); });
+    return () => { cancelled = true; };
+  }, []);
+
+  const readyToSign = Boolean(authorization.stamp && authorization.signature);
+  const hasFreePositionImages = Boolean(authorization.stamp?.imagemUrl || authorization.signature?.imagemUrl);
+
+  if (positioning) {
+    return (
+      <StampPositionPicker
+        open
+        onOpenChange={(v) => !v && setPositioning(false)}
+        pdfUrl={principalPdfUrl}
+        stamp={authorization.stamp?.imagemUrl ? { imageUrl: authorization.stamp.imagemUrl, label: authorization.stamp.nome, initialPosition: authorization.stamp.posicaoLivre } : undefined}
+        signature={authorization.signature?.imagemUrl ? { imageUrl: authorization.signature.imagemUrl, label: authorization.signature.proprietario, initialPosition: authorization.signature.posicaoLivre } : undefined}
+        onConfirm={(result) => onComplete(result.posicaoCarimbo, result.posicaoAssinatura)}
+      />
+    );
+  }
+
+  return (
+    <Dialog open onOpenChange={(v) => !v && onClose()}>
+      <DialogContent size="sm">
+        <DialogHeader>
+          <DialogTitle>Protocolar</DialogTitle>
+          <DialogDescription>{expedient.protocolo} · {expedient.assunto}</DialogDescription>
+        </DialogHeader>
+        <DialogBody className="space-y-3">
+          {authorization.loading ? (
+            <p className="text-[13px] text-graphite-500">A verificar o carimbo e a assinatura da sua unidade…</p>
+          ) : readyToSign ? (
+            <p className="text-[13px] text-graphite-600">
+              Vai aplicar o carimbo de <strong>{authorization.stamp?.unidade}</strong> e a sua assinatura ({authorization.signature?.proprietario}) a este documento.
+            </p>
+          ) : (
+            <p className="border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-relaxed text-amber-800">
+              {!authorization.stamp && "A sua unidade ainda não tem um carimbo configurado. "}
+              {!authorization.signature && "Não tem uma assinatura configurada. "}
+              Contacte a administração — não é possível protocolar sem os dois.
+            </p>
+          )}
+        </DialogBody>
+        <DialogFooter>
+          <Button variant="secondary" onClick={onClose}>Cancelar</Button>
+          <Button
+            disabled={!readyToSign || authorization.loading}
+            onClick={() => (hasFreePositionImages ? setPositioning(true) : onComplete())}
+          >
+            {hasFreePositionImages ? "Continuar e posicionar" : "Protocolar"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
 }

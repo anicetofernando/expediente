@@ -1,7 +1,6 @@
-import type { Priority, Confidentiality } from "@/types";
+import type { Confidentiality, FreePosition, Priority } from "@/types";
 
 export type DocumentOrigin = "sistema" | "importado" | "apenas-processo";
-export type StampChoice = "nao" | "automatico" | "escolher";
 
 export interface WizardAttachment {
   id: string;
@@ -28,10 +27,9 @@ export interface WizardState {
   numPaginas: number;
   ficheiro?: File;
   anexos: WizardAttachment[];
-  carimbo: StampChoice | "";
-  carimboId: string;
-  solicitarAssinatura: boolean;
-  posicaoPredefinida: boolean;
+  usarCarimboAssinatura: boolean;
+  posicaoCarimbo?: FreePosition;
+  posicaoAssinatura?: FreePosition;
 }
 
 export const initialWizardState: WizardState = {
@@ -49,10 +47,7 @@ export const initialWizardState: WizardState = {
   ficheiroNome: "",
   numPaginas: 0,
   anexos: [],
-  carimbo: "",
-  carimboId: "",
-  solicitarAssinatura: false,
-  posicaoPredefinida: true,
+  usarCarimboAssinatura: false,
 };
 
 export interface StepProps {

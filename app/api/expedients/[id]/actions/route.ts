@@ -2,17 +2,16 @@ import { NextRequest, NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { audit, getCurrentSession } from "@/lib/auth";
 import { transaction } from "@/lib/db";
-import { configuredSignatures, configuredStamps, rememberSignaturePosition, rememberStampPosition } from "@/lib/document-configuration";
 import type { FreePosition } from "@/types";
-import { signatureBelongsToUser, userCanUseStamp } from "@/lib/document-authorization";
 import { dateValueInMaputo, isValidFutureOrTodayDate } from "@/lib/date-only";
 import { configuredDocumentTypes, requiresDirectorEscalation, resolveSecretaryId, secretaryOwnedUnitIds } from "@/lib/routing";
+import { rememberStampSignaturePositions, resolveMandatoryStampSignature, signatureMetadataJson, stampMetadataJson } from "@/lib/stamping";
 
 const PROFILE_ACTIONS: Record<string, Set<string>> = {
   remetente: new Set(["submeter","resposta","confirmar","arquivar"]),
-  secretaria: new Set(["receber","protocolar","encaminhar","carimbo","disponibilizar","arquivar","notificar"]),
-  superior: new Set(["encaminhar","parecer","esclarecimento","aprovar","rejeitar","devolver","resposta","carimbo","assinatura","disponibilizar","retomar","escalar"]),
-  administracao: new Set(["submeter","receber","protocolar","encaminhar","parecer","esclarecimento","aprovar","rejeitar","devolver","resposta","carimbo","assinatura","disponibilizar","confirmar","arquivar","retomar","escalar","notificar"]),
+  secretaria: new Set(["receber","protocolar","encaminhar","disponibilizar","arquivar","notificar"]),
+  superior: new Set(["encaminhar","parecer","esclarecimento","aprovar","rejeitar","devolver","resposta","disponibilizar","retomar","escalar"]),
+  administracao: new Set(["submeter","receber","protocolar","encaminhar","parecer","esclarecimento","aprovar","rejeitar","devolver","resposta","disponibilizar","confirmar","arquivar","retomar","escalar","notificar"]),
 };
 
 const NEXT_STATUS: Record<string,string|undefined> = {
@@ -27,14 +26,14 @@ const LABELS: Record<string,string> = {
   submeter:"Expediente submetido",
   receber:"Expediente recebido",protocolar:"Expediente protocolado",encaminhar:"Expediente encaminhado",parecer:"Parecer solicitado",
   esclarecimento:"Esclarecimento solicitado",aprovar:"Expediente aprovado",rejeitar:"Expediente rejeitado",devolver:"Devolvido para correccao",
-  resposta:"Resposta registada",carimbo:"Carimbo aplicado",assinatura:"Assinatura aplicada",disponibilizar:"Disponibilizado ao remetente",
+  resposta:"Resposta registada",disponibilizar:"Disponibilizado ao remetente",
   confirmar:"Recebimento confirmado",arquivar:"Expediente arquivado",retomar:"Tramitacao retomada",escalar:"Prioridade escalada",notificar:"Remetente notificado",
 };
 
 export async function POST(request:NextRequest,{params}:{params:{id:string}}){
   const session=await getCurrentSession();
   if(!session) return NextResponse.json({error:"Nao autenticado."},{status:401});
-  let input:{action?:string;note?:string;target?:string;posicao?:FreePosition};
+  let input:{action?:string;note?:string;target?:string;posicaoCarimbo?:FreePosition;posicaoAssinatura?:FreePosition};
   try{input=await request.json();}catch{return NextResponse.json({error:"Pedido invalido."},{status:400});}
   const action=input.action??"";
   if(!PROFILE_ACTIONS[session.perfilNavegacao]?.has(action)) return NextResponse.json({error:"Acção não permitida para o seu perfil."},{status:403});
@@ -43,7 +42,7 @@ export async function POST(request:NextRequest,{params}:{params:{id:string}}){
       const found=await client.query<{id:string;protocol:string;subject:string;status:string;created_by:string;origin_unit_id:string;recipient_unit_id:string;responsible_user_id:string|null;due_date:string|Date;document_type:string;origin_secretary_id:string|null}>("SELECT id,protocol,subject,status,created_by,origin_unit_id,recipient_unit_id,responsible_user_id,due_date,document_type,origin_secretary_id FROM expedients WHERE id=$1 FOR UPDATE",[params.id]);
       const exp=found.rows[0];
       if(!exp) throw new Error("Expediente nao encontrado.");
-      const allowedByStatus:Record<string,string[]>={rascunho:["submeter"],submetido:["receber"],recebido:["protocolar"],protocolado:["encaminhar","carimbo"],encaminhado:["encaminhar","parecer","devolver","aprovar","carimbo"],em_analise:["encaminhar","aprovar","rejeitar","devolver","parecer","esclarecimento","carimbo"],aguardando_parecer:["resposta","esclarecimento"],aguardando_esclarecimento:["resposta"],devolvido:["resposta","encaminhar"],aprovado:["resposta","carimbo","assinatura","disponibilizar"],rejeitado:["notificar","arquivar"],disponivel_remetente:["confirmar"],recebimento_confirmado:["arquivar"],suspenso:["retomar"],expirado:["escalar","arquivar"],atrasado:["escalar","encaminhar","aprovar","carimbo"]};
+      const allowedByStatus:Record<string,string[]>={rascunho:["submeter"],submetido:["receber"],recebido:["protocolar"],protocolado:["encaminhar"],encaminhado:["encaminhar","parecer","devolver","aprovar"],em_analise:["encaminhar","aprovar","rejeitar","devolver","parecer","esclarecimento"],aguardando_parecer:["resposta","esclarecimento"],aguardando_esclarecimento:["resposta"],devolvido:["resposta","encaminhar"],aprovado:["resposta","disponibilizar"],rejeitado:["notificar","arquivar"],disponivel_remetente:["confirmar"],recebimento_confirmado:["arquivar"],suspenso:["retomar"],expirado:["escalar","arquivar"],atrasado:["escalar","encaminhar","aprovar"]};
       if(!allowedByStatus[exp.status]?.includes(action)) throw new Error("Esta accao nao e valida no estado actual do expediente.");
       const secretaryUnits=session.perfilNavegacao==="secretaria"?await secretaryOwnedUnitIds(client,session.user.id):[];
       const hasAccess=session.perfilNavegacao==="administracao"||(session.perfilNavegacao==="secretaria"&&exp.status!=="rascunho"&&(secretaryUnits.includes(exp.recipient_unit_id)||secretaryUnits.includes(exp.origin_unit_id)))||exp.created_by===session.user.id||exp.responsible_user_id===session.user.id||(session.perfilNavegacao==="superior"&&(exp.origin_unit_id===session.user.unidadeId||exp.recipient_unit_id===session.user.unidadeId));
@@ -55,7 +54,6 @@ export async function POST(request:NextRequest,{params}:{params:{id:string}}){
         ]);
         if(requiresDirectorEscalation(recipientUnit.rows[0]?.unit_type,exp.document_type,docTypes)) throw new Error("Este tipo de documento exige aprovacao da direccao. Encaminhe para a unidade superior antes de aprovar.");
       }
-      const [stamps,signatures]=await Promise.all([configuredStamps(client),configuredSignatures(client)]);
       let responsible=exp.responsible_user_id;
       let recipient=exp.recipient_unit_id;
       let protocol=exp.protocol;
@@ -95,29 +93,14 @@ export async function POST(request:NextRequest,{params}:{params:{id:string}}){
       const nextStep=action==="submeter"?"Recepcao pela Secretaria":action==="aprovar"?"Disponibilizar ao remetente":action==="disponibilizar"?"Confirmacao do remetente":action==="confirmar"?"Arquivo":action==="arquivar"?"Concluido":action==="devolver"?"Correccao pelo remetente":action==="parecer"?"Emissao de parecer":"Continuar tramitacao";
       await client.query(`UPDATE expedients SET protocol=$2,status=COALESCE($3,status),responsible_user_id=$4,recipient_unit_id=$5,next_step=$6,priority=CASE WHEN $7='escalar' THEN 'urgente' ELSE priority END,completed_at=CASE WHEN $7='arquivar' THEN now() ELSE completed_at END,submitted_at=CASE WHEN $7='submeter' THEN now() ELSE submitted_at END,origin_secretary_id=COALESCE(origin_secretary_id,$8) WHERE id=$1`,[exp.id,protocol,next??null,responsible,recipient,nextStep,action,originSecretary]);
       if(action==="protocolar"){
-        const selected=await client.query<{stamp_id:string|null}>("SELECT stamp_id FROM documents WHERE expedient_id=$1 AND document_kind='principal' LIMIT 1",[exp.id]);
-        const requestedId=selected.rows[0]?.stamp_id;
-        const stamp=stamps.find((item)=>item.id===requestedId&&userCanUseStamp(item,session.user,session.unitName,session.perfilNavegacao));
-        if(requestedId&&!stamp) throw new Error("O carimbo solicitado nao pertence a sua unidade ou nao esta autorizado para o seu utilizador.");
-        if(stamp) await client.query("UPDATE documents SET stamped=true,stamp_metadata=$2::jsonb WHERE expedient_id=$1 AND document_kind='principal'",[exp.id,JSON.stringify({id:stamp.id,nome:stamp.nome,posicao:stamp.posicao,unidade:stamp.unidade,aplicadoPor:session.user.nome,aplicadoEm:new Date().toISOString()})]);
+        const resolved=await resolveMandatoryStampSignature(client,session.user,session.unitName,session.perfilNavegacao);
+        await client.query(
+          "UPDATE documents SET stamped=true,signed=true,stamp_id=$2,stamp_metadata=$3::jsonb,signature_metadata=$4::jsonb WHERE expedient_id=$1 AND document_kind='principal'",
+          [exp.id,resolved.stamp.id,JSON.stringify(stampMetadataJson(resolved.stamp,session.user.nome,input.posicaoCarimbo)),JSON.stringify(signatureMetadataJson(resolved.signature,session.user,input.posicaoAssinatura))],
+        );
+        await rememberStampSignaturePositions(client,resolved.stamp,resolved.signature,input.posicaoCarimbo,input.posicaoAssinatura);
       }
-      if(action==="carimbo"){
-        const allowedStamps=stamps.filter((item)=>userCanUseStamp(item,session.user,session.unitName,session.perfilNavegacao));
-        const stamp=allowedStamps.find((item)=>item.id===input.target)??(!input.target?allowedStamps[0]:undefined);
-        if(!stamp) throw new Error("Seleccione um carimbo activo e autorizado para a sua unidade.");
-        const posicao=stamp.imagemUrl&&input.posicao?input.posicao:undefined;
-        await client.query("UPDATE documents SET stamped=true,stamp_id=$2,stamp_metadata=$3::jsonb WHERE expedient_id=$1 AND document_kind='principal'",[exp.id,stamp.id,JSON.stringify({id:stamp.id,nome:stamp.nome,posicao:stamp.posicao,unidade:stamp.unidade,aplicadoPor:session.user.nome,aplicadoEm:new Date().toISOString(),imagemUrl:stamp.imagemUrl,posicaoLivre:posicao})]);
-        if(posicao) await rememberStampPosition(client,stamp.id,posicao);
-      }
-      if(action==="assinatura"){
-        const ownSignatures=signatures.filter((item)=>signatureBelongsToUser(item,session.user));
-        const signature=ownSignatures.find((item)=>item.id===input.target)??(!input.target?ownSignatures[0]:undefined);
-        if(!signature) throw new Error("Nao existe uma assinatura activa associada ao seu utilizador.");
-        const posicao=signature.imagemUrl&&input.posicao?input.posicao:undefined;
-        await client.query("UPDATE documents SET signed=true,signature_metadata=$2::jsonb WHERE expedient_id=$1 AND document_kind='principal'",[exp.id,JSON.stringify({id:signature.id,utilizadorId:session.user.id,proprietario:signature.proprietario,cargo:signature.cargo,aplicadoPor:session.user.nome,aplicadoEm:new Date().toISOString(),imagemUrl:signature.imagemUrl,posicaoLivre:posicao})]);
-        if(posicao) await rememberSignaturePosition(client,signature.id,posicao);
-      }
-      await client.query(`INSERT INTO timeline_events(expedient_id,event_type,title,description,user_id,unit_id) VALUES($1,$2,$3,$4,$5,$6)`,[exp.id,action==="receber"?"recepcao":action==="protocolar"?"protocolo":action==="encaminhar"?"encaminhamento":action==="aprovar"?"aprovacao":action==="rejeitar"?"rejeicao":action==="devolver"?"devolucao":action==="carimbo"?"carimbo":action==="assinatura"?"assinatura":action==="disponibilizar"?"entrega":action==="confirmar"?"confirmacao":action==="arquivar"?"arquivo":"comentario",LABELS[action]??action,input.note?.trim()||LABELS[action]||action,session.user.id,session.user.unidadeId]);
+      await client.query(`INSERT INTO timeline_events(expedient_id,event_type,title,description,user_id,unit_id) VALUES($1,$2,$3,$4,$5,$6)`,[exp.id,action==="receber"?"recepcao":action==="protocolar"?"protocolo":action==="encaminhar"?"encaminhamento":action==="aprovar"?"aprovacao":action==="rejeitar"?"rejeicao":action==="devolver"?"devolucao":action==="disponibilizar"?"entrega":action==="confirmar"?"confirmacao":action==="arquivar"?"arquivo":"comentario",LABELS[action]??action,input.note?.trim()||LABELS[action]||action,session.user.id,session.user.unidadeId]);
       const notifyIds=new Set([exp.created_by,responsible].filter(Boolean));
       if(action==="aprovar"){
         const chain=await client.query<{user_id:string|null}>("SELECT DISTINCT user_id FROM timeline_events WHERE expedient_id=$1 AND event_type='encaminhamento'",[exp.id]);

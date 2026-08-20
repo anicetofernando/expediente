@@ -1,114 +1,112 @@
 "use client";
 
-import { Ban, Wand2, MousePointerClick, Check, PenTool, MapPin } from "lucide-react";
-import { cn } from "@/lib/utils";
-import { Label } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import * as React from "react";
+import { PenTool } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
-import { useCatalogs } from "@/lib/catalogs";
-import type { StepProps, StampChoice } from "./types";
+import { Button } from "@/components/ui/button";
+import { StampPositionPicker } from "@/components/documents/stamp-position-picker";
+import type { FreePosition, Signature, Stamp } from "@/types";
+import type { StepProps } from "./types";
 
-const STAMP_CHOICE_ICONS: Record<StampChoice, typeof Ban> = {
-  nao: Ban,
-  automatico: Wand2,
-  escolher: MousePointerClick,
-};
+export function StepStampSignature({
+  state,
+  update,
+  ensurePreview,
+}: StepProps & { ensurePreview: () => Promise<{ pdfUrl: string | null } | null> }) {
+  const [authorization, setAuthorization] = React.useState<{ stamp: Stamp | null; signature: Signature | null; loading: boolean }>({ stamp: null, signature: null, loading: true });
+  const [positioning, setPositioning] = React.useState(false);
+  const [pdfUrl, setPdfUrl] = React.useState<string | null>(null);
+  const [preparing, setPreparing] = React.useState(false);
 
-export function StepStampSignature({ state, update }: StepProps) {
-  const { stamps, stampChoices, organizationalUnits } = useCatalogs();
-  const originUnit = organizationalUnits.find((unit) => unit.id === state.unidadeOrigem)?.nome;
-  const availableStamps = stamps.filter((stamp) => stamp.activo && (stamp.unidade === "Global" || stamp.unidade === originUnit));
-  const selected = availableStamps.find((s) => s.id === state.carimboId);
-  const options = [...stampChoices]
-    .filter((item) => item.active && item.code in STAMP_CHOICE_ICONS)
-    .sort((a, b) => a.order - b.order);
+  React.useEffect(() => {
+    if (state.origemDocumento !== "sistema" || !state.unidadeOrigem) return;
+    let cancelled = false;
+    setAuthorization((current) => ({ ...current, loading: true }));
+    void fetch(`/api/document-authorizations?unidadeId=${state.unidadeOrigem}`, { cache: "no-store" })
+      .then((response) => response.json())
+      .then((data) => { if (!cancelled) setAuthorization({ stamp: data.stamp ?? null, signature: data.signature ?? null, loading: false }); })
+      .catch(() => { if (!cancelled) setAuthorization({ stamp: null, signature: null, loading: false }); });
+    return () => { cancelled = true; };
+  }, [state.origemDocumento, state.unidadeOrigem]);
+
+  if (state.origemDocumento !== "sistema") {
+    return (
+      <div className="rounded-lg border border-graphite-200 bg-graphite-50 px-4 py-6 text-center text-[13px] text-graphite-600">
+        Este documento já vem formalizado fora do sistema — não é necessário aplicar carimbo nem assinatura aqui.
+      </div>
+    );
+  }
+
+  const readyToSign = Boolean(authorization.stamp && authorization.signature);
+  const hasFreePositionImages = Boolean(authorization.stamp?.imagemUrl || authorization.signature?.imagemUrl);
+  const hasPosition = Boolean(state.posicaoCarimbo || state.posicaoAssinatura);
+
+  async function openPositioning() {
+    setPreparing(true);
+    const result = await ensurePreview();
+    setPreparing(false);
+    if (!result?.pdfUrl) return;
+    setPdfUrl(result.pdfUrl);
+    setPositioning(true);
+  }
+
+  function confirmPosition(result: { posicaoCarimbo?: FreePosition; posicaoAssinatura?: FreePosition }) {
+    update({ posicaoCarimbo: result.posicaoCarimbo, posicaoAssinatura: result.posicaoAssinatura });
+    setPositioning(false);
+  }
 
   return (
-    <div className="space-y-5">
-      <fieldset>
-        <legend className="mb-2 text-xs font-semibold text-graphite-700">Carimbo da unidade/departamento</legend>
-        <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
-          {options.map((option) => {
-            const value = option.code as StampChoice;
-            const Icon = STAMP_CHOICE_ICONS[value];
-            const active = state.carimbo === value;
-            return (
-              <button
-                key={option.id}
-                type="button"
-                onClick={() => update({ carimbo: value })}
-                aria-pressed={active}
-                className={cn(
-                  "relative flex min-h-16 items-center gap-3 border px-3.5 py-2.5 text-left transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-navy-500",
-                  active ? "border-navy-700 bg-navy-50" : "border-graphite-200 bg-white hover:border-graphite-400 hover:bg-graphite-50"
-                )}
-              >
-                {active && <span className="absolute right-2 top-2 flex size-4 items-center justify-center bg-navy-800 text-white"><Check className="size-2.5" /></span>}
-                <span className={cn("flex size-8 shrink-0 items-center justify-center border", active ? "border-navy-300 bg-white text-navy-800" : "border-graphite-200 bg-graphite-50 text-graphite-500")}>
-                  <Icon className="size-4" />
-                </span>
-                <span className="min-w-0 pr-3">
-                  <span className="block text-[13px] font-medium text-graphite-900">{option.label}</span>
-                  {option.description && (
-                    <span className="block text-xs text-graphite-500">{option.description}</span>
-                  )}
-                </span>
-              </button>
-            );
-          })}
+    <div className="space-y-4">
+      <label className="flex items-center gap-3 border border-graphite-200 bg-white px-3.5 py-3">
+        <span className="flex size-8 shrink-0 items-center justify-center border border-graphite-200 bg-graphite-50 text-navy-700">
+          <PenTool className="size-4" />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-[13px] font-medium text-graphite-800">Usar carimbo e assinatura</span>
+          <span className="block text-xs text-graphite-500">
+            {authorization.loading
+              ? "A verificar o carimbo e a assinatura da sua unidade…"
+              : readyToSign
+                ? `Carimbo de ${authorization.stamp?.unidade} + assinatura de ${authorization.signature?.proprietario}`
+                : "Indisponível — veja o aviso abaixo"}
+          </span>
+        </span>
+        <Switch
+          checked={state.usarCarimboAssinatura}
+          onCheckedChange={(value) => update({ usarCarimboAssinatura: value, posicaoCarimbo: undefined, posicaoAssinatura: undefined })}
+          disabled={!readyToSign || authorization.loading}
+        />
+      </label>
+
+      {!authorization.loading && !readyToSign && (
+        <p className="border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-relaxed text-amber-800">
+          {!authorization.stamp && "Esta unidade ainda não tem um carimbo configurado. "}
+          {!authorization.signature && "Não tem uma assinatura configurada. "}
+          Contacte a administração — não é possível submeter apenas com um dos dois.
+        </p>
+      )}
+
+      {state.usarCarimboAssinatura && hasFreePositionImages && (
+        <div className="border border-graphite-200 bg-graphite-50 px-3.5 py-3">
+          <p className="text-[13px] text-graphite-700">
+            {hasPosition ? "Posição definida." : "Escolha onde o carimbo e a assinatura devem aparecer no documento."}
+          </p>
+          <Button type="button" variant="secondary" className="mt-2" loading={preparing} onClick={openPositioning}>
+            {hasPosition ? "Ajustar posição" : "Posicionar carimbo e assinatura"}
+          </Button>
         </div>
+      )}
 
-        {state.carimbo === "escolher" && (
-          <div className="mt-4 grid grid-cols-1 gap-4 border-t border-graphite-200 pt-4 lg:grid-cols-12">
-            <div className="lg:col-span-5">
-              <Label>Carimbo autorizado</Label>
-              <Select value={state.carimboId} onValueChange={(v) => update({ carimboId: v })}>
-                <SelectTrigger><SelectValue placeholder="Seleccione um carimbo" /></SelectTrigger>
-                <SelectContent>
-                  {availableStamps.map((s) => (
-                    <SelectItem key={s.id} value={s.id}>{s.nome} — {s.unidade}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {availableStamps.length === 0 && <p className="mt-1.5 text-xs text-amber-700">Esta unidade ainda não possui um carimbo activo configurado.</p>}
-              <label className="mt-3 flex items-center gap-2 border border-graphite-200 bg-graphite-50 px-3 py-2 text-[13px] text-graphite-700">
-                <MapPin className="size-3.5 text-graphite-500" />
-                <Switch checked={state.posicaoPredefinida} onCheckedChange={(v) => update({ posicaoPredefinida: v })} />
-                Posição predefinida
-              </label>
-            </div>
-            <div className="flex min-h-[292px] items-center justify-center border border-graphite-300 bg-graphite-50 p-3 lg:col-span-7">
-              <div className="relative flex h-[268px] w-[190px] items-center justify-center border border-graphite-200 bg-white">
-                <span className="text-2xs text-graphite-300">Pré-visualização A4</span>
-                {selected && (
-                  <span
-                    className={cn(
-                      "absolute rotate-[-8deg] border-2 border-navy-700 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-navy-700",
-                      selected.posicao.includes("superior") ? "top-3" : "bottom-3",
-                      selected.posicao.includes("esquerda") ? "left-3" : selected.posicao.includes("direita") ? "right-3" : ""
-                    )}
-                  >
-                    {selected.nome}
-                  </span>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-      </fieldset>
-
-      <div className="border-t border-graphite-200 pt-4">
-        <label className="flex items-center gap-3 border border-graphite-200 bg-white px-3.5 py-3">
-          <span className="flex size-8 shrink-0 items-center justify-center border border-graphite-200 bg-graphite-50 text-navy-700">
-            <PenTool className="size-4" />
-          </span>
-          <span className="min-w-0 flex-1">
-            <span className="block text-[13px] font-medium text-graphite-800">Solicitar assinatura digital</span>
-            <span className="block text-xs text-graphite-500">Encaminhar para assinatura antes da submissão</span>
-          </span>
-          <Switch checked={state.solicitarAssinatura} onCheckedChange={(v) => update({ solicitarAssinatura: v })} />
-        </label>
-      </div>
+      {positioning && pdfUrl && (
+        <StampPositionPicker
+          open
+          onOpenChange={(v) => !v && setPositioning(false)}
+          pdfUrl={pdfUrl}
+          stamp={authorization.stamp?.imagemUrl ? { imageUrl: authorization.stamp.imagemUrl, label: authorization.stamp.nome, initialPosition: state.posicaoCarimbo ?? authorization.stamp.posicaoLivre } : undefined}
+          signature={authorization.signature?.imagemUrl ? { imageUrl: authorization.signature.imagemUrl, label: authorization.signature.proprietario, initialPosition: state.posicaoAssinatura ?? authorization.signature.posicaoLivre } : undefined}
+          onConfirm={confirmPosition}
+        />
+      )}
     </div>
   );
 }

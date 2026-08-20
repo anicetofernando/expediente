@@ -64,7 +64,7 @@ export function StepBasicInfo({ state, update }: StepProps) {
 
       <div className="lg:col-span-4">
         <Label required>Unidade de origem</Label>
-        <Select value={state.unidadeOrigem} onValueChange={(v) => update({ unidadeOrigem: v, carimboId: "" })}>
+        <Select value={state.unidadeOrigem} onValueChange={(v) => update({ unidadeOrigem: v })}>
           <SelectTrigger><SelectValue placeholder="Seleccione a unidade" /></SelectTrigger>
           <SelectContent>
             {availableUnits.map((unit) => (

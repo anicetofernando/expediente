@@ -16,8 +16,6 @@ export function StepReview({ state }: StepProps) {
     confidentialities,
     documentOrigins,
     documentTemplates,
-    stamps,
-    stampChoices,
   } = useCatalogs();
   const documentType = documentTypes.find((item) => item.id === state.tipo);
   const originUnit = organizationalUnits.find((item) => item.id === state.unidadeOrigem);
@@ -26,8 +24,6 @@ export function StepReview({ state }: StepProps) {
   const confidentiality = confidentialities.find((item) => item.code === state.confidencialidade);
   const documentOrigin = documentOrigins.find((item) => item.code === state.origemDocumento);
   const template = documentTemplates.find((item) => item.id === state.modeloId);
-  const carimbo = stamps.find((s) => s.id === state.carimboId);
-  const stampChoice = stampChoices.find((item) => item.code === state.carimbo);
 
   return (
     <div className="space-y-4">
@@ -141,25 +137,16 @@ export function StepReview({ state }: StepProps) {
         </div>
       </ReviewSection>
 
-      <ReviewSection title="Carimbo e assinatura" icon={Stamp}>
-        <div className="grid grid-cols-1 divide-y divide-graphite-150 text-[13px] sm:grid-cols-2 sm:divide-x sm:divide-y-0">
-          <div className="flex items-center gap-2 px-3 py-3">
-            <Stamp className="size-3.5 text-navy-700" />
-            <span className="text-graphite-500">Carimbo</span>
-            <span className="font-medium text-graphite-800">
-              {state.carimbo === "escolher"
-                ? carimbo?.nome ?? "Não seleccionado"
-                : stampChoice?.label ?? "Não definido"}
-            </span>
-          </div>
-          <div className="flex items-center gap-2 px-3 py-3">
+      {state.origemDocumento === "sistema" && (
+        <ReviewSection title="Carimbo e assinatura" icon={Stamp}>
+          <div className="flex items-center gap-2 px-3 py-3 text-[13px]">
             <PenTool className="size-3.5 text-navy-700" />
             <span className="font-medium text-graphite-800">
-              {state.solicitarAssinatura ? "Assinatura digital solicitada" : "Sem assinatura digital"}
+              {state.usarCarimboAssinatura ? "Carimbo do departamento e assinatura aplicados" : "Sem carimbo nem assinatura"}
             </span>
           </div>
-        </div>
-      </ReviewSection>
+        </ReviewSection>
+      )}
     </div>
   );
 }

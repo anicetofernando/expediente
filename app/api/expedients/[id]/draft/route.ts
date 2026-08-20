@@ -10,7 +10,8 @@ import { dateValueInMaputo, isValidFutureOrTodayDate } from "@/lib/date-only";
 import { templateSnapshot } from "@/lib/document-configuration";
 import { resolveSecretaryId } from "@/lib/routing";
 import { saveFile } from "@/lib/file-storage";
-import type { DocumentTemplate } from "@/types";
+import { resolveMandatoryStampSignatureByUnitId, signatureMetadataJson, stampMetadataJson } from "@/lib/stamping";
+import type { DocumentTemplate, FreePosition } from "@/types";
 
 export const runtime = "nodejs";
 
@@ -19,8 +20,7 @@ interface DraftInput {
   prioridade: Priority; confidencialidade: Confidentiality; prazo: string;
   origemDocumento: "sistema" | "importado" | "apenas-processo";
   modeloId?: string; conteudo?: string; numPaginas?: number; rascunho?: boolean;
-  carimbo?: "nao" | "automatico" | "escolher"; carimboId?: string;
-  solicitarAssinatura?: boolean;
+  usarCarimboAssinatura?: boolean; posicaoCarimbo?: FreePosition; posicaoAssinatura?: FreePosition;
   anexos?: Array<{ id: string; nome: string; descricao?: string; confidencialidade?: Confidentiality }>;
 }
 
@@ -75,8 +75,7 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
       conteudo: row.content_html ?? "", ficheiroNome: row.source && row.source !== "sistema" ? row.name ?? "" : "",
       numPaginas: row.page_count ?? 0,
       anexos: attachments.rows.map((item) => ({ id:item.id,nome:item.name,tamanho:`${Math.max(1,Math.round(Number(item.size_bytes)/1024))} KB`,descricao:"",confidencialidade:item.confidentiality })),
-      carimbo: row.stamp_id ? "escolher" : "nao", carimboId: row.stamp_id ?? "",
-      solicitarAssinatura: row.signature_requested ?? false, posicaoPredefinida: true,
+      usarCarimboAssinatura: Boolean(row.stamp_id),
     },
   });
 }
@@ -133,18 +132,43 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
       await client.query(`UPDATE expedients SET protocol=$2,subject=$3,document_type=$4,status=$5,priority=$6,confidentiality=$7,sender_name=$8,origin_unit_id=$9,recipient_unit_id=$10,responsible_user_id=$11,origin_secretary_id=COALESCE(origin_secretary_id,$15),due_date=$12,next_step=$13,submitted_at=$14 WHERE id=$1`,
         [params.id,protocol,input.assunto.trim(),input.tipo,submitting?"submetido":"rascunho",input.prioridade,input.confidencialidade,input.remetente.trim(),input.unidadeOrigem,input.destinatario,responsible,input.prazo,submitting?"Recepcao pela Secretaria":"Continuar a edicao",submitting?new Date().toISOString():null,submitting?responsible:null]);
 
-      const stampId = input.carimbo === "automatico" ? "st-protocolo-geral" : input.carimbo === "escolher" ? input.carimboId || null : null;
+      let documentId: string | null = main?.id ?? null;
       if (input.origemDocumento === "apenas-processo") {
         await client.query("DELETE FROM documents WHERE expedient_id=$1 AND document_kind='principal'", [params.id]);
+        documentId = null;
       } else if (input.origemDocumento === "sistema") {
-        if (main) await client.query(`UPDATE documents SET name=$2,source='sistema',mime_type='text/html',size_bytes=$3,page_count=1,storage_path=NULL,content_html=$4,confidentiality=$5,stamp_id=$6,signature_requested=$7,template_metadata=$8::jsonb,stamped=false,signed=false,stamp_metadata=NULL,signature_metadata=NULL WHERE id=$1`, [main.id,`${input.assunto.trim()}.html`,Buffer.byteLength(cleanHtml,"utf8"),cleanHtml,input.confidencialidade,stampId,input.solicitarAssinatura===true,template ? JSON.stringify(template) : null]);
-        else await client.query(`INSERT INTO documents(expedient_id,name,document_kind,source,mime_type,size_bytes,page_count,content_html,confidentiality,created_by,stamp_id,signature_requested,template_metadata) VALUES($1,$2,'principal','sistema','text/html',$3,1,$4,$5,$6,$7,$8,$9::jsonb)`, [params.id,`${input.assunto.trim()}.html`,Buffer.byteLength(cleanHtml,"utf8"),cleanHtml,input.confidencialidade,session.user.id,stampId,input.solicitarAssinatura===true,template ? JSON.stringify(template) : null]);
+        let stampId: string | null = null;
+        let stampMeta: string | null = null;
+        let sigMeta: string | null = null;
+        if (input.usarCarimboAssinatura) {
+          const resolved = await resolveMandatoryStampSignatureByUnitId(client, input.unidadeOrigem, session.user, session.perfilNavegacao);
+          stampId = resolved.stamp.id;
+          stampMeta = JSON.stringify(stampMetadataJson(resolved.stamp, session.user.nome, input.posicaoCarimbo));
+          sigMeta = JSON.stringify(signatureMetadataJson(resolved.signature, session.user, input.posicaoAssinatura));
+        }
+        if (main) {
+          await client.query(
+            `UPDATE documents SET name=$2,source='sistema',mime_type='text/html',size_bytes=$3,page_count=1,storage_path=NULL,content_html=$4,confidentiality=$5,stamp_id=$6,signature_requested=$7,template_metadata=$8::jsonb,stamped=$7,signed=$7,stamp_metadata=$9::jsonb,signature_metadata=$10::jsonb WHERE id=$1`,
+            [main.id,`${input.assunto.trim()}.html`,Buffer.byteLength(cleanHtml,"utf8"),cleanHtml,input.confidencialidade,stampId,Boolean(stampId),template ? JSON.stringify(template) : null,stampMeta,sigMeta],
+          );
+        } else {
+          const inserted = await client.query<{ id: string }>(
+            `INSERT INTO documents(expedient_id,name,document_kind,source,mime_type,size_bytes,page_count,content_html,confidentiality,created_by,stamp_id,stamped,signed,signature_requested,stamp_metadata,signature_metadata,template_metadata)
+             VALUES($1,$2,'principal','sistema','text/html',$3,1,$4,$5,$6,$7,$8,$8,$8,$9::jsonb,$10::jsonb,$11::jsonb) RETURNING id`,
+            [params.id,`${input.assunto.trim()}.html`,Buffer.byteLength(cleanHtml,"utf8"),cleanHtml,input.confidencialidade,session.user.id,stampId,Boolean(stampId),stampMeta,sigMeta,template ? JSON.stringify(template) : null],
+          );
+          documentId = inserted.rows[0].id;
+        }
       } else if (mainFile) {
         const stored = await persistFile(params.id, mainFile);
-        if (main) await client.query(`UPDATE documents SET name=$2,source='importado',mime_type=$3,size_bytes=$4,page_count=$5,storage_path=$6,content_html=NULL,confidentiality=$7,stamp_id=$8,signature_requested=$9,template_metadata=NULL,stamped=false,signed=false,stamp_metadata=NULL,signature_metadata=NULL WHERE id=$1`, [main.id,mainFile.name,stored.mime,mainFile.size,Math.max(1,input.numPaginas??1),stored.relative,input.confidencialidade,stampId,input.solicitarAssinatura===true]);
-        else await client.query(`INSERT INTO documents(expedient_id,name,document_kind,source,mime_type,size_bytes,page_count,storage_path,confidentiality,created_by,stamp_id,signature_requested) VALUES($1,$2,'principal','importado',$3,$4,$5,$6,$7,$8,$9,$10)`, [params.id,mainFile.name,stored.mime,mainFile.size,Math.max(1,input.numPaginas??1),stored.relative,input.confidencialidade,session.user.id,stampId,input.solicitarAssinatura===true]);
+        if (main) {
+          await client.query(`UPDATE documents SET name=$2,source='importado',mime_type=$3,size_bytes=$4,page_count=$5,storage_path=$6,content_html=NULL,confidentiality=$7,stamp_id=NULL,signature_requested=false,template_metadata=NULL,stamped=false,signed=false,stamp_metadata=NULL,signature_metadata=NULL WHERE id=$1`, [main.id,mainFile.name,stored.mime,mainFile.size,Math.max(1,input.numPaginas??1),stored.relative,input.confidencialidade]);
+        } else {
+          const inserted = await client.query<{ id: string }>(`INSERT INTO documents(expedient_id,name,document_kind,source,mime_type,size_bytes,page_count,storage_path,confidentiality,created_by) VALUES($1,$2,'principal','importado',$3,$4,$5,$6,$7,$8) RETURNING id`, [params.id,mainFile.name,stored.mime,mainFile.size,Math.max(1,input.numPaginas??1),stored.relative,input.confidencialidade,session.user.id]);
+          documentId = inserted.rows[0].id;
+        }
       } else if (main) {
-        await client.query("UPDATE documents SET confidentiality=$2,stamp_id=$3,signature_requested=$4 WHERE id=$1", [main.id,input.confidencialidade,stampId,input.solicitarAssinatura===true]);
+        await client.query("UPDATE documents SET confidentiality=$2 WHERE id=$1", [main.id,input.confidencialidade]);
       }
 
       const keptIds = (input.anexos ?? []).map((item) => item.id).filter((id) => UUID_PATTERN.test(id));
@@ -157,11 +181,11 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
       }
       await client.query(`INSERT INTO timeline_events(expedient_id,event_type,title,description,user_id,unit_id) VALUES($1,$2,$3,$4,$5,$6)`, [params.id,submitting?"submissao":"criacao",submitting?"Rascunho submetido":"Rascunho actualizado",submitting?"Enviado para recepcao e protocolo.":"Alteracoes guardadas para continuar mais tarde.",session.user.id,session.user.unidadeId]);
       if (submitting) await client.query(`INSERT INTO notifications(user_id,notification_type,title,description,expedient_id,urgent) SELECT u.id,'tarefa','Novo expediente submetido',$2,$1,$3 FROM users u JOIN user_profiles up ON up.user_id=u.id JOIN profiles p ON p.id=up.profile_id WHERE p.slug='secretaria' AND u.status='activo'`, [params.id,`${protocol} aguarda recepcao.`,input.prioridade==="urgente"]);
-      return { id: params.id, protocol, draft: !submitting };
+      return { id: params.id, protocol, draft: !submitting, documentId };
     });
     await audit({userId:session.user.id,action:updated.draft?"Rascunho actualizado":"Rascunho submetido",entityType:"Expediente",entityId:params.id,details:{protocol:updated.protocol}});
     revalidatePath(`/expedientes/${params.id}`); revalidatePath("/expedientes");
-    return NextResponse.json({ok:true,id:updated.id,protocolo:updated.protocol,rascunho:updated.draft});
+    return NextResponse.json({ok:true,id:updated.id,protocolo:updated.protocol,rascunho:updated.draft,documentId:updated.documentId,pdfUrl:updated.documentId ? `/api/documents/${updated.documentId}/pdf` : null});
   } catch (error) {
     return NextResponse.json({error:error instanceof Error?error.message:"Nao foi possivel guardar o rascunho."},{status:400});
   }
