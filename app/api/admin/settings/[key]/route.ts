@@ -3,10 +3,13 @@ import { audit, getCurrentSession } from "@/lib/auth";
 import { query } from "@/lib/db";
 
 const ALLOWED_KEYS = new Set(["workflows-ui", "signatures", "numbering", "notification-rules", "general-configuration"]);
+// Non-sensitive settings any authenticated user may read (e.g. to pre-fill forms) — writes remain administracao-only.
+const PUBLIC_READ_KEYS = new Set(["general-configuration", "numbering", "workflows-ui"]);
 
 export async function GET(_request: Request, { params }: { params: { key: string } }) {
   const session = await getCurrentSession();
-  if (!session || session.perfilNavegacao !== "administracao") return NextResponse.json({ error: "Acesso negado." }, { status: 403 });
+  if (!session) return NextResponse.json({ error: "Acesso negado." }, { status: 403 });
+  if (session.perfilNavegacao !== "administracao" && !PUBLIC_READ_KEYS.has(params.key)) return NextResponse.json({ error: "Acesso negado." }, { status: 403 });
   if (!ALLOWED_KEYS.has(params.key)) return NextResponse.json({ error: "Configuracao desconhecida." }, { status: 404 });
   const result = await query<{ setting_value: unknown }>("SELECT setting_value FROM system_settings WHERE setting_key=$1", [params.key]);
   return NextResponse.json({ value: result.rows[0]?.setting_value ?? null });

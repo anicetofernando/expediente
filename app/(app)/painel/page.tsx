@@ -7,6 +7,7 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableContainer,
   TableHead,
   TableHeaderCell,
   TableRow,
@@ -83,6 +84,7 @@ export default async function PainelPage() {
             </Button>
           </header>
 
+          <TableContainer>
           <Table>
             <TableHead>
               <TableRow>
@@ -144,6 +146,7 @@ export default async function PainelPage() {
               ))}
             </TableBody>
           </Table>
+          </TableContainer>
         </section>
       </div>
     </div>

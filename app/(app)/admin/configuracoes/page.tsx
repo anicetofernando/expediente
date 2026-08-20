@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import {
   Archive,
   Building2,
@@ -46,7 +47,6 @@ interface SystemSettings {
   supportEmail: string;
   timezone: string;
   locale: string;
-  protocolPrefix: string;
   passwordDays: string;
   maxAttempts: string;
   auditYears: string;
@@ -69,7 +69,6 @@ const DEFAULT_SETTINGS: SystemSettings = {
   supportEmail: "suporte.expediente@cfm.co.mz",
   timezone: "Africa/Maputo",
   locale: "pt-MZ",
-  protocolPrefix: "CFM",
   passwordDays: "90",
   maxAttempts: "5",
   auditYears: "10",
@@ -331,22 +330,10 @@ function ConfiguracoesContent() {
                       </Select>
                     </div>
                   </div>
-                  <div>
-                    <Label htmlFor="protocol-prefix">
-                      Prefixo geral de protocolo
-                    </Label>
-                    <Input
-                      id="protocol-prefix"
-                      value={settings.protocolPrefix}
-                      onChange={(event) =>
-                        update(
-                          "protocolPrefix",
-                          event.target.value.toUpperCase()
-                        )
-                      }
-                    />
-                    <p className="mt-1.5 text-xs text-graphite-500">
-                      Exemplo: {settings.protocolPrefix || "CFM"}/2026/000001
+                  <div className="rounded-lg border border-graphite-200 bg-graphite-50 p-3.5">
+                    <p className="text-[13px] font-medium text-graphite-800">Formato do número de protocolo</p>
+                    <p className="mt-1 text-xs leading-relaxed text-graphite-500">
+                      O prefixo, separador e dígitos do número de protocolo real são configurados por unidade em <Link href="/admin/numeracao" className="text-cfm-700 underline">Administração → Numeração</Link>.
                     </p>
                   </div>
                 </CardContent>

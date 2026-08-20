@@ -217,7 +217,7 @@ function FluxosContent() {
     <div>
       <PageHeader
         title="Fluxos"
-        description="Configuração dos circuitos de tramitação, responsáveis, prazos e decisões."
+        description="Um fluxo publicado e associado a um tipo de documento (em Tipos de Documento) sugere automaticamente o prazo do expediente, somando o prazo de todas as suas etapas. O responsável e as acções por etapa são apenas informativos — a tramitação real segue as regras fixas do sistema, não este desenho."
         breadcrumb={[{ label: "Administração" }, { label: "Fluxos" }]}
         actions={
           <Button onClick={() => setCreateOpen(true)}>

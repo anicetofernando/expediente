@@ -1,18 +1,8 @@
 "use client";
 
 import * as React from "react";
-import {
-  CalendarDays,
-  CheckCircle2,
-  Hash,
-  ListOrdered,
-  Plus,
-  RotateCcw,
-  TicketCheck,
-  Trash2,
-} from "lucide-react";
+import { CheckCircle2, Globe, Pencil, RotateCcw } from "lucide-react";
 import { PageHeader } from "@/components/shared/page-header";
-import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { StatCard } from "@/components/shared/stat-card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -26,419 +16,181 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input, Label, SearchInput } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { FieldHint, Input, Label, SearchInput } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableHeaderCell,
-  TableRow,
-} from "@/components/ui/table";
+import { Table, TableBody, TableCell, TableContainer, TableHead, TableHeaderCell, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
-import { formatDate } from "@/lib/utils";
 import { useDatabaseSetting } from "@/lib/use-database-setting";
+import { CatalogsProvider, useCatalogs } from "@/lib/catalogs";
 
-interface NumberingSequence {
-  id: string;
-  nome: string;
-  prefixo: string;
-  ano: number;
-  actual: number;
+type Separator = "/" | "-" | ".";
+
+interface UnitNumberingConfig {
+  unitId: string;
+  prefixoInstitucional: string;
+  separador: Separator;
   digitos: number;
-  separador: "/" | "-" | ".";
   reinicioAnual: boolean;
-  activa: boolean;
-  ultimaEmissao?: string;
 }
 
-const INITIAL_SEQUENCES: NumberingSequence[] = [
-  {
-    id: "num-oficio",
-    nome: "Ofícios",
-    prefixo: "OF",
-    ano: 2026,
-    actual: 1487,
-    digitos: 5,
-    separador: "/",
-    reinicioAnual: true,
-    activa: true,
-    ultimaEmissao: "2026-07-25T09:14:00",
-  },
-  {
-    id: "num-memorando",
-    nome: "Memorandos",
-    prefixo: "MEM",
-    ano: 2026,
-    actual: 836,
-    digitos: 4,
-    separador: "/",
-    reinicioAnual: true,
-    activa: true,
-    ultimaEmissao: "2026-07-24T16:42:00",
-  },
-  {
-    id: "num-requisicao",
-    nome: "Requisições",
-    prefixo: "REQ",
-    ano: 2026,
-    actual: 542,
-    digitos: 4,
-    separador: "-",
-    reinicioAnual: true,
-    activa: true,
-    ultimaEmissao: "2026-07-25T08:20:00",
-  },
-  {
-    id: "num-parecer",
-    nome: "Pareceres",
-    prefixo: "PAR",
-    ano: 2026,
-    actual: 219,
-    digitos: 4,
-    separador: "/",
-    reinicioAnual: true,
-    activa: true,
-    ultimaEmissao: "2026-07-23T13:10:00",
-  },
-  {
-    id: "num-despacho",
-    nome: "Despachos",
-    prefixo: "DESP",
-    ano: 2026,
-    actual: 174,
-    digitos: 4,
-    separador: "/",
-    reinicioAnual: true,
-    activa: true,
-    ultimaEmissao: "2026-07-24T10:05:00",
-  },
-  {
-    id: "num-relatorio",
-    nome: "Relatórios",
-    prefixo: "REL",
-    ano: 2026,
-    actual: 91,
-    digitos: 3,
-    separador: "-",
-    reinicioAnual: true,
-    activa: true,
-    ultimaEmissao: "2026-07-20T11:45:00",
-  },
-  {
-    id: "num-nota",
-    nome: "Notas de serviço",
-    prefixo: "NS",
-    ano: 2026,
-    actual: 66,
-    digitos: 3,
-    separador: ".",
-    reinicioAnual: false,
-    activa: false,
-    ultimaEmissao: "2026-02-18T09:30:00",
-  },
-];
+const GLOBAL_ID = "";
+const GLOBAL_DEFAULT: UnitNumberingConfig = { unitId: GLOBAL_ID, prefixoInstitucional: "CFM", separador: "/", digitos: 4, reinicioAnual: true };
+const INITIAL_CONFIG: UnitNumberingConfig[] = [GLOBAL_DEFAULT];
 
-function formatNumber(sequence: NumberingSequence, value = sequence.actual) {
-  return [
-    sequence.prefixo,
-    sequence.ano,
-    String(value).padStart(sequence.digitos, "0"),
-  ].join(sequence.separador);
+function formatPreview(config: UnitNumberingConfig, acronym: string) {
+  return [config.prefixoInstitucional, acronym, new Date().getFullYear(), "0".repeat(config.digitos)].join(config.separador);
 }
 
-export default function NumeracaoPage() {
+function NumeracaoContent() {
   const { toast } = useToast();
-  const [sequences, setSequences] = useDatabaseSetting<NumberingSequence[]>("numbering", INITIAL_SEQUENCES);
-  const [deleteTarget, setDeleteTarget] = React.useState<NumberingSequence | null>(null);
+  const { organizationalUnits } = useCatalogs();
+  const [config, setConfig] = useDatabaseSetting<UnitNumberingConfig[]>("numbering", INITIAL_CONFIG);
   const [search, setSearch] = React.useState("");
-  const [status, setStatus] = React.useState("todas");
-  const [open, setOpen] = React.useState(false);
-  const [name, setName] = React.useState("");
+  const [editing, setEditing] = React.useState<{ unitId: string; label: string; acronym: string } | null>(null);
   const [prefix, setPrefix] = React.useState("");
   const [digits, setDigits] = React.useState("4");
-  const [separator, setSeparator] =
-    React.useState<NumberingSequence["separador"]>("/");
+  const [separator, setSeparator] = React.useState<Separator>("/");
   const [annualReset, setAnnualReset] = React.useState(true);
+
+  const global = config.find((item) => item.unitId === GLOBAL_ID) ?? GLOBAL_DEFAULT;
+  const overrides = config.filter((item) => item.unitId !== GLOBAL_ID);
+  const activeUnits = organizationalUnits.filter((unit) => unit.estado === "activo");
 
   const filtered = React.useMemo(() => {
     const query = search.trim().toLowerCase();
-    return sequences.filter((sequence) => {
-      const matchesSearch =
-        !query ||
-        sequence.nome.toLowerCase().includes(query) ||
-        sequence.prefixo.toLowerCase().includes(query) ||
-        formatNumber(sequence).toLowerCase().includes(query);
-      const matchesStatus =
-        status === "todas" ||
-        (status === "activas" ? sequence.activa : !sequence.activa);
-      return matchesSearch && matchesStatus;
-    });
-  }, [sequences, search, status]);
+    if (!query) return activeUnits;
+    return activeUnits.filter((unit) => unit.nome.toLowerCase().includes(query) || unit.sigla.toLowerCase().includes(query));
+  }, [activeUnits, search]);
 
-  const activeCount = sequences.filter((item) => item.activa).length;
-  const issuedCount = sequences.reduce((total, item) => total + item.actual, 0);
-  const annualCount = sequences.filter((item) => item.reinicioAnual).length;
-
-  const duplicatePrefix = sequences.some(
-    (item) => item.prefixo === prefix.trim().toUpperCase()
-  );
-
-  function resetForm() {
-    setName("");
-    setPrefix("");
-    setDigits("4");
-    setSeparator("/");
-    setAnnualReset(true);
+  function effectiveConfig(unitId: string) {
+    return overrides.find((item) => item.unitId === unitId) ?? global;
   }
 
-  function createSequence() {
-    const sequence: NumberingSequence = {
-      id: `num-${Date.now()}`,
-      nome: name.trim(),
-      prefixo: prefix.trim().toUpperCase(),
-      ano: new Date().getFullYear(),
-      actual: 0,
-      digitos: Number(digits),
+  function openEditor(unitId: string, label: string, acronym: string) {
+    const current = unitId === GLOBAL_ID ? global : effectiveConfig(unitId);
+    setPrefix(current.prefixoInstitucional);
+    setDigits(String(current.digitos));
+    setSeparator(current.separador);
+    setAnnualReset(current.reinicioAnual);
+    setEditing({ unitId, label, acronym });
+  }
+
+  function save() {
+    if (!editing) return;
+    const updated: UnitNumberingConfig = {
+      unitId: editing.unitId,
+      prefixoInstitucional: prefix.trim().toUpperCase() || "CFM",
       separador: separator,
+      digitos: Number(digits),
       reinicioAnual: annualReset,
-      activa: true,
     };
-    setSequences((current) => [sequence, ...current]);
-    setOpen(false);
-    resetForm();
-    toast({
-      title: "Sequência criada",
-      description: `A próxima referência será ${formatNumber(sequence, 1)}.`,
-      variant: "success",
+    setConfig((current) => {
+      const withoutThis = current.filter((item) => item.unitId !== editing.unitId);
+      return [...withoutThis, updated];
     });
+    const example = [updated.prefixoInstitucional, editing.acronym, new Date().getFullYear(), "1".padStart(updated.digitos, "0")].join(updated.separador);
+    toast({ title: "Formato de numeração actualizado", description: `Exemplo do próximo protocolo: ${example}`, variant: "success" });
+    setEditing(null);
   }
 
-  function reserveNext(sequence: NumberingSequence) {
-    const next = sequence.actual + 1;
-    setSequences((current) =>
-      current.map((item) =>
-        item.id === sequence.id
-          ? {
-              ...item,
-              actual: next,
-              ultimaEmissao: new Date().toISOString(),
-            }
-          : item
-      )
-    );
-    toast({
-      title: "Número reservado",
-      description: `${formatNumber(
-        sequence,
-        next
-      )} foi reservado e guardado no PostgreSQL.`,
-      variant: "success",
-    });
-  }
-
-  function toggleSequence(sequence: NumberingSequence, active: boolean) {
-    setSequences((current) =>
-      current.map((item) =>
-        item.id === sequence.id ? { ...item, activa: active } : item
-      )
-    );
-    toast({
-      title: active ? "Sequência activada" : "Sequência suspensa",
-      description: `${sequence.nome} ${
-        active
-          ? "pode voltar a emitir números."
-          : "deixou de emitir novas referências."
-      }`,
-      variant: active ? "success" : "warning",
-    });
-  }
-
-  function deleteSequenceConfirmed() {
-    if (!deleteTarget) return;
-    setSequences((current) => current.filter((item) => item.id !== deleteTarget.id));
-    toast({ title: "Sequência eliminada", description: `${deleteTarget.nome} foi removida.`, variant: "success" });
-    setDeleteTarget(null);
+  function clearOverride(unitId: string) {
+    setConfig((current) => current.filter((item) => item.unitId !== unitId));
+    toast({ title: "Excepção removida", description: "Esta unidade volta a usar a predefinição global.", variant: "success" });
   }
 
   return (
     <div>
       <PageHeader
         title="Numeração"
-        description="Sequências automáticas, formatos e reinícios anuais das referências documentais."
+        description="Formato dos números de protocolo reais, por unidade — este formato é o que efectivamente é usado ao submeter um expediente."
         breadcrumb={[{ label: "Administração" }, { label: "Numeração" }]}
-        actions={
-          <Button onClick={() => setOpen(true)}>
-            <Plus className="size-4" />
-            Nova sequência
-          </Button>
-        }
       />
 
       <div className="space-y-5 p-6">
         <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-          <StatCard
-            label="Sequências activas"
-            value={activeCount}
-            icon="ListOrdered"
-            tone="success"
-          />
-          <StatCard
-            label="Números emitidos"
-            value={issuedCount.toLocaleString("pt-PT")}
-            icon="Hash"
-            tone="navy"
-          />
-          <StatCard
-            label="Reinício anual"
-            value={annualCount}
-            icon="CalendarDays"
-            tone="info"
-          />
-          <StatCard
-            label="Ano corrente"
-            value={new Date().getFullYear()}
-            icon="CalendarCheck2"
-            tone="graphite"
-          />
+          <StatCard label="Predefinição global" value={formatPreview(global, "SIGLA")} icon="Hash" tone="navy" />
+          <StatCard label="Unidades com excepção" value={overrides.length} icon="ListOrdered" tone="info" />
+          <StatCard label="Reinício anual (global)" value={global.reinicioAnual ? "Sim" : "Não"} icon="CalendarDays" tone={global.reinicioAnual ? "success" : "graphite"} />
+          <StatCard label="Ano corrente" value={new Date().getFullYear()} icon="CalendarCheck2" tone="graphite" />
         </div>
+
+        <Card>
+          <CardHeader className="flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-3">
+              <span className="flex size-9 items-center justify-center rounded-md bg-navy-50 text-navy-700">
+                <Globe className="size-4" />
+              </span>
+              <div>
+                <p className="text-[13px] font-medium text-graphite-900">Predefinição global</p>
+                <code className="text-xs text-graphite-500">{formatPreview(global, "SIGLA")}</code>
+              </div>
+            </div>
+            <Button variant="secondary" size="sm" onClick={() => openEditor(GLOBAL_ID, "Predefinição global", "SIGLA")}>
+              <Pencil className="size-3.5" />
+              Editar predefinição
+            </Button>
+          </CardHeader>
+        </Card>
 
         <Card>
           <CardHeader className="flex-col items-stretch sm:flex-row sm:items-center sm:justify-start">
             <div className="w-full sm:w-72">
-              <SearchInput
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                onClear={() => setSearch("")}
-                placeholder="Pesquisar sequência ou prefixo…"
-              />
+              <SearchInput value={search} onChange={(event) => setSearch(event.target.value)} onClear={() => setSearch("")} placeholder="Pesquisar unidade…" />
             </div>
-            <Select value={status} onValueChange={setStatus}>
-              <SelectTrigger className="w-full sm:w-40">
-                <SelectValue placeholder="Estado" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="todas">Todas</SelectItem>
-                <SelectItem value="activas">Activas</SelectItem>
-                <SelectItem value="inactivas">Inactivas</SelectItem>
-              </SelectContent>
-            </Select>
-            <span className="ml-auto text-xs text-graphite-500">
-              {filtered.length} sequências configuradas
-            </span>
+            <span className="ml-auto text-xs text-graphite-500">{filtered.length} unidades</span>
           </CardHeader>
           <CardContent className="p-0">
             <TableContainer>
               <Table>
                 <TableHead>
                   <TableRow>
-                    <TableHeaderCell>Sequência</TableHeaderCell>
-                    <TableHeaderCell>Formato</TableHeaderCell>
-                    <TableHeaderCell>Último número</TableHeaderCell>
-                    <TableHeaderCell>Próximo número</TableHeaderCell>
+                    <TableHeaderCell>Unidade</TableHeaderCell>
+                    <TableHeaderCell>Formato do protocolo</TableHeaderCell>
                     <TableHeaderCell>Reinício</TableHeaderCell>
-                    <TableHeaderCell>Última emissão</TableHeaderCell>
-                    <TableHeaderCell>Estado</TableHeaderCell>
-                    <TableHeaderCell className="w-32" />
+                    <TableHeaderCell>Origem</TableHeaderCell>
+                    <TableHeaderCell className="w-40" />
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {filtered.map((sequence) => (
-                    <TableRow key={sequence.id}>
-                      <TableCell>
-                        <div className="flex items-center gap-2.5">
-                          <span className="flex size-8 items-center justify-center rounded-md bg-navy-50 text-navy-700">
-                            <ListOrdered className="size-4" />
-                          </span>
-                          <div>
-                            <p className="font-medium text-graphite-900">
-                              {sequence.nome}
-                            </p>
-                            <p className="mt-0.5 text-2xs text-graphite-500">
-                              Prefixo {sequence.prefixo}
-                            </p>
+                  {filtered.map((unit) => {
+                    const cfg = effectiveConfig(unit.id);
+                    const hasOverride = overrides.some((item) => item.unitId === unit.id);
+                    return (
+                      <TableRow key={unit.id}>
+                        <TableCell>
+                          <p className="font-medium text-graphite-900">{unit.nome}</p>
+                          <p className="mt-0.5 text-2xs text-graphite-500">Sigla {unit.sigla}</p>
+                        </TableCell>
+                        <TableCell>
+                          <code className="rounded bg-graphite-100 px-2 py-1 text-xs text-graphite-700">{formatPreview(cfg, unit.sigla)}</code>
+                        </TableCell>
+                        <TableCell>
+                          {cfg.reinicioAnual ? (
+                            <span className="flex items-center gap-1.5 text-xs"><RotateCcw className="size-3.5 text-info-600" />Anual</span>
+                          ) : (
+                            <span className="text-xs text-graphite-500">Contínuo</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={hasOverride ? "info" : "neutral"}>{hasOverride ? "Excepção própria" : "Predefinição global"}</Badge>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-1">
+                            <Button variant="secondary" size="sm" onClick={() => openEditor(unit.id, unit.nome, unit.sigla)}>
+                              <Pencil className="size-3.5" />
+                              Editar
+                            </Button>
+                            {hasOverride && (
+                              <Button variant="ghost" size="sm" onClick={() => clearOverride(unit.id)}>
+                                Remover
+                              </Button>
+                            )}
                           </div>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <code className="rounded bg-graphite-100 px-2 py-1 text-xs text-graphite-700">
-                          {sequence.prefixo}
-                          {sequence.separador}
-                          AAAA
-                          {sequence.separador}
-                          {"0".repeat(sequence.digitos)}
-                        </code>
-                      </TableCell>
-                      <TableCell className="whitespace-nowrap font-medium tabular-nums text-graphite-900">
-                        {sequence.actual
-                          ? formatNumber(sequence)
-                          : "Ainda não emitido"}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="info">
-                          {formatNumber(sequence, sequence.actual + 1)}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        {sequence.reinicioAnual ? (
-                          <span className="flex items-center gap-1.5 text-xs">
-                            <RotateCcw className="size-3.5 text-info-600" />
-                            Anual
-                          </span>
-                        ) : (
-                          <span className="text-xs text-graphite-500">
-                            Contínuo
-                          </span>
-                        )}
-                      </TableCell>
-                      <TableCell className="whitespace-nowrap tabular-nums">
-                        {sequence.ultimaEmissao
-                          ? formatDate(sequence.ultimaEmissao, true)
-                          : "Nunca"}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <Switch
-                            checked={sequence.activa}
-                            onCheckedChange={(checked) =>
-                              toggleSequence(sequence, checked)
-                            }
-                            aria-label={`Estado de ${sequence.nome}`}
-                          />
-                          <Badge
-                            variant={sequence.activa ? "success" : "neutral"}
-                          >
-                            {sequence.activa ? "Activa" : "Inactiva"}
-                          </Badge>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-1">
-                          <Button
-                            variant="secondary"
-                            size="sm"
-                            disabled={!sequence.activa}
-                            onClick={() => reserveNext(sequence)}
-                          >
-                            <TicketCheck className="size-3.5" />
-                            Reservar
-                          </Button>
-                          <Button variant="ghost" size="icon-sm" aria-label={`Eliminar ${sequence.nome}`} onClick={() => setDeleteTarget(sequence)}>
-                            <Trash2 className="size-3.5" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </TableContainer>
@@ -446,53 +198,26 @@ export default function NumeracaoPage() {
         </Card>
       </div>
 
-      <Dialog
-        open={open}
-        onOpenChange={(value) => {
-          setOpen(value);
-          if (!value) resetForm();
-        }}
-      >
+      <Dialog open={!!editing} onOpenChange={(value) => !value && setEditing(null)}>
         <DialogContent size="md">
           <DialogHeader>
-            <DialogTitle>Nova sequência de numeração</DialogTitle>
+            <DialogTitle>{editing?.unitId === GLOBAL_ID ? "Editar predefinição global" : `Excepção para ${editing?.label}`}</DialogTitle>
             <DialogDescription>
-              Configure o padrão que será usado para gerar referências únicas.
+              {editing?.unitId === GLOBAL_ID
+                ? "Aplica-se a todas as unidades que não tenham uma excepção própria."
+                : "Substitui a predefinição global apenas para esta unidade."}
             </DialogDescription>
           </DialogHeader>
           <DialogBody className="space-y-4">
-            <div>
-              <Label htmlFor="sequence-name" required>
-                Nome
-              </Label>
-              <Input
-                id="sequence-name"
-                value={name}
-                onChange={(event) => setName(event.target.value)}
-                placeholder="Ex.: Contratos"
-              />
-            </div>
             <div className="grid gap-4 sm:grid-cols-3">
               <div>
-                <Label htmlFor="sequence-prefix" required>
-                  Prefixo
-                </Label>
-                <Input
-                  id="sequence-prefix"
-                  value={prefix}
-                  onChange={(event) =>
-                    setPrefix(event.target.value.toUpperCase().slice(0, 8))
-                  }
-                  placeholder="CONT"
-                  invalid={duplicatePrefix}
-                />
+                <Label htmlFor="numbering-prefix" required>Prefixo institucional</Label>
+                <Input id="numbering-prefix" value={prefix} onChange={(event) => setPrefix(event.target.value.toUpperCase().slice(0, 8))} placeholder="CFM" />
               </div>
               <div>
                 <Label>Dígitos</Label>
                 <Select value={digits} onValueChange={setDigits}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="3">3 dígitos</SelectItem>
                     <SelectItem value="4">4 dígitos</SelectItem>
@@ -503,15 +228,8 @@ export default function NumeracaoPage() {
               </div>
               <div>
                 <Label>Separador</Label>
-                <Select
-                  value={separator}
-                  onValueChange={(value) =>
-                    setSeparator(value as NumberingSequence["separador"])
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
+                <Select value={separator} onValueChange={(value) => setSeparator(value as Separator)}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="/">Barra /</SelectItem>
                     <SelectItem value="-">Hífen -</SelectItem>
@@ -520,58 +238,36 @@ export default function NumeracaoPage() {
                 </Select>
               </div>
             </div>
-            {prefix.trim() && (
+            {prefix.trim() && editing && (
               <div className="rounded-lg border border-info-200 bg-info-50 p-3">
-                <p className="text-xs font-medium text-info-800">
-                  Pré-visualização
-                </p>
+                <p className="text-xs font-medium text-info-800">Pré-visualização</p>
                 <p className="mt-1 font-mono text-sm text-info-900">
-                  {prefix.trim().toUpperCase()}
-                  {separator}
-                  {new Date().getFullYear()}
-                  {separator}
-                  {"1".padStart(Number(digits), "0")}
+                  {[prefix.trim().toUpperCase(), editing.acronym, new Date().getFullYear(), "1".padStart(Number(digits), "0")].join(separator)}
                 </p>
               </div>
             )}
             <label className="flex items-center justify-between rounded-lg border border-graphite-200 p-3.5">
               <div>
-                <p className="text-[13px] font-medium text-graphite-800">
-                  Reiniciar no início de cada ano
-                </p>
-                <p className="mt-0.5 text-xs text-graphite-500">
-                  A contagem regressa a 1 mantendo o ano na referência.
-                </p>
+                <p className="text-[13px] font-medium text-graphite-800">Reiniciar no início de cada ano</p>
+                <p className="mt-0.5 text-xs text-graphite-500">A contagem regressa a 1 mantendo o ano na referência.</p>
               </div>
-              <Switch
-                checked={annualReset}
-                onCheckedChange={setAnnualReset}
-              />
+              <Switch checked={annualReset} onCheckedChange={setAnnualReset} />
             </label>
+            <FieldHint>Este formato é usado de imediato ao submeter o próximo expediente — não é uma pré-visualização apenas.</FieldHint>
           </DialogBody>
           <DialogFooter>
-            <Button variant="secondary" onClick={() => setOpen(false)}>
-              Cancelar
-            </Button>
-            <Button
-              disabled={!name.trim() || !prefix.trim() || duplicatePrefix}
-              onClick={createSequence}
-            >
+            <Button variant="secondary" onClick={() => setEditing(null)}>Cancelar</Button>
+            <Button disabled={!prefix.trim()} onClick={save}>
               <CheckCircle2 className="size-4" />
-              Criar sequência
+              Guardar
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      <ConfirmDialog
-        open={!!deleteTarget}
-        onOpenChange={(open) => !open && setDeleteTarget(null)}
-        title="Eliminar sequência"
-        description={deleteTarget ? `${deleteTarget.nome} será removida permanentemente.` : undefined}
-        confirmLabel="Eliminar"
-        destructive
-        onConfirm={deleteSequenceConfirmed}
-      />
     </div>
   );
+}
+
+export default function NumeracaoPage() {
+  return <CatalogsProvider><NumeracaoContent /></CatalogsProvider>;
 }

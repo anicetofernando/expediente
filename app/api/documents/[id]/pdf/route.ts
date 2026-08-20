@@ -26,7 +26,9 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
   if (!allowed) return NextResponse.json({ error: "Acesso negado." }, { status: 403 });
   try {
     const sourceFile = doc.storage_path ? await loadFile(doc.storage_path) : null;
-    const pdf = await createDocumentPdf({ name: doc.name, mimeType: doc.mime_type, contentHtml: doc.content_html, sourceFile, protocol: doc.protocol, subject: doc.subject, stamp: doc.stamp_metadata, signature: doc.signature_metadata, template: doc.template_metadata });
+    const config = await query<{ setting_value: { institutionName?: string } | null }>("SELECT setting_value FROM system_settings WHERE setting_key='general-configuration'");
+    const institutionName = config.rows[0]?.setting_value?.institutionName || undefined;
+    const pdf = await createDocumentPdf({ name: doc.name, mimeType: doc.mime_type, contentHtml: doc.content_html, sourceFile, protocol: doc.protocol, subject: doc.subject, stamp: doc.stamp_metadata, signature: doc.signature_metadata, template: doc.template_metadata, institutionName });
     const name = `${doc.name.replace(/\.[^.]+$/, "").replace(/["\r\n]/g, "")}.pdf`;
     const disposition = request.nextUrl.searchParams.get("download") === "1" ? "attachment" : "inline";
     return new NextResponse(pdf, { headers: { "content-type": "application/pdf", "content-disposition": `${disposition}; filename="${name}"`, "content-length": String(pdf.length), "cache-control": "private, no-cache" } });

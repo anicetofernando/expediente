@@ -19,3 +19,10 @@ export function dateValueInMaputo(value: string | Date) {
   const date = value instanceof Date ? value : new Date(value);
   return Number.isNaN(date.valueOf()) ? "" : todayInMaputo(date);
 }
+
+export function addDaysToDate(baseDate: string, days: number) {
+  const [year, month, day] = baseDate.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  date.setUTCDate(date.getUTCDate() + days);
+  return todayInMaputo(date);
+}

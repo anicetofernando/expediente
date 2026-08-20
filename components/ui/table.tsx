@@ -2,7 +2,7 @@ import * as React from "react";
 import { cn } from "@/lib/utils";
 
 export function TableContainer({ className, children }: { className?: string; children: React.ReactNode }) {
-  return <div className={cn("relative w-full overflow-x-auto", className)}>{children}</div>;
+  return <div className={cn("relative w-full max-h-[65vh] overflow-auto", className)}>{children}</div>;
 }
 
 export function Table({ className, ...props }: React.TableHTMLAttributes<HTMLTableElement>) {

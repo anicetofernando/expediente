@@ -11,6 +11,7 @@ import { templateSnapshot } from "@/lib/document-configuration";
 import { resolveSecretaryId } from "@/lib/routing";
 import { saveFile } from "@/lib/file-storage";
 import { resolveMandatoryStampSignatureByUnitId, signatureMetadataJson, stampMetadataJson } from "@/lib/stamping";
+import { generateProtocolNumber } from "@/lib/numbering";
 import type { DocumentTemplate, FreePosition } from "@/types";
 
 export const runtime = "nodejs";
@@ -125,9 +126,7 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
         if (protocol.startsWith("RASCUNHO-")) {
           const unit = await client.query<{acronym:string}>("SELECT acronym FROM organizational_units WHERE id=$1 AND active=true", [input.unidadeOrigem]);
           if (!unit.rows[0]) throw new Error("Unidade de origem invalida.");
-          const year = new Date().getFullYear();
-          const sequence = await client.query<{value:number}>(`INSERT INTO number_sequences(unit_id,year,next_value) VALUES($1,$2,2) ON CONFLICT(unit_id,year) DO UPDATE SET next_value=number_sequences.next_value+1 RETURNING next_value-1 value`, [input.unidadeOrigem,year]);
-          protocol = `CFM/${unit.rows[0].acronym}/${year}/${String(sequence.rows[0].value).padStart(4,"0")}`;
+          protocol = await generateProtocolNumber(client, input.unidadeOrigem, unit.rows[0].acronym, new Date().getFullYear());
         }
       }
       await client.query(`UPDATE expedients SET protocol=$2,subject=$3,document_type=$4,status=$5,priority=$6,confidentiality=$7,sender_name=$8,origin_unit_id=$9,recipient_unit_id=$10,responsible_user_id=$11,origin_secretary_id=COALESCE(origin_secretary_id,$15),due_date=$12,next_step=$13,submitted_at=$14 WHERE id=$1`,

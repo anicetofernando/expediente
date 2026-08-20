@@ -32,7 +32,7 @@ import { StepDocument } from "@/components/expedients/wizard/step-document";
 import { StepAttachments } from "@/components/expedients/wizard/step-attachments";
 import { StepStampSignature } from "@/components/expedients/wizard/step-stamp-signature";
 import { StepReview } from "@/components/expedients/wizard/step-review";
-import { isValidFutureOrTodayDate } from "@/lib/date-only";
+import { addDaysToDate, isValidFutureOrTodayDate, todayInMaputo } from "@/lib/date-only";
 
 const STEPS = [
   { label: "Dados", description: "Dados gerais" },
@@ -94,6 +94,7 @@ function NovoExpedienteContent() {
   const {
     priorities,
     confidentialities,
+    documentTypes,
   } = useCatalogs();
   const [step, setStep] = React.useState(0);
   const [state, setState] = React.useState<WizardState>(initialWizardState);
@@ -102,6 +103,9 @@ function NovoExpedienteContent() {
   const [saving, setSaving] = React.useState(false);
   const [draftLoading, setDraftLoading] = React.useState(Boolean(draftId));
   const [effectiveDraftId, setEffectiveDraftId] = React.useState(draftId);
+  const [defaultDeadlineDays, setDefaultDeadlineDays] = React.useState<number | null>(null);
+  const [workflows, setWorkflows] = React.useState<Array<{ id: string; estado: string; etapas: { prazoDias: number }[] }>>([]);
+  const autoFilledPrazo = React.useRef<string | null>(null);
   const defaultsApplied = React.useRef(false);
 
   const createInitialState = React.useCallback((): WizardState => {
@@ -135,6 +139,42 @@ function NovoExpedienteContent() {
       };
     });
   }, [createInitialState]);
+
+  React.useEffect(() => {
+    if (draftId) return;
+    let cancelled = false;
+    void Promise.all([
+      fetch("/api/admin/settings/general-configuration", { cache: "no-store" }).then((r) => (r.ok ? r.json() : { value: null })),
+      fetch("/api/admin/settings/workflows-ui", { cache: "no-store" }).then((r) => (r.ok ? r.json() : { value: null })),
+    ]).then(([configResult, workflowsResult]) => {
+      if (cancelled) return;
+      const days = Number((configResult.value as { defaultDeadlineDays?: string } | null)?.defaultDeadlineDays);
+      if (Number.isFinite(days) && days > 0) setDefaultDeadlineDays(days);
+      if (Array.isArray(workflowsResult.value)) setWorkflows(workflowsResult.value);
+    }).catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [draftId]);
+
+  /**
+   * Sugere um prazo: o SLA do fluxo publicado associado ao tipo de documento
+   * escolhido (soma dos prazos das suas etapas), com o prazo por omissão das
+   * Configurações Gerais como recurso. Só actualiza o campo enquanto o
+   * utilizador não o tiver editado manualmente (a partir daí, deixa de mexer).
+   */
+  React.useEffect(() => {
+    if (draftId) return;
+    const documentType = documentTypes.find((item) => item.id === state.tipo);
+    const workflow = documentType?.workflowId ? workflows.find((item) => item.id === documentType.workflowId && item.estado === "publicado") : undefined;
+    const workflowDays = workflow?.etapas.reduce((total, step) => total + (Number(step.prazoDias) || 0), 0);
+    const days = workflowDays && workflowDays > 0 ? workflowDays : defaultDeadlineDays;
+    if (!days) return;
+    const suggested = addDaysToDate(todayInMaputo(), days);
+    setState((current) => {
+      if (current.prazo && current.prazo !== autoFilledPrazo.current) return current;
+      autoFilledPrazo.current = suggested;
+      return { ...current, prazo: suggested };
+    });
+  }, [draftId, state.tipo, documentTypes, workflows, defaultDeadlineDays]);
 
   React.useEffect(() => {
     if (!draftId) return;

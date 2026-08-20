@@ -50,6 +50,7 @@ export interface PdfDocumentInput {
   stamp: PdfStampMetadata | null;
   signature: PdfSignatureMetadata | null;
   template: Partial<DocumentTemplate> | null;
+  institutionName?: string;
 }
 
 function escapeHtml(value: string) {
@@ -117,7 +118,7 @@ async function decorations(input: PdfDocumentInput) {
 }
 
 async function printableHtml(input: PdfDocumentInput, body: string) {
-  const headerText = escapeHtml(input.template?.cabecalho ?? "CFM — Portos e Caminhos de Ferro de Moçambique").replace(/\r?\n/g, "<br>");
+  const headerText = escapeHtml(input.template?.cabecalho ?? input.institutionName ?? "CFM — Portos e Caminhos de Ferro de Moçambique").replace(/\r?\n/g, "<br>");
   const footerText = escapeHtml(input.template?.rodape ?? "Correspondência institucional").replace(/\r?\n/g, "<br>");
   const logo = input.template?.logotipo?.startsWith("data:image/") ? input.template.logotipo : "";
   const headerLogo = logo && input.template?.logotipoPosicao === "cabecalho" ? `<img class="brand-logo header-logo" src="${logo}" alt="Logótipo">` : "";
@@ -258,7 +259,7 @@ async function bodyFromInput(input: PdfDocumentInput) {
 export async function createDocumentPdf(input: PdfDocumentInput) {
   const key = createHash("sha256")
     .update(input.contentHtml ?? input.sourceFile ?? "")
-    .update(JSON.stringify({ protocol: input.protocol, stamp: input.stamp, signature: input.signature, template: input.template }))
+    .update(JSON.stringify({ protocol: input.protocol, stamp: input.stamp, signature: input.signature, template: input.template, institutionName: input.institutionName }))
     .digest("hex");
   const cached = outputCache.get(key);
   if (cached) return cached;

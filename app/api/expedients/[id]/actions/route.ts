@@ -6,6 +6,7 @@ import type { FreePosition } from "@/types";
 import { dateValueInMaputo, isValidFutureOrTodayDate } from "@/lib/date-only";
 import { configuredDocumentTypes, requiresDirectorEscalation, resolveSecretaryId, secretaryOwnedUnitIds } from "@/lib/routing";
 import { rememberStampSignaturePositions, resolveMandatoryStampSignature, signatureMetadataJson, stampMetadataJson } from "@/lib/stamping";
+import { generateProtocolNumber } from "@/lib/numbering";
 
 const PROFILE_ACTIONS: Record<string, Set<string>> = {
   remetente: new Set(["submeter","resposta","confirmar","arquivar"]),
@@ -67,9 +68,7 @@ export async function POST(request:NextRequest,{params}:{params:{id:string}}){
         if(protocol.startsWith("RASCUNHO-")){
           const unit=await client.query<{acronym:string}>("SELECT acronym FROM organizational_units WHERE id=$1 AND active=true",[exp.origin_unit_id]);
           if(!unit.rows[0]) throw new Error("Unidade de origem invalida.");
-          const year=new Date().getFullYear();
-          const sequence=await client.query<{value:number}>(`INSERT INTO number_sequences(unit_id,year,next_value) VALUES($1,$2,2) ON CONFLICT(unit_id,year) DO UPDATE SET next_value=number_sequences.next_value+1 RETURNING next_value-1 value`,[exp.origin_unit_id,year]);
-          protocol=`CFM/${unit.rows[0].acronym}/${year}/${String(sequence.rows[0].value).padStart(4,"0")}`;
+          protocol=await generateProtocolNumber(client,exp.origin_unit_id,unit.rows[0].acronym,new Date().getFullYear());
         }
       }
       if(action==="encaminhar"||action==="parecer"){

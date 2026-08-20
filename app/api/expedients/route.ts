@@ -10,6 +10,7 @@ import { templateSnapshot } from "@/lib/document-configuration";
 import { resolveSecretaryId } from "@/lib/routing";
 import { saveFile } from "@/lib/file-storage";
 import { resolveMandatoryStampSignatureByUnitId, signatureMetadataJson, stampMetadataJson } from "@/lib/stamping";
+import { generateProtocolNumber } from "@/lib/numbering";
 import type { FreePosition } from "@/types";
 
 export const runtime = "nodejs";
@@ -82,12 +83,7 @@ export async function POST(request: NextRequest) {
       const year = new Date().getFullYear();
       let protocol = `RASCUNHO-${expedientId.slice(0,8).toUpperCase()}`;
       if (!input.rascunho) {
-        const sequence = await client.query<{ value: number }>(`
-          INSERT INTO number_sequences(unit_id,year,next_value) VALUES($1,$2,2)
-          ON CONFLICT(unit_id,year) DO UPDATE SET next_value=number_sequences.next_value+1
-          RETURNING next_value-1 value
-        `, [input.unidadeOrigem,year]);
-        protocol = `CFM/${unit.rows[0].acronym}/${year}/${String(sequence.rows[0].value).padStart(4,"0")}`;
+        protocol = await generateProtocolNumber(client, input.unidadeOrigem, unit.rows[0].acronym, year);
       }
       const status = input.rascunho ? "rascunho" : "submetido";
       const responsible = input.rascunho ? session.user.id : await resolveSecretaryId(client, input.destinatario);
