@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { FieldHint, Label, Input } from "@/components/ui/input";
+import { Label, Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useCatalogs } from "@/lib/catalogs";
 import { useSession } from "@/lib/session";
@@ -67,7 +67,6 @@ export function StepBasicInfo({ state, update }: StepProps) {
       <div className="lg:col-span-4">
         <Label>Unidade de origem</Label>
         <Input value={unitName} disabled readOnly />
-        <FieldHint>O departamento/unidade a que pertence — não é possível criar em nome de outra unidade.</FieldHint>
       </div>
 
       <div className="lg:col-span-4">
@@ -104,7 +103,6 @@ export function StepBasicInfo({ state, update }: StepProps) {
             ))}
           </SelectContent>
         </Select>
-        <FieldHint>Deixe em branco para encaminhar directamente ao departamento.</FieldHint>
       </div>
 
       <div className="sm:col-span-2 lg:col-span-12">
