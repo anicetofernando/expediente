@@ -3,7 +3,7 @@
 import * as React from "react";
 import { Move } from "lucide-react";
 import type { FreePosition } from "@/types";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogBody, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 
 const STAMP_DEFAULT: FreePosition = { x: 10, y: 76, width: 28, height: 14 };
@@ -92,15 +92,15 @@ export function StampPositionPicker({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent size="lg">
+      <DialogContent size="xl" className="max-h-[94vh]">
         <DialogHeader>
           <DialogTitle>Posicionar carimbo e assinatura</DialogTitle>
           <DialogDescription>Arraste cada elemento para o local exacto onde deve ficar no documento.</DialogDescription>
         </DialogHeader>
-        <div className="px-6 pb-2">
+        <DialogBody className="flex flex-1 flex-col items-center">
           <div
             ref={containerRef}
-            className="relative mx-auto w-full max-w-[520px] overflow-hidden border border-graphite-300 bg-white shadow-sm"
+            className="relative mx-auto w-full max-w-[680px] overflow-hidden border border-graphite-300 bg-white shadow-sm"
             style={{ aspectRatio: "210 / 297" }}
           >
             <iframe
@@ -115,10 +115,10 @@ export function StampPositionPicker({
               <PositionableOverlay containerRef={containerRef} item={signature} position={signaturePosition} onChange={setSignaturePosition} accent="#177047" />
             )}
           </div>
-          <p className="mt-2 text-center text-2xs text-graphite-500">
+          <p className="mt-2 shrink-0 text-center text-2xs text-graphite-500">
             Mostra a última página do documento. A posição de cada elemento fica guardada para as próximas vezes.
           </p>
-        </div>
+        </DialogBody>
         <DialogFooter>
           <Button variant="secondary" onClick={() => onOpenChange(false)}>Cancelar</Button>
           <Button onClick={() => onConfirm({ posicaoCarimbo: stamp ? stampPosition : undefined, posicaoAssinatura: signature ? signaturePosition : undefined })}>
