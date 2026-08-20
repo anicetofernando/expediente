@@ -437,7 +437,7 @@ export default function AssinaturasPage() {
             </DialogDescription>
           </DialogHeader>
           <DialogBody className="grid gap-4 sm:grid-cols-2">
-            <div>
+            <div className="sm:col-span-2">
               <Label htmlFor="signature-owner" required>
                 Utilizador proprietário
               </Label>
@@ -451,6 +451,17 @@ export default function AssinaturasPage() {
                 </SelectContent>
               </Select>
             </div>
+            <div className="sm:col-span-2">
+              <Label htmlFor="signature-unit" required>
+                Unidade
+              </Label>
+              <Input
+                id="signature-unit"
+                value={unidade}
+                readOnly
+                placeholder="Unidade orgânica"
+              />
+            </div>
             <div>
               <Label htmlFor="signature-job" required>
                 Cargo
@@ -460,17 +471,6 @@ export default function AssinaturasPage() {
                 value={cargo}
                 readOnly
                 placeholder="Cargo institucional"
-              />
-            </div>
-            <div>
-              <Label htmlFor="signature-unit" required>
-                Unidade
-              </Label>
-              <Input
-                id="signature-unit"
-                value={unidade}
-                readOnly
-                placeholder="Unidade orgânica"
               />
             </div>
             <div>

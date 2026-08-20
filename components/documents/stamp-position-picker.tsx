@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button";
 
 const STAMP_DEFAULT: FreePosition = { x: 10, y: 76, width: 28, height: 14 };
 const SIGNATURE_DEFAULT: FreePosition = { x: 62, y: 78, width: 28, height: 14 };
+const MIN_SIZE = 6;
+const MAX_SIZE = 60;
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
@@ -32,15 +34,37 @@ function PositionableOverlay({
   onChange: (position: FreePosition) => void;
   accent: string;
 }) {
-  const dragging = React.useRef(false);
+  const mode = React.useRef<"move" | "resize" | null>(null);
 
   function updateFromPointer(clientX: number, clientY: number) {
     const el = containerRef.current;
     if (!el) return;
     const rect = el.getBoundingClientRect();
-    const px = clamp(((clientX - rect.left) / rect.width) * 100, 0, 100 - position.width);
-    const py = clamp(((clientY - rect.top) / rect.height) * 100, 0, 100 - position.height);
-    onChange({ ...position, x: px, y: py });
+    if (mode.current === "resize") {
+      const width = clamp(((clientX - rect.left) / rect.width) * 100 - position.x, MIN_SIZE, Math.min(MAX_SIZE, 100 - position.x));
+      const height = clamp(((clientY - rect.top) / rect.height) * 100 - position.y, MIN_SIZE, Math.min(MAX_SIZE, 100 - position.y));
+      onChange({ ...position, width, height });
+    } else {
+      const px = clamp(((clientX - rect.left) / rect.width) * 100, 0, 100 - position.width);
+      const py = clamp(((clientY - rect.top) / rect.height) * 100, 0, 100 - position.height);
+      onChange({ ...position, x: px, y: py });
+    }
+  }
+
+  function startMove(event: React.PointerEvent) {
+    mode.current = "move";
+    (event.target as HTMLElement).setPointerCapture(event.pointerId);
+    updateFromPointer(event.clientX, event.clientY);
+  }
+
+  function startResize(event: React.PointerEvent) {
+    event.stopPropagation();
+    mode.current = "resize";
+    (event.target as HTMLElement).setPointerCapture(event.pointerId);
+  }
+
+  function stop() {
+    mode.current = null;
   }
 
   return (
@@ -48,9 +72,9 @@ function PositionableOverlay({
       role="button"
       tabIndex={0}
       aria-label={`Arrastar para posicionar ${item.label}`}
-      onPointerDown={(event) => { dragging.current = true; (event.target as HTMLElement).setPointerCapture(event.pointerId); updateFromPointer(event.clientX, event.clientY); }}
-      onPointerMove={(event) => { if (dragging.current) updateFromPointer(event.clientX, event.clientY); }}
-      onPointerUp={() => { dragging.current = false; }}
+      onPointerDown={startMove}
+      onPointerMove={(event) => { if (mode.current) updateFromPointer(event.clientX, event.clientY); }}
+      onPointerUp={stop}
       className="absolute cursor-move touch-none select-none border-2 border-dashed bg-white/70"
       style={{ left: `${position.x}%`, top: `${position.y}%`, width: `${position.width}%`, height: `${position.height}%`, borderColor: accent }}
     >
@@ -60,6 +84,16 @@ function PositionableOverlay({
         <Move className="size-3" />
       </span>
       <span className="pointer-events-none absolute -bottom-4 left-0 whitespace-nowrap text-2xs font-medium" style={{ color: accent }}>{item.label}</span>
+      <div
+        role="button"
+        tabIndex={0}
+        aria-label={`Redimensionar ${item.label}`}
+        onPointerDown={startResize}
+        onPointerMove={(event) => { if (mode.current === "resize") { event.stopPropagation(); updateFromPointer(event.clientX, event.clientY); } }}
+        onPointerUp={(event) => { event.stopPropagation(); stop(); }}
+        className="absolute -bottom-1.5 -right-1.5 flex size-4 cursor-nwse-resize touch-none items-center justify-center rounded-full border-2 border-white"
+        style={{ backgroundColor: accent }}
+      />
     </div>
   );
 }
@@ -95,7 +129,7 @@ export function StampPositionPicker({
       <DialogContent size="xl" className="max-h-[94vh]">
         <DialogHeader>
           <DialogTitle>Posicionar carimbo e assinatura</DialogTitle>
-          <DialogDescription>Arraste cada elemento para o local exacto onde deve ficar no documento.</DialogDescription>
+          <DialogDescription>Arraste cada elemento para o local exacto onde deve ficar, e use o ponto no canto inferior direito para ajustar o tamanho.</DialogDescription>
         </DialogHeader>
         <DialogBody className="flex flex-1 flex-col items-center">
           <div
