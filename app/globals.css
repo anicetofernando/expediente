@@ -24,6 +24,41 @@
     text-rendering: optimizeLegibility;
   }
 
+  a[href],
+  button,
+  [role="button"],
+  input,
+  select,
+  textarea {
+    touch-action: manipulation;
+  }
+
+  a[href],
+  button,
+  [role="button"] {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  a[href] {
+    cursor: pointer;
+  }
+
+  @media (pointer: coarse) {
+    button,
+    a[href],
+    [role="button"] {
+      min-height: 40px;
+    }
+
+    button:active,
+    a[href]:active,
+    [role="button"]:active {
+      opacity: 0.82;
+    }
+  }
+
   ::selection {
     @apply bg-cfm-200 text-cfm-950;
   }
@@ -90,4 +125,27 @@
   .scrollbar-none::-webkit-scrollbar {
     display: none;
   }
+}
+
+.navigation-progress {
+  pointer-events: none;
+  position: fixed;
+  inset: 0 0 auto 0;
+  z-index: 9999;
+  height: 3px;
+  opacity: 0;
+  transform: scaleX(0);
+  transform-origin: left center;
+  background: theme("colors.cfm.300");
+}
+
+body[data-navigation-pending="true"] .navigation-progress {
+  opacity: 1;
+  animation: navigation-progress 1.2s ease-out infinite;
+}
+
+@keyframes navigation-progress {
+  0% { transform: scaleX(0); }
+  55% { transform: scaleX(0.72); }
+  100% { transform: scaleX(0.94); }
 }

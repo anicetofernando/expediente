@@ -8,9 +8,13 @@ import {
   Plus,
   Route,
   Stamp,
+  Trash2,
 } from "lucide-react";
-import { workflows } from "@/data/workflows";
+import type { Workflow as WorkflowType } from "@/types";
+import { workflows as initialWorkflows } from "@/data/workflows";
+import { useDatabaseSetting } from "@/lib/use-database-setting";
 import {
+  CatalogsProvider,
   useCatalogs,
   type DocumentTypeConfig,
 } from "@/lib/catalogs";
@@ -46,11 +50,13 @@ import {
   TableHeaderCell,
   TableRow,
 } from "@/components/ui/table";
+import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { useToast } from "@/hooks/use-toast";
 
-export default function TiposDocumentoPage() {
+function TiposDocumentoContent() {
   const { toast } = useToast();
   const { documentTypes, setDocumentTypes } = useCatalogs();
+  const [workflows] = useDatabaseSetting<WorkflowType[]>("workflows-ui", initialWorkflows);
   const [search, setSearch] = React.useState("");
   const [status, setStatus] = React.useState("todos");
   const [open, setOpen] = React.useState(false);
@@ -59,6 +65,8 @@ export default function TiposDocumentoPage() {
   const [workflowId, setWorkflowId] = React.useState("");
   const [requiresStamp, setRequiresStamp] = React.useState(false);
   const [requiresSignature, setRequiresSignature] = React.useState(false);
+  const [requiresDirectorApproval, setRequiresDirectorApproval] = React.useState(false);
+  const [deleteTarget, setDeleteTarget] = React.useState<DocumentTypeConfig | null>(null);
 
   const workflowById = React.useCallback(
     (id: string) => workflows.find((workflow) => workflow.id === id),
@@ -101,6 +109,7 @@ export default function TiposDocumentoPage() {
     setWorkflowId("");
     setRequiresStamp(false);
     setRequiresSignature(false);
+    setRequiresDirectorApproval(false);
   }
 
   function createType() {
@@ -110,6 +119,7 @@ export default function TiposDocumentoPage() {
       numeracaoPrefixo: prefix.trim().toUpperCase(),
       exigeCarimbo: requiresStamp,
       exigeAssinatura: requiresSignature,
+      exigeAprovacaoDirector: requiresDirectorApproval,
       workflowId,
       activo: true,
       ordem:
@@ -131,13 +141,24 @@ export default function TiposDocumentoPage() {
     patch: Partial<
       Pick<
         DocumentTypeConfig,
-        "activo" | "exigeCarimbo" | "exigeAssinatura"
+        "activo" | "exigeCarimbo" | "exigeAssinatura" | "exigeAprovacaoDirector"
       >
     >
   ) {
     setDocumentTypes((current) =>
       current.map((item) => (item.id === id ? { ...item, ...patch } : item))
     );
+  }
+
+  function handleDeleteConfirmed() {
+    if (!deleteTarget) return;
+    setDocumentTypes((current) => current.filter((item) => item.id !== deleteTarget.id));
+    toast({
+      title: "Tipo de documento eliminado",
+      description: `${deleteTarget.nome} foi removido do catálogo.`,
+      variant: "success",
+    });
+    setDeleteTarget(null);
   }
 
   return (
@@ -219,7 +240,9 @@ export default function TiposDocumentoPage() {
                     <TableHeaderCell>Fluxo predefinido</TableHeaderCell>
                     <TableHeaderCell>Carimbo</TableHeaderCell>
                     <TableHeaderCell>Assinatura</TableHeaderCell>
+                    <TableHeaderCell>Aprovação do director</TableHeaderCell>
                     <TableHeaderCell>Disponível</TableHeaderCell>
+                    <TableHeaderCell className="w-10" />
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -290,6 +313,24 @@ export default function TiposDocumentoPage() {
                         <TableCell>
                           <div className="flex items-center gap-2">
                             <Switch
+                              checked={item.exigeAprovacaoDirector}
+                              onCheckedChange={(checked) =>
+                                updateItem(item.id, {
+                                  exigeAprovacaoDirector: checked,
+                                })
+                              }
+                              aria-label={`Exigir aprovação do director em ${item.nome}`}
+                            />
+                            <span className="text-xs text-graphite-500">
+                              {item.exigeAprovacaoDirector
+                                ? "O chefe do serviço deve reencaminhar"
+                                : "O chefe do serviço pode aprovar"}
+                            </span>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <Switch
                               checked={item.activo}
                               onCheckedChange={(checked) => {
                                 updateItem(item.id, { activo: checked });
@@ -311,6 +352,17 @@ export default function TiposDocumentoPage() {
                               {item.activo ? "Activo" : "Inactivo"}
                             </Badge>
                           </div>
+                        </TableCell>
+                        <TableCell>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="size-8"
+                            aria-label={`Eliminar ${item.nome}`}
+                            onClick={() => setDeleteTarget(item)}
+                          >
+                            <Trash2 className="size-3.5" />
+                          </Button>
                         </TableCell>
                       </TableRow>
                     );
@@ -413,6 +465,16 @@ export default function TiposDocumentoPage() {
                   onCheckedChange={setRequiresSignature}
                 />
               </label>
+              <label className="flex items-center justify-between rounded-lg border border-graphite-200 p-3 sm:col-span-2">
+                <span className="flex items-center gap-2 text-[13px] font-medium text-graphite-700">
+                  <FileCheck2 className="size-4 text-graphite-400" />
+                  Exigir aprovação do director (o chefe do serviço não pode aprovar directamente)
+                </span>
+                <Switch
+                  checked={requiresDirectorApproval}
+                  onCheckedChange={setRequiresDirectorApproval}
+                />
+              </label>
             </div>
           </DialogBody>
           <DialogFooter>
@@ -433,6 +495,19 @@ export default function TiposDocumentoPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => !open && setDeleteTarget(null)}
+        title="Eliminar tipo de documento"
+        description={deleteTarget ? `${deleteTarget.nome} será removido permanentemente do catálogo. Expedientes já criados com este tipo mantêm o registo.` : undefined}
+        confirmLabel="Eliminar"
+        destructive
+        onConfirm={handleDeleteConfirmed}
+      />
     </div>
   );
+}
+
+export default function TiposDocumentoPage() {
+  return <CatalogsProvider><TiposDocumentoContent /></CatalogsProvider>;
 }

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { ChevronRight, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { usePathname } from "next/navigation";
-import { useSession } from "@/lib/session";
+import { useSession, useSidebar } from "@/lib/session";
 import { cn } from "@/lib/utils";
 import {
   getActiveGroup,
@@ -16,7 +16,8 @@ import {
 
 export function Sidebar() {
   const pathname = usePathname() ?? "";
-  const { sidebarCollapsed, toggleSidebar, perfilNavegacao } = useSession();
+  const { perfilNavegacao } = useSession();
+  const { sidebarCollapsed, toggleSidebar } = useSidebar();
   const visibleGroups = getVisibleNavigation(perfilNavegacao);
   const activeHref = getActiveHref(pathname, visibleGroups);
   const currentGroup = getActiveGroup(pathname, visibleGroups, activeHref) ?? visibleGroups[0];

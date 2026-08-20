@@ -68,7 +68,7 @@ export const workflows: Workflow[] = [
 ];
 
 export const documentTemplates: DocumentTemplate[] = [
-  { id: "tpl-oficio", nome: "Ofício Institucional", categoria: "Correspondência", descricao: "Modelo padrão para ofícios internos e externos com cabeçalho institucional.", camposCount: 8, utilizacoes: 412, actualizadoEm: "2026-06-01", estado: "activo" },
+  { id: "tpl-oficio", nome: "Ofício Institucional", categoria: "Correspondência", descricao: "Modelo padrão para ofícios internos e externos com cabeçalho institucional.", camposCount: 8, utilizacoes: 412, actualizadoEm: "2026-06-01", estado: "activo", cabecalho: "CFM — Portos e Caminhos de Ferro de Moçambique", rodape: "Correspondência institucional · Maputo, Moçambique", logotipoPosicao: "sem-logotipo", conteudoInicial: "Exmo. Senhor,\n\nAssunto: \n\nCom os melhores cumprimentos." },
   { id: "tpl-memorando", nome: "Memorando Interno", categoria: "Correspondência", descricao: "Comunicação interna entre unidades orgânicas.", camposCount: 6, utilizacoes: 289, actualizadoEm: "2026-05-20", estado: "activo" },
   { id: "tpl-requisicao", nome: "Requisição de Material", categoria: "Aprovisionamento", descricao: "Formulário de requisição de bens e materiais com lista de itens.", camposCount: 10, utilizacoes: 201, actualizadoEm: "2026-06-15", estado: "activo" },
   { id: "tpl-parecer", nome: "Parecer Técnico", categoria: "Técnico", descricao: "Modelo estruturado para emissão de pareceres técnicos e jurídicos.", camposCount: 7, utilizacoes: 134, actualizadoEm: "2026-04-18", estado: "activo" },
@@ -78,12 +78,12 @@ export const documentTemplates: DocumentTemplate[] = [
 ];
 
 export const documentTypes = [
-  { id: "dt-oficio", nome: "Ofício", numeracaoPrefixo: "OF", exigeCarimbo: true, exigeAssinatura: true, workflowId: "wf-oficio-padrao" },
-  { id: "dt-memorando", nome: "Memorando", numeracaoPrefixo: "MEM", exigeCarimbo: false, exigeAssinatura: true, workflowId: "wf-oficio-padrao" },
-  { id: "dt-requisicao", nome: "Requisição", numeracaoPrefixo: "REQ", exigeCarimbo: true, exigeAssinatura: false, workflowId: "wf-requisicao-material" },
-  { id: "dt-informacao", nome: "Informação técnica", numeracaoPrefixo: "INF", exigeCarimbo: false, exigeAssinatura: false, workflowId: "wf-relatorio-incidente" },
-  { id: "dt-parecer", nome: "Parecer", numeracaoPrefixo: "PAR", exigeCarimbo: true, exigeAssinatura: true, workflowId: "wf-parecer-juridico" },
-  { id: "dt-relatorio", nome: "Relatório", numeracaoPrefixo: "REL", exigeCarimbo: true, exigeAssinatura: true, workflowId: "wf-oficio-padrao" },
-  { id: "dt-despacho", nome: "Despacho", numeracaoPrefixo: "DESP", exigeCarimbo: true, exigeAssinatura: true, workflowId: "wf-oficio-padrao" },
-  { id: "dt-nota-servico", nome: "Nota de serviço", numeracaoPrefixo: "NS", exigeCarimbo: false, exigeAssinatura: false, workflowId: "wf-oficio-padrao" },
+  { id: "dt-oficio", nome: "Ofício", numeracaoPrefixo: "OF", exigeCarimbo: true, exigeAssinatura: true, exigeAprovacaoDirector: false, workflowId: "wf-oficio-padrao" },
+  { id: "dt-memorando", nome: "Memorando", numeracaoPrefixo: "MEM", exigeCarimbo: false, exigeAssinatura: true, exigeAprovacaoDirector: false, workflowId: "wf-oficio-padrao" },
+  { id: "dt-requisicao", nome: "Requisição", numeracaoPrefixo: "REQ", exigeCarimbo: true, exigeAssinatura: false, exigeAprovacaoDirector: false, workflowId: "wf-requisicao-material" },
+  { id: "dt-informacao", nome: "Informação técnica", numeracaoPrefixo: "INF", exigeCarimbo: false, exigeAssinatura: false, exigeAprovacaoDirector: false, workflowId: "wf-relatorio-incidente" },
+  { id: "dt-parecer", nome: "Parecer", numeracaoPrefixo: "PAR", exigeCarimbo: true, exigeAssinatura: true, exigeAprovacaoDirector: false, workflowId: "wf-parecer-juridico" },
+  { id: "dt-relatorio", nome: "Relatório", numeracaoPrefixo: "REL", exigeCarimbo: true, exigeAssinatura: true, exigeAprovacaoDirector: true, workflowId: "wf-oficio-padrao" },
+  { id: "dt-despacho", nome: "Despacho", numeracaoPrefixo: "DESP", exigeCarimbo: true, exigeAssinatura: true, exigeAprovacaoDirector: true, workflowId: "wf-oficio-padrao" },
+  { id: "dt-nota-servico", nome: "Nota de serviço", numeracaoPrefixo: "NS", exigeCarimbo: false, exigeAssinatura: false, exigeAprovacaoDirector: false, workflowId: "wf-oficio-padrao" },
 ];

@@ -1,7 +1,14 @@
 import { NextRequest,NextResponse } from "next/server";
 import { audit,getCurrentSession } from "@/lib/auth";
 import { hashPassword } from "@/lib/password";
-import { transaction } from "@/lib/db";
+import { query, transaction } from "@/lib/db";
+
+export async function GET(){
+  const session=await getCurrentSession();
+  if(!session||session.perfilNavegacao!=="administracao") return NextResponse.json({error:"Acesso negado."},{status:403});
+  const result=await query<{id:string;full_name:string;email:string;job_title:string;unit_id:string;unit_name:string;status:"activo"|"inactivo"|"suspenso";profile_ids:string[]}>(`SELECT u.id,u.full_name,u.email,u.job_title,u.unit_id,ou.name unit_name,u.status,COALESCE(array_agg(up.profile_id) FILTER (WHERE up.profile_id IS NOT NULL),'{}') profile_ids FROM users u JOIN organizational_units ou ON ou.id=u.unit_id LEFT JOIN user_profiles up ON up.user_id=u.id GROUP BY u.id,ou.name ORDER BY u.full_name`);
+  return NextResponse.json({users:result.rows.map((user)=>({id:user.id,nome:user.full_name,email:user.email,cargo:user.job_title,unidadeId:user.unit_id,unidade:user.unit_name,perfilIds:user.profile_ids,estado:user.status}))});
+}
 
 export async function POST(request:NextRequest){
   const session=await getCurrentSession();if(!session||session.perfilNavegacao!=="administracao")return NextResponse.json({error:"Acesso negado."},{status:403});

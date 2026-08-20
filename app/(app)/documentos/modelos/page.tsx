@@ -3,9 +3,9 @@
 import { PageHeader } from "@/components/shared/page-header";
 import { TemplateGallery } from "@/components/documents/template-gallery";
 import { NewTemplateButton } from "@/components/documents/new-template-button";
-import { useCatalogs } from "@/lib/catalogs";
+import { CatalogsProvider, useCatalogs } from "@/lib/catalogs";
 
-export default function ModelosPage() {
+function ModelosContent() {
   const { documentTemplates } = useCatalogs();
   return (
     <div>
@@ -20,4 +20,8 @@ export default function ModelosPage() {
       </div>
     </div>
   );
+}
+
+export default function ModelosPage() {
+  return <CatalogsProvider><ModelosContent /></CatalogsProvider>;
 }

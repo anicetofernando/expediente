@@ -55,6 +55,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { formatDate } from "@/lib/utils";
 import { useDatabaseSetting } from "@/lib/use-database-setting";
+import { CatalogsProvider, useCatalogs } from "@/lib/catalogs";
 
 const STATUS_LABEL: Record<WorkflowType["estado"], string> = {
   publicado: "Publicado",
@@ -71,8 +72,9 @@ const STATUS_VARIANT: Record<
   arquivado: "neutral",
 };
 
-export default function FluxosPage() {
+function FluxosContent() {
   const { toast } = useToast();
+  const { documentTypes: catalogDocumentTypes } = useCatalogs();
   const [items, setItems] = useDatabaseSetting<WorkflowType[]>("workflows-ui", initialWorkflows);
   const [search, setSearch] = React.useState("");
   const [status, setStatus] = React.useState("todos");
@@ -86,6 +88,10 @@ export default function FluxosPage() {
   const documentTypes = React.useMemo(
     () => Array.from(new Set(items.map((item) => item.tipoDocumento))),
     [items]
+  );
+  const availableDocumentTypes = React.useMemo(
+    () => catalogDocumentTypes.filter((item) => item.activo).sort((a, b) => a.ordem - b.ordem),
+    [catalogDocumentTypes]
   );
 
   const filtered = React.useMemo(() => {
@@ -522,9 +528,9 @@ export default function FluxosPage() {
                   <SelectValue placeholder="Seleccione um tipo" />
                 </SelectTrigger>
                 <SelectContent>
-                  {documentTypes.map((item) => (
-                    <SelectItem key={item} value={item}>
-                      {item}
+                  {availableDocumentTypes.map((item) => (
+                    <SelectItem key={item.id} value={item.nome}>
+                      {item.nome}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -557,4 +563,8 @@ export default function FluxosPage() {
       </Dialog>
     </div>
   );
+}
+
+export default function FluxosPage() {
+  return <CatalogsProvider><FluxosContent /></CatalogsProvider>;
 }

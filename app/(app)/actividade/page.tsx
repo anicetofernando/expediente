@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { SearchInput } from "@/components/ui/input";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Pagination } from "@/components/ui/pagination";
-import { useCatalogs } from "@/lib/catalogs";
+import { CatalogsProvider, useCatalogs } from "@/lib/catalogs";
 import type { TimelineEvent } from "@/types";
 
 const EVENT_TYPE_LABEL: Record<string, string> = {
@@ -19,7 +19,7 @@ const EVENT_TYPE_LABEL: Record<string, string> = {
   confirmacao: "Confirmação", arquivo: "Arquivo", comentario: "Comentário",
 };
 
-export default function ActividadePage() {
+function ActividadeContent() {
   const { organizationalUnits } = useCatalogs();
   const [search, setSearch] = React.useState("");
   const [unit, setUnit] = React.useState("todas");
@@ -100,6 +100,10 @@ export default function ActividadePage() {
       </div>
     </div>
   );
+}
+
+export default function ActividadePage() {
+  return <CatalogsProvider><ActividadeContent /></CatalogsProvider>;
 }
 
 function TimelineRow({ event, protocolo }: { event: TimelineEvent; protocolo: string }) {

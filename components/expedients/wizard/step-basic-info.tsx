@@ -1,12 +1,15 @@
 "use client";
 
-import { Label, Input } from "@/components/ui/input";
+import * as React from "react";
+import { FieldHint, Label, Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useCatalogs } from "@/lib/catalogs";
 import type { Priority, Confidentiality } from "@/types";
 import type { StepProps } from "./types";
+import { todayInMaputo } from "@/lib/date-only";
 
 export function StepBasicInfo({ state, update }: StepProps) {
+  const today = todayInMaputo();
   const {
     documentTypes,
     organizationalUnits,
@@ -26,6 +29,25 @@ export function StepBasicInfo({ state, update }: StepProps) {
     .filter((item) => item.active)
     .sort((a, b) => a.order - b.order);
 
+  const departamentos = availableUnits.filter((unit) => unit.tipo === "direccao");
+  const [departamentoId, setDepartamentoId] = React.useState("");
+  const servicos = availableUnits.filter((unit) => unit.parentId === departamentoId);
+
+  React.useEffect(() => {
+    if (!state.destinatario) return;
+    const destino = availableUnits.find((unit) => unit.id === state.destinatario);
+    if (!destino) return;
+    const parent = destino.tipo === "direccao" ? destino.id : destino.parentId ?? "";
+    setDepartamentoId((current) => (current === parent ? current : parent));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.destinatario, organizationalUnits]);
+
+  function selectDepartamento(id: string) {
+    setDepartamentoId(id);
+    const children = availableUnits.filter((unit) => unit.parentId === id);
+    update({ destinatario: children.length > 0 ? "" : id });
+  }
+
   return (
     <div className="grid grid-cols-1 gap-x-5 gap-y-4 sm:grid-cols-2 lg:grid-cols-12">
       <div className="lg:col-span-4">
@@ -42,7 +64,7 @@ export function StepBasicInfo({ state, update }: StepProps) {
 
       <div className="lg:col-span-4">
         <Label required>Unidade de origem</Label>
-        <Select value={state.unidadeOrigem} onValueChange={(v) => update({ unidadeOrigem: v })}>
+        <Select value={state.unidadeOrigem} onValueChange={(v) => update({ unidadeOrigem: v, carimboId: "" })}>
           <SelectTrigger><SelectValue placeholder="Seleccione a unidade" /></SelectTrigger>
           <SelectContent>
             {availableUnits.map((unit) => (
@@ -54,24 +76,39 @@ export function StepBasicInfo({ state, update }: StepProps) {
 
       <div className="lg:col-span-4">
         <Label required>Prazo de resposta</Label>
-        <Input type="date" value={state.prazo} onChange={(e) => update({ prazo: e.target.value })} />
+        <Input type="date" min={today} value={state.prazo} onChange={(e) => update({ prazo: e.target.value })} />
+        {state.prazo && state.prazo < today && (
+          <p className="mt-1 text-xs text-crimson-600">A data de entrega não pode ser anterior a hoje.</p>
+        )}
       </div>
 
       <div className="lg:col-span-6">
-        <Label required>Remetente</Label>
-        <Input placeholder="Nome do remetente" value={state.remetente} onChange={(e) => update({ remetente: e.target.value })} />
-      </div>
-
-      <div className="lg:col-span-6">
-        <Label required>Destinatário</Label>
-        <Select value={state.destinatario} onValueChange={(v) => update({ destinatario: v })}>
-          <SelectTrigger><SelectValue placeholder="Seleccione o destinatário" /></SelectTrigger>
+        <Label required>Departamento destinatário</Label>
+        <Select value={departamentoId} onValueChange={selectDepartamento}>
+          <SelectTrigger><SelectValue placeholder="Seleccione o departamento" /></SelectTrigger>
           <SelectContent>
-            {availableUnits.map((unit) => (
+            {departamentos.map((unit) => (
               <SelectItem key={unit.id} value={unit.id}>{unit.sigla} — {unit.nome}</SelectItem>
             ))}
           </SelectContent>
         </Select>
+      </div>
+
+      <div className="lg:col-span-6">
+        <Label required={servicos.length > 0}>Serviço</Label>
+        <Select
+          value={servicos.some((unit) => unit.id === state.destinatario) ? state.destinatario : ""}
+          onValueChange={(v) => update({ destinatario: v })}
+          disabled={!departamentoId || servicos.length === 0}
+        >
+          <SelectTrigger><SelectValue placeholder={servicos.length === 0 ? "Vai directo ao departamento" : "Seleccione o serviço"} /></SelectTrigger>
+          <SelectContent>
+            {servicos.map((unit) => (
+              <SelectItem key={unit.id} value={unit.id}>{unit.sigla} — {unit.nome}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <FieldHint>Deixe em branco para encaminhar directamente ao departamento.</FieldHint>
       </div>
 
       <div className="sm:col-span-2 lg:col-span-12">

@@ -12,7 +12,7 @@ import {
   Power,
 } from "lucide-react";
 import type { DocumentTemplate } from "@/types";
-import { useCatalogs } from "@/lib/catalogs";
+import { CatalogsProvider, useCatalogs } from "@/lib/catalogs";
 import { PageHeader } from "@/components/shared/page-header";
 import { StatCard } from "@/components/shared/stat-card";
 import { Badge } from "@/components/ui/badge";
@@ -62,7 +62,7 @@ const CATEGORIES = [
   "Relatório",
 ];
 
-export default function ModelosDocumentoPage() {
+function ModelosDocumentoContent() {
   const { toast } = useToast();
   const {
     documentTemplates: templates,
@@ -72,10 +72,16 @@ export default function ModelosDocumentoPage() {
   const [category, setCategory] = React.useState("todas");
   const [status, setStatus] = React.useState("todos");
   const [createOpen, setCreateOpen] = React.useState(false);
+  const [editing, setEditing] = React.useState<DocumentTemplate | null>(null);
   const [preview, setPreview] = React.useState<DocumentTemplate | null>(null);
   const [name, setName] = React.useState("");
   const [newCategory, setNewCategory] = React.useState("");
   const [description, setDescription] = React.useState("");
+  const [header, setHeader] = React.useState("CFM — Portos e Caminhos de Ferro de Moçambique");
+  const [footer, setFooter] = React.useState("Correspondência institucional");
+  const [logo, setLogo] = React.useState("");
+  const [logoPosition, setLogoPosition] = React.useState<DocumentTemplate["logotipoPosicao"]>("sem-logotipo");
+  const [initialContent, setInitialContent] = React.useState("");
 
   const categories = React.useMemo(
     () => Array.from(new Set([...CATEGORIES, ...templates.map((item) => item.categoria)])),
@@ -110,28 +116,76 @@ export default function ModelosDocumentoPage() {
     : 0;
 
   function resetForm() {
+    setEditing(null);
     setName("");
     setNewCategory("");
     setDescription("");
+    setHeader("CFM — Portos e Caminhos de Ferro de Moçambique");
+    setFooter("Correspondência institucional");
+    setLogo("");
+    setLogoPosition("sem-logotipo");
+    setInitialContent("");
+  }
+
+  function openTemplateEditor(template?: DocumentTemplate) {
+    if (!template) {
+      resetForm();
+    } else {
+      setEditing(template);
+      setName(template.nome);
+      setNewCategory(template.categoria);
+      setDescription(template.descricao);
+      setHeader(template.cabecalho ?? "CFM — Portos e Caminhos de Ferro de Moçambique");
+      setFooter(template.rodape ?? "Correspondência institucional");
+      setLogo(template.logotipo ?? "");
+      setLogoPosition(template.logotipoPosicao ?? "sem-logotipo");
+      setInitialContent(template.conteudoInicial ?? "");
+    }
+    setCreateOpen(true);
+  }
+
+  function readLogo(file?: File) {
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      toast({ title: "Formato inválido", description: "Seleccione uma imagem PNG, JPG ou SVG.", variant: "destructive" });
+      return;
+    }
+    if (file.size > 1024 * 1024) {
+      toast({ title: "Imagem demasiado grande", description: "O logótipo não pode exceder 1 MB.", variant: "destructive" });
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      setLogo(typeof reader.result === "string" ? reader.result : "");
+      setLogoPosition((current) => current === "sem-logotipo" ? "cabecalho" : current);
+    };
+    reader.readAsDataURL(file);
   }
 
   function createTemplate() {
     const template: DocumentTemplate = {
-      id: `tpl-${Date.now()}`,
+      id: editing?.id ?? `tpl-${Date.now()}`,
       nome: name.trim(),
       categoria: newCategory,
       descricao: description.trim() || "Modelo institucional configurável.",
-      camposCount: 0,
-      utilizacoes: 0,
+      camposCount: editing?.camposCount ?? 0,
+      utilizacoes: editing?.utilizacoes ?? 0,
       actualizadoEm: new Date().toISOString().slice(0, 10),
-      estado: "activo",
+      estado: editing?.estado ?? "activo",
+      cabecalho: header.trim(),
+      rodape: footer.trim(),
+      logotipo: logo || undefined,
+      logotipoPosicao: logo ? logoPosition : "sem-logotipo",
+      conteudoInicial: initialContent.trim() || undefined,
     };
-    setTemplates((current) => [template, ...current]);
+    setTemplates((current) => editing
+      ? current.map((item) => item.id === editing.id ? template : item)
+      : [template, ...current]);
     setCreateOpen(false);
     resetForm();
     toast({
-      title: "Modelo criado",
-      description: `“${template.nome}” foi adicionado ao catálogo administrativo.`,
+      title: editing ? "Modelo actualizado" : "Modelo criado",
+      description: `O layout de “${template.nome}” foi guardado.`,
       variant: "success",
     });
   }
@@ -182,7 +236,7 @@ export default function ModelosDocumentoPage() {
           { label: "Modelos de documento" },
         ]}
         actions={
-          <Button onClick={() => setCreateOpen(true)}>
+          <Button onClick={() => openTemplateEditor()}>
             <Plus className="size-4" />
             Novo modelo
           </Button>
@@ -327,15 +381,10 @@ export default function ModelosDocumentoPage() {
                               Pré-visualizar
                             </DropdownMenuItem>
                             <DropdownMenuItem
-                              onClick={() =>
-                                toast({
-                                  title: "Editor de campos",
-                                  description: `${template.camposCount} campos disponíveis para configuração em “${template.nome}”.`,
-                                })
-                              }
+                              onClick={() => openTemplateEditor(template)}
                             >
                               <Pencil className="size-3.5" />
-                              Configurar campos
+                              Personalizar modelo
                             </DropdownMenuItem>
                             <DropdownMenuItem
                               onClick={() => duplicateTemplate(template)}
@@ -380,16 +429,15 @@ export default function ModelosDocumentoPage() {
           if (!value) resetForm();
         }}
       >
-        <DialogContent size="md">
+        <DialogContent size="lg">
           <DialogHeader>
-            <DialogTitle>Novo modelo de documento</DialogTitle>
+            <DialogTitle>{editing ? "Personalizar modelo" : "Novo modelo de documento"}</DialogTitle>
             <DialogDescription>
-              Defina os dados base. A configuração de campos pode ser concluída
-              depois.
+              Configure os dados, o cabeçalho, o rodapé e a posição do logótipo.
             </DialogDescription>
           </DialogHeader>
-          <DialogBody className="space-y-4">
-            <div>
+          <DialogBody className="grid gap-4 sm:grid-cols-2">
+            <div className="sm:col-span-2">
               <Label htmlFor="template-name" required>
                 Nome
               </Label>
@@ -425,6 +473,35 @@ export default function ModelosDocumentoPage() {
                 rows={3}
               />
             </div>
+            <div>
+              <Label htmlFor="template-header">Texto do cabeçalho</Label>
+              <Textarea id="template-header" value={header} onChange={(event) => setHeader(event.target.value)} rows={3} placeholder="Nome da instituição ou unidade" />
+            </div>
+            <div>
+              <Label htmlFor="template-footer">Texto do rodapé</Label>
+              <Textarea id="template-footer" value={footer} onChange={(event) => setFooter(event.target.value)} rows={3} placeholder="Endereço, contactos ou referência institucional" />
+            </div>
+            <div>
+              <Label htmlFor="template-logo">Logótipo</Label>
+              <Input id="template-logo" type="file" accept="image/png,image/jpeg,image/svg+xml" onChange={(event) => readLogo(event.target.files?.[0])} />
+              <p className="mt-1 text-2xs text-graphite-500">PNG, JPG ou SVG, até 1 MB.</p>
+              {logo && <Button type="button" variant="ghost" size="sm" className="mt-1" onClick={() => { setLogo(""); setLogoPosition("sem-logotipo"); }}>Remover logótipo</Button>}
+            </div>
+            <div>
+              <Label>Posição do logótipo</Label>
+              <Select value={logoPosition ?? "sem-logotipo"} onValueChange={(value) => setLogoPosition(value as DocumentTemplate["logotipoPosicao"])} disabled={!logo}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="cabecalho">Cabeçalho</SelectItem>
+                  <SelectItem value="rodape">Rodapé</SelectItem>
+                  <SelectItem value="sem-logotipo">Não mostrar</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="sm:col-span-2">
+              <Label htmlFor="template-initial-content">Texto inicial da carta (opcional)</Label>
+              <Textarea id="template-initial-content" value={initialContent} onChange={(event) => setInitialContent(event.target.value)} rows={4} placeholder="Exmo. Senhor,&#10;&#10;Assunto: ..." />
+            </div>
           </DialogBody>
           <DialogFooter>
             <Button variant="secondary" onClick={() => setCreateOpen(false)}>
@@ -434,7 +511,7 @@ export default function ModelosDocumentoPage() {
               disabled={!name.trim() || !newCategory}
               onClick={createTemplate}
             >
-              Criar modelo
+              {editing ? "Guardar alterações" : "Criar modelo"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -451,8 +528,9 @@ export default function ModelosDocumentoPage() {
           <DialogBody>
             <div className="flex justify-center rounded-lg bg-graphite-50 p-6">
               <div className="flex aspect-[210/297] w-full max-w-xs flex-col border border-graphite-300 bg-white p-8 shadow-card">
-                <p className="text-center text-[10px] font-semibold uppercase tracking-wide text-navy-800">
-                  CFM — Portos e Caminhos de Ferro de Moçambique
+                {preview?.logotipo && preview.logotipoPosicao === "cabecalho" && <img src={preview.logotipo} alt="Logótipo do modelo" className="mx-auto mb-2 max-h-12 max-w-28 object-contain" />}
+                <p className="whitespace-pre-line text-center text-[10px] font-semibold uppercase tracking-wide text-navy-800">
+                  {preview?.cabecalho ?? "CFM — Portos e Caminhos de Ferro de Moçambique"}
                 </p>
                 <div className="my-5 h-px bg-graphite-200" />
                 <p className="text-center text-sm font-semibold text-graphite-900">
@@ -467,6 +545,10 @@ export default function ModelosDocumentoPage() {
                     />
                   ))}
                 </div>
+                <div className="mt-auto border-t border-graphite-200 pt-3 text-center text-[8px] text-graphite-500">
+                  {preview?.logotipo && preview.logotipoPosicao === "rodape" && <img src={preview.logotipo} alt="Logótipo do modelo" className="mx-auto mb-1 max-h-9 max-w-24 object-contain" />}
+                  <p className="whitespace-pre-line">{preview?.rodape ?? "Correspondência institucional"}</p>
+                </div>
               </div>
             </div>
           </DialogBody>
@@ -474,4 +556,8 @@ export default function ModelosDocumentoPage() {
       </Dialog>
     </div>
   );
+}
+
+export default function ModelosDocumentoPage() {
+  return <CatalogsProvider><ModelosDocumentoContent /></CatalogsProvider>;
 }

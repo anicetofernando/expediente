@@ -1,6 +1,6 @@
 import type { Priority, Confidentiality } from "@/types";
 
-export type DocumentOrigin = "sistema" | "importado" | "digitalizado" | "apenas-processo";
+export type DocumentOrigin = "sistema" | "importado" | "apenas-processo";
 export type StampChoice = "nao" | "automatico" | "escolher";
 
 export interface WizardAttachment {

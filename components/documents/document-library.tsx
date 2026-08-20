@@ -11,6 +11,8 @@ import { ConfidentialityBadge } from "@/components/ui/badge";
 import { Pagination } from "@/components/ui/pagination";
 import { EmptyState } from "@/components/ui/empty-state";
 import { SimpleTooltip } from "@/components/ui/tooltip";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { DocumentViewer } from "@/components/documents/document-viewer";
 import { formatDate } from "@/lib/utils";
 
 export type FlatDocument = ExpedientDocument & { protocolo: string; expedienteId: string; assunto: string };
@@ -35,6 +37,7 @@ export function DocumentLibrary({ documents }: { documents: FlatDocument[] }) {
   const [formatoFilter, setFormatoFilter] = React.useState("todos");
   const [page, setPage] = React.useState(1);
   const [pageSize, setPageSize] = React.useState(20);
+  const [preview, setPreview] = React.useState<FlatDocument | null>(null);
 
   const filtered = React.useMemo(() => {
     let list = documents;
@@ -107,12 +110,16 @@ export function DocumentLibrary({ documents }: { documents: FlatDocument[] }) {
               {paged.map((doc) => (
                 <TableRow key={`${doc.expedienteId}-${doc.id}`}>
                   <TableCell className="max-w-[260px]">
-                    <div className="flex items-center gap-2.5">
+                    <button
+                      type="button"
+                      onClick={() => setPreview(doc)}
+                      className="flex w-full items-center gap-2.5 text-left"
+                    >
                       <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-graphite-100 text-graphite-500">
                         <FileText className="size-3.5" />
                       </span>
-                      <span className="truncate font-medium text-graphite-800" title={doc.nome}>{doc.nome}</span>
-                    </div>
+                      <span className="truncate font-medium text-navy-700 hover:underline" title={doc.nome}>{doc.nome}</span>
+                    </button>
                   </TableCell>
                   <TableCell className="whitespace-nowrap">
                     <Link href={`/expedientes/${doc.expedienteId}`} className="font-medium text-navy-700 hover:underline">
@@ -151,6 +158,16 @@ export function DocumentLibrary({ documents }: { documents: FlatDocument[] }) {
       {filtered.length > 0 && (
         <Pagination page={pageSafe} pageSize={pageSize} total={filtered.length} onPageChange={setPage} onPageSizeChange={(s) => { setPageSize(s); setPage(1); }} />
       )}
+
+      <Dialog open={Boolean(preview)} onOpenChange={(open) => !open && setPreview(null)}>
+        <DialogContent size="xl" className="h-[94vh] w-[96vw] max-w-[1600px] p-0">
+          {preview && (
+            <div className="flex h-full min-h-0 flex-col pt-8">
+              <DocumentViewer document={preview} />
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

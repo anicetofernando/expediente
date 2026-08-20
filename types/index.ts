@@ -103,6 +103,22 @@ export interface ExpedientDocument {
   conteudoHtml?: string;
   mimeType?: string;
   downloadUrl?: string;
+  pdfUrl?: string;
+  carimboDetalhes?: {
+    id?: string;
+    nome: string;
+    posicao?: string;
+    aplicadoPor?: string;
+    aplicadoEm?: string;
+  };
+  assinaturaSolicitada?: boolean;
+  assinaturaDetalhes?: {
+    id?: string;
+    proprietario: string;
+    cargo?: string;
+    aplicadoPor?: string;
+    aplicadoEm?: string;
+  };
 }
 
 export interface Delegation {
@@ -173,7 +189,16 @@ export interface Expedient {
   timeline: TimelineEvent[];
   comentarios: Comment[];
   atrasado: boolean;
+  precisaEscalarDirector: boolean;
+  tipoLabel: string;
   processosRelacionados?: { protocolo: string; assunto: string }[];
+}
+
+export interface FreePosition {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
 }
 
 export interface Stamp {
@@ -192,10 +217,14 @@ export interface Stamp {
   utilizacoes: number;
   ultimaUtilizacao?: string;
   cor: string;
+  imagemUrl?: string;
+  posicaoLivre?: FreePosition;
 }
 
 export interface Signature {
   id: string;
+  utilizadorId?: string;
+  email?: string;
   proprietario: string;
   cargo: string;
   unidade: string;
@@ -206,6 +235,8 @@ export interface Signature {
   estado: "activa" | "revogada" | "expirada";
   utilizacoes: number;
   ultimaUtilizacao?: string;
+  imagemUrl?: string;
+  posicaoLivre?: FreePosition;
 }
 
 export interface WorkflowStep {
@@ -241,6 +272,11 @@ export interface DocumentTemplate {
   utilizacoes: number;
   actualizadoEm: string;
   estado: "activo" | "inactivo";
+  cabecalho?: string;
+  rodape?: string;
+  logotipo?: string;
+  logotipoPosicao?: "cabecalho" | "rodape" | "sem-logotipo";
+  conteudoInicial?: string;
 }
 
 export interface Notification {

@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Eye, FileSearch2, Lock, X } from "lucide-react";
 import type { LivroEntry } from "@/types";
 import { SearchInput } from "@/components/ui/input";
@@ -35,6 +36,7 @@ const MESES = [
 ];
 
 export function LivroBoard({ rows }: { rows: LivroRow[] }) {
+  const router = useRouter();
   const { toast } = useToast();
   const [search, setSearch] = React.useState("");
   const [month, setMonth] = React.useState("todos");
@@ -73,6 +75,18 @@ export function LivroBoard({ rows }: { rows: LivroRow[] }) {
     setMonth("todos");
     setYear("todos");
     setPage(1);
+  }
+
+  function openRow(event: React.MouseEvent<HTMLTableRowElement>, href: string) {
+    if ((event.target as HTMLElement).closest("a, button, input, select, textarea, [role='button']")) return;
+    router.push(href);
+  }
+
+  function openRowWithKeyboard(event: React.KeyboardEvent<HTMLTableRowElement>, href: string) {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    if ((event.target as HTMLElement).closest("a, button, input, select, textarea, [role='button']")) return;
+    event.preventDefault();
+    router.push(href);
   }
 
   async function handleFechoMensal() {
@@ -198,9 +212,21 @@ export function LivroBoard({ rows }: { rows: LivroRow[] }) {
               <TableBody>
                 {paged.map((row) => {
                   const status = STATUS_META[row.estado];
+                  const href = `/expedientes/${row.expedientId}`;
 
                   return (
-                    <TableRow key={row.numeroSequencial}>
+                    <TableRow
+                      key={row.numeroSequencial}
+                      clickable
+                      tabIndex={0}
+                      role="link"
+                      aria-label={`Abrir expediente ${row.protocolo}: ${row.assunto}`}
+                      className="bg-white hover:bg-graphite-50"
+                      onClick={(event) => openRow(event, href)}
+                      onKeyDown={(event) => openRowWithKeyboard(event, href)}
+                      onPointerEnter={() => router.prefetch(href)}
+                      onPointerDown={() => router.prefetch(href)}
+                    >
                       <TableCell className="tabular-nums text-graphite-500">{row.numeroSequencial}</TableCell>
                       <TableCell className="whitespace-nowrap font-semibold text-cfm-900">{row.protocolo}</TableCell>
                       <TableCell className="whitespace-nowrap tabular-nums text-graphite-500">{formatDate(row.data)}</TableCell>
@@ -223,8 +249,8 @@ export function LivroBoard({ rows }: { rows: LivroRow[] }) {
                       <TableCell>
                         <div className="flex items-center justify-center">
                           <Link
-                            href={`/expedientes/${row.expedientId}`}
-                            prefetch
+                            href={href}
+                            prefetch={false}
                             aria-label={`Abrir expediente ${row.protocolo}`}
                             title="Abrir expediente"
                             className="inline-flex size-7 items-center justify-center rounded-sm text-graphite-600 hover:bg-graphite-100 hover:text-cfm-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cfm-500"

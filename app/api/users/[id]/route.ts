@@ -1,6 +1,6 @@
 import { NextRequest,NextResponse } from "next/server";
 import { audit,getCurrentSession } from "@/lib/auth";
-import { transaction } from "@/lib/db";
+import { query,transaction } from "@/lib/db";
 
 export async function PATCH(request:NextRequest,{params}:{params:{id:string}}){
   const session=await getCurrentSession();if(!session||session.perfilNavegacao!=="administracao")return NextResponse.json({error:"Acesso negado."},{status:403});
@@ -9,4 +9,20 @@ export async function PATCH(request:NextRequest,{params}:{params:{id:string}}){
     if(input.perfilId){await client.query("UPDATE user_profiles SET is_primary=false WHERE user_id=$1",[params.id]);await client.query("INSERT INTO user_profiles(user_id,profile_id,is_primary) VALUES($1,$2,true) ON CONFLICT(user_id,profile_id) DO UPDATE SET is_primary=true",[params.id,input.perfilId]);}
   });await audit({userId:session.user.id,action:"Utilizador actualizado",entityType:"Utilizador",entityId:params.id,details:{status:input.estado}});return NextResponse.json({ok:true});}
   catch(error){return NextResponse.json({error:error instanceof Error?error.message:"Nao foi possivel actualizar."},{status:400});}
+}
+
+export async function DELETE(request:NextRequest,{params}:{params:{id:string}}){
+  const session=await getCurrentSession();if(!session||session.perfilNavegacao!=="administracao")return NextResponse.json({error:"Acesso negado."},{status:403});
+  if(params.id===session.user.id) return NextResponse.json({error:"Nao pode eliminar a sua propria conta."},{status:400});
+  try{
+    const existing=await query<{full_name:string}>("SELECT full_name FROM users WHERE id=$1",[params.id]);
+    if(!existing.rows[0]) return NextResponse.json({error:"Utilizador nao encontrado."},{status:404});
+    await query("DELETE FROM users WHERE id=$1",[params.id]);
+    await audit({userId:session.user.id,action:"Utilizador eliminado",entityType:"Utilizador",entityId:params.id,details:{nome:existing.rows[0].full_name}});
+    return NextResponse.json({ok:true});
+  }catch(error){
+    const message=error instanceof Error?error.message:"";
+    if(message.includes("violates foreign key constraint")) return NextResponse.json({error:"Este utilizador tem expedientes, documentos ou registos de auditoria associados e nao pode ser eliminado. Desactive a conta em vez de a eliminar."},{status:409});
+    return NextResponse.json({error:message||"Nao foi possivel eliminar."},{status:400});
+  }
 }

@@ -11,8 +11,10 @@ import {
   Save,
   Send,
   Smartphone,
+  Trash2,
 } from "lucide-react";
 import { PageHeader } from "@/components/shared/page-header";
+import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { StatCard } from "@/components/shared/stat-card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -170,6 +172,7 @@ export default function NotificacoesPage() {
   const { toast } = useToast();
   const [storedConfiguration, setStoredConfiguration, configurationReady] = useDatabaseSetting<NotificationConfiguration>("notification-rules", DEFAULT_CONFIGURATION);
   const [rules, setRules] = React.useState(INITIAL_RULES);
+  const [deleteTarget, setDeleteTarget] = React.useState<NotificationRule | null>(null);
   const [search, setSearch] = React.useState("");
   const [category, setCategory] = React.useState("todas");
   const [changed, setChanged] = React.useState(false);
@@ -264,6 +267,14 @@ export default function NotificacoesPage() {
       )
     );
     setChanged(true);
+  }
+
+  function deleteRuleConfirmed() {
+    if (!deleteTarget) return;
+    setRules((current) => current.filter((item) => item.id !== deleteTarget.id));
+    setChanged(true);
+    toast({ title: "Regra eliminada", description: `«${deleteTarget.nome}» foi removida. Não se esqueça de guardar as alterações.`, variant: "success" });
+    setDeleteTarget(null);
   }
 
   function saveChanges() {
@@ -509,17 +520,22 @@ export default function NotificacoesPage() {
                         />
                       </TableCell>
                       <TableCell>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={async () => {
-                            const response = await fetch("/api/admin/notifications/test", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ rule }) });
-                            toast(response.ok ? { title: "Notificação de teste criada", description: `A regra “${rule.nome}” gerou uma notificação real no sistema.`, variant: "success" } : { title: "Falha no teste", variant: "destructive" });
-                          }}
-                        >
-                          <Send className="size-3.5" />
-                          Testar
-                        </Button>
+                        <div className="flex items-center gap-1">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={async () => {
+                              const response = await fetch("/api/admin/notifications/test", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ rule }) });
+                              toast(response.ok ? { title: "Notificação de teste criada", description: `A regra “${rule.nome}” gerou uma notificação real no sistema.`, variant: "success" } : { title: "Falha no teste", variant: "destructive" });
+                            }}
+                          >
+                            <Send className="size-3.5" />
+                            Testar
+                          </Button>
+                          <Button variant="ghost" size="icon-sm" aria-label={`Eliminar ${rule.nome}`} onClick={() => setDeleteTarget(rule)}>
+                            <Trash2 className="size-3.5" />
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -671,6 +687,15 @@ export default function NotificacoesPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => !open && setDeleteTarget(null)}
+        title="Eliminar regra de notificação"
+        description={deleteTarget ? `«${deleteTarget.nome}» será removida permanentemente.` : undefined}
+        confirmLabel="Eliminar"
+        destructive
+        onConfirm={deleteRuleConfirmed}
+      />
     </div>
   );
 }

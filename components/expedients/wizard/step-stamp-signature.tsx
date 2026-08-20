@@ -15,8 +15,10 @@ const STAMP_CHOICE_ICONS: Record<StampChoice, typeof Ban> = {
 };
 
 export function StepStampSignature({ state, update }: StepProps) {
-  const { stamps, stampChoices } = useCatalogs();
-  const selected = stamps.find((s) => s.id === state.carimboId);
+  const { stamps, stampChoices, organizationalUnits } = useCatalogs();
+  const originUnit = organizationalUnits.find((unit) => unit.id === state.unidadeOrigem)?.nome;
+  const availableStamps = stamps.filter((stamp) => stamp.activo && (stamp.unidade === "Global" || stamp.unidade === originUnit));
+  const selected = availableStamps.find((s) => s.id === state.carimboId);
   const options = [...stampChoices]
     .filter((item) => item.active && item.code in STAMP_CHOICE_ICONS)
     .sort((a, b) => a.order - b.order);
@@ -24,7 +26,7 @@ export function StepStampSignature({ state, update }: StepProps) {
   return (
     <div className="space-y-5">
       <fieldset>
-        <legend className="mb-2 text-xs font-semibold text-graphite-700">Carimbo</legend>
+        <legend className="mb-2 text-xs font-semibold text-graphite-700">Carimbo da unidade/departamento</legend>
         <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
           {options.map((option) => {
             const value = option.code as StampChoice;
@@ -63,11 +65,12 @@ export function StepStampSignature({ state, update }: StepProps) {
               <Select value={state.carimboId} onValueChange={(v) => update({ carimboId: v })}>
                 <SelectTrigger><SelectValue placeholder="Seleccione um carimbo" /></SelectTrigger>
                 <SelectContent>
-                  {stamps.filter((s) => s.activo).map((s) => (
-                    <SelectItem key={s.id} value={s.id}>{s.nome}</SelectItem>
+                  {availableStamps.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>{s.nome} — {s.unidade}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+              {availableStamps.length === 0 && <p className="mt-1.5 text-xs text-amber-700">Esta unidade ainda não possui um carimbo activo configurado.</p>}
               <label className="mt-3 flex items-center gap-2 border border-graphite-200 bg-graphite-50 px-3 py-2 text-[13px] text-graphite-700">
                 <MapPin className="size-3.5 text-graphite-500" />
                 <Switch checked={state.posicaoPredefinida} onCheckedChange={(v) => update({ posicaoPredefinida: v })} />

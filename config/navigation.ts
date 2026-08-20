@@ -113,11 +113,6 @@ export const navigation: NavGroupConfig[] = [
         icon: "PackageCheck",
       },
       { label: "Consultar expedientes", href: "/expedientes", icon: "Files" },
-      {
-        label: "Digitalizações",
-        href: "/documentos/digitalizacoes",
-        icon: "ScanLine",
-      },
       { label: "Arquivo", href: "/documentos/arquivo", icon: "Archive" },
     ],
   },

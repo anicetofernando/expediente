@@ -35,6 +35,9 @@ export function UserFormDialog({
   onSubmit: (values: UserFormValues) => void;
 }) {
   const [values, setValues] = React.useState<UserFormValues>(emptyValues());
+  const departamentos = units.filter((u) => u.tipo === "direccao");
+  const [departamentoId, setDepartamentoId] = React.useState("");
+  const servicos = units.filter((u) => u.parentId === departamentoId);
 
   React.useEffect(() => {
     if (!open) return;
@@ -48,13 +51,22 @@ export function UserFormDialog({
         estado: initialUser.estado,
         telefone: initialUser.telefone ?? "",
       });
+      const current = units.find((u) => u.id === initialUser.unidadeId);
+      setDepartamentoId(current ? (current.tipo === "direccao" ? current.id : current.parentId ?? "") : "");
     } else {
       setValues(emptyValues());
+      setDepartamentoId("");
     }
-  }, [open, mode, initialUser]);
+  }, [open, mode, initialUser, units]);
 
   function emptyValues(): UserFormValues {
     return { nome: "", email: "", cargo: "", unidadeId: "", perfilId: "", estado: "activo", telefone: "" };
+  }
+
+  function selectDepartamento(id: string) {
+    setDepartamentoId(id);
+    const children = units.filter((u) => u.parentId === id);
+    setValues((s) => ({ ...s, unidadeId: children.length > 0 ? "" : id }));
   }
 
   const isValid = values.nome.trim() && values.email.trim() && values.cargo.trim() && values.unidadeId && values.perfilId;
@@ -111,13 +123,30 @@ export function UserFormDialog({
                 />
               </div>
               <div>
-                <Label required>Unidade orgânica</Label>
-                <Select value={values.unidadeId} onValueChange={(v) => setValues((s) => ({ ...s, unidadeId: v }))}>
+                <Label required>Departamento</Label>
+                <Select value={departamentoId} onValueChange={selectDepartamento}>
                   <SelectTrigger>
-                    <SelectValue placeholder="Seleccionar unidade" />
+                    <SelectValue placeholder="Seleccionar departamento" />
                   </SelectTrigger>
                   <SelectContent>
-                    {units.map((u) => (
+                    {departamentos.map((u) => (
+                      <SelectItem key={u.id} value={u.id}>{u.sigla} — {u.nome}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label required={servicos.length > 0}>Serviço</Label>
+                <Select
+                  value={servicos.some((u) => u.id === values.unidadeId) ? values.unidadeId : ""}
+                  onValueChange={(v) => setValues((s) => ({ ...s, unidadeId: v }))}
+                  disabled={!departamentoId || servicos.length === 0}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={servicos.length === 0 ? "Fica no departamento" : "Seleccionar serviço"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {servicos.map((u) => (
                       <SelectItem key={u.id} value={u.id}>{u.sigla} — {u.nome}</SelectItem>
                     ))}
                   </SelectContent>

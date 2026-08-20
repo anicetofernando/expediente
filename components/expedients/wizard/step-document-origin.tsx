@@ -1,6 +1,6 @@
 "use client";
 
-import { FileEdit, Upload, ScanLine, FolderPlus, Check } from "lucide-react";
+import { FileEdit, Upload, FolderPlus, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useCatalogs } from "@/lib/catalogs";
 import type { StepProps } from "./types";
@@ -9,7 +9,6 @@ import type { DocumentOrigin } from "./types";
 const ORIGIN_ICONS: Record<DocumentOrigin, typeof FileEdit> = {
   sistema: FileEdit,
   importado: Upload,
-  digitalizado: ScanLine,
   "apenas-processo": FolderPlus,
 };
 
@@ -22,7 +21,7 @@ export function StepDocumentOrigin({ state, update }: StepProps) {
   return (
     <fieldset>
       <legend className="sr-only">Origem do documento principal</legend>
-      <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
         {options.map((option) => {
           const value = option.code as DocumentOrigin;
           const Icon = ORIGIN_ICONS[value];

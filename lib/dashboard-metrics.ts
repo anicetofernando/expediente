@@ -7,7 +7,7 @@ const PENDING: ExpedientStatus[] = ["submetido", "recebido", "protocolado", "enc
 export function coreStats(data: Expedient[]) {
   const recebidos = data.length;
   const pendentes = data.filter((e) => PENDING.includes(e.estado)).length;
-  const aguardandoAprovacao = data.filter((e) => e.estado === "em_analise" || e.estado === "aguardando_parecer").length;
+  const aguardandoAprovacao = data.filter((e) => e.estado === "encaminhado" || e.estado === "em_analise" || e.estado === "aguardando_parecer" || e.estado === "atrasado").length;
   const devolvidos = data.filter((e) => e.estado === "devolvido").length;
   const atrasados = data.filter((e) => e.atrasado || e.estado === "atrasado").length;
   const concluidos = data.filter((e) => CONCLUDED.includes(e.estado)).length;

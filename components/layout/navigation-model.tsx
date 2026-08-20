@@ -138,9 +138,16 @@ function matchesPrefix(pathname: string, prefix: string) {
 }
 
 function isExpedientConsultationPath(pathname: string) {
+  if (pathname === "/expedientes") return true;
+
+  const identifier = pathname.match(/^\/expedientes\/([^/]+)$/)?.[1];
+  if (!identifier) return false;
+
+  // Os registos persistidos usam UUID. Mantemos tambem o formato legado
+  // `exp-*` para que expedientes antigos continuem acessiveis.
   return (
-    pathname === "/expedientes" ||
-    /^\/expedientes\/exp-[^/]+$/.test(pathname)
+    /^exp-[^/]+$/i.test(identifier) ||
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(identifier)
   );
 }
 
@@ -156,7 +163,7 @@ export function isPathAllowedForProfile(pathname: string, perfil: PerfilNavegaca
       );
     case "secretaria":
       return (
-        ["/secretaria", "/livro", "/documentos/digitalizacoes", "/documentos/arquivo"].some(
+        ["/secretaria", "/livro", "/documentos/arquivo"].some(
           (prefix) => matchesPrefix(pathname, prefix)
         ) || isExpedientConsultationPath(pathname)
       );

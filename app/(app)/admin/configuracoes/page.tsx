@@ -38,6 +38,7 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { useDatabaseSetting } from "@/lib/use-database-setting";
+import { CatalogsProvider } from "@/lib/catalogs";
 
 interface SystemSettings {
   institutionName: string;
@@ -114,7 +115,7 @@ function SettingRow({
   );
 }
 
-export default function ConfiguracoesPage() {
+function ConfiguracoesContent() {
   const { toast } = useToast();
   const [storedSettings, setStoredSettings, settingsReady] = useDatabaseSetting<SystemSettings>("general-configuration", DEFAULT_SETTINGS);
   const [settings, setSettings] = React.useState<SystemSettings>(DEFAULT_SETTINGS);
@@ -695,4 +696,8 @@ export default function ConfiguracoesPage() {
       </div>
     </div>
   );
+}
+
+export default function ConfiguracoesPage() {
+  return <CatalogsProvider><ConfiguracoesContent /></CatalogsProvider>;
 }

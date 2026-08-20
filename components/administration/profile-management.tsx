@@ -1,12 +1,13 @@
 "use client";
 
 import * as React from "react";
-import { Plus, ShieldCheck, Copy, Pencil, Users2 } from "lucide-react";
+import { Plus, ShieldCheck, Copy, Pencil, Trash2, Users2 } from "lucide-react";
 import type { Profile, User } from "@/types";
 import { PageHeader } from "@/components/shared/page-header";
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { ProfileFormDialog, type ProfileFormValues } from "@/components/administration/profile-form-dialog";
 import { ProfilePermissionsDrawer } from "@/components/administration/profile-permissions-drawer";
@@ -39,6 +40,7 @@ export function ProfileManagement({ initialProfiles, users }: { initialProfiles:
   const [createOpen, setCreateOpen] = React.useState(false);
   const [editingProfile, setEditingProfile] = React.useState<Profile | null>(null);
   const [permissionsProfile, setPermissionsProfile] = React.useState<Profile | null>(null);
+  const [deleteTarget, setDeleteTarget] = React.useState<Profile | null>(null);
 
   async function saveProfile(values: ProfileFormValues) {
     const response = await fetch(editingProfile ? `/api/profiles/${editingProfile.id}` : "/api/profiles", {
@@ -74,6 +76,16 @@ export function ProfileManagement({ initialProfiles, users }: { initialProfiles:
   function handleEdit(p: Profile) {
     setEditingProfile(p);
     setCreateOpen(true);
+  }
+
+  async function handleDeleteConfirmed() {
+    if (!deleteTarget) return;
+    const response = await fetch(`/api/profiles/${deleteTarget.id}`, { method: "DELETE" });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) { toast({ title: "Eliminação falhou", description: result.error, variant: "destructive" }); setDeleteTarget(null); return; }
+    setProfiles((current) => current.filter((profile) => profile.id !== deleteTarget.id));
+    toast({ title: "Perfil eliminado", description: `${deleteTarget.nome} foi removido do sistema.`, variant: "success" });
+    setDeleteTarget(null);
   }
 
   async function savePermissions(profileId: string, permissions: string[]) {
@@ -129,6 +141,9 @@ export function ProfileManagement({ initialProfiles, users }: { initialProfiles:
                 <Button variant="secondary" size="sm" onClick={() => setPermissionsProfile(p)}>
                   <ShieldCheck className="size-3.5" /> Ver permissões
                 </Button>
+                <Button variant="ghost" size="sm" onClick={() => setDeleteTarget(p)}>
+                  <Trash2 className="size-3.5" /> Eliminar
+                </Button>
               </div>
             </CardFooter>
           </Card>
@@ -137,6 +152,15 @@ export function ProfileManagement({ initialProfiles, users }: { initialProfiles:
 
       <ProfileFormDialog open={createOpen} onOpenChange={(open) => { setCreateOpen(open); if (!open) setEditingProfile(null); }} onSubmit={saveProfile} initialProfile={editingProfile} />
       <ProfilePermissionsDrawer profile={permissionsProfile} users={users} onOpenChange={(open) => !open && setPermissionsProfile(null)} onSave={savePermissions} />
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => !open && setDeleteTarget(null)}
+        title="Eliminar perfil"
+        description={deleteTarget ? `${deleteTarget.nome} será removido permanentemente. Perfis essenciais do sistema (Remetente, Secretaria, Superior, Administração) não podem ser eliminados, e perfis com utilizadores atribuídos serão recusados.` : undefined}
+        confirmLabel="Eliminar"
+        destructive
+        onConfirm={handleDeleteConfirmed}
+      />
     </div>
   );
 }

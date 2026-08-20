@@ -1,5 +1,6 @@
 import "server-only";
 import { createHmac, timingSafeEqual } from "node:crypto";
+import { cache } from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import type { PerfilNavegacao } from "@/config/navigation";
@@ -77,7 +78,7 @@ export function clearAuthCookie() {
   cookies().set(COOKIE_NAME, "", { httpOnly: true, sameSite: "strict", path: "/", maxAge: 0 });
 }
 
-export async function getCurrentSession(): Promise<AuthSession | null> {
+async function readCurrentSession(): Promise<AuthSession | null> {
   const payload = decode(cookies().get(COOKIE_NAME)?.value);
   if (!payload) return null;
   const result = await query<SessionRow>(`
@@ -125,6 +126,10 @@ export async function getCurrentSession(): Promise<AuthSession | null> {
     unitName: row.unit_name,
   };
 }
+
+// O layout e a pagina podem validar a sessao durante o mesmo pedido RSC.
+// `cache` elimina a segunda consulta sem manter dados de utilizadores entre pedidos.
+export const getCurrentSession = cache(readCurrentSession);
 
 export async function requireSession() {
   const session = await getCurrentSession();

@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input, Textarea, Label, FieldHint } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { organizationalUnits } from "@/data/organization";
+import { useCatalogs } from "@/lib/catalogs";
 import { cn } from "@/lib/utils";
 
 const CATEGORIA_OPTIONS: { value: Stamp["categoria"]; label: string }[] = [
@@ -35,8 +35,6 @@ const TAMANHO_OPTIONS: { value: Stamp["tamanho"]; label: string }[] = [
   { value: "medio", label: "Médio" },
   { value: "grande", label: "Grande" },
 ];
-
-const UNIDADE_OPTIONS = ["Global", ...organizationalUnits.map((u) => u.nome)];
 
 const COR_POR_CATEGORIA: Record<Stamp["categoria"], string> = {
   institucional: "navy",
@@ -83,9 +81,11 @@ export function StampEditorDrawer({
   onSave: (stamp: Stamp) => void;
   onOpenUsage: (stamp: Stamp) => void;
 }) {
+  const { organizationalUnits } = useCatalogs();
+  const unidadeOptions = React.useMemo(() => ["Global", ...organizationalUnits.map((u) => u.nome)], [organizationalUnits]);
   const [nome, setNome] = React.useState(stamp?.nome ?? "");
   const [categoria, setCategoria] = React.useState<Stamp["categoria"]>(stamp?.categoria ?? "protocolo");
-  const [unidade, setUnidade] = React.useState(stamp?.unidade ?? UNIDADE_OPTIONS[0]);
+  const [unidade, setUnidade] = React.useState(stamp?.unidade ?? "Global");
   const [utilizadores, setUtilizadores] = React.useState(stamp?.utilizadoresAutorizados.join(", ") ?? "");
   const [etapas, setEtapas] = React.useState(stamp?.etapasPermitidas.join(", ") ?? "");
   const [tipos, setTipos] = React.useState(stamp?.tiposDocumento.join(", ") ?? "");
@@ -94,6 +94,22 @@ export function StampEditorDrawer({
   const [transparencia, setTransparencia] = React.useState(stamp?.transparencia ?? 10);
   const [validadeDias, setValidadeDias] = React.useState(stamp?.validadeDias != null ? String(stamp.validadeDias) : "");
   const [activo, setActivo] = React.useState(stamp?.activo ?? true);
+  const [imagemUrl, setImagemUrl] = React.useState(stamp?.imagemUrl ?? "");
+  const [uploading, setUploading] = React.useState(false);
+
+  async function handleImageUpload(file: File) {
+    setUploading(true);
+    try {
+      const form = new FormData();
+      form.set("file", file);
+      const response = await fetch("/api/admin/assets", { method: "POST", body: form });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error ?? "Falha ao carregar a imagem.");
+      setImagemUrl(result.url);
+    } finally {
+      setUploading(false);
+    }
+  }
 
   function handleSubmit() {
     const result: Stamp = {
@@ -112,6 +128,8 @@ export function StampEditorDrawer({
       utilizacoes: stamp?.utilizacoes ?? 0,
       ultimaUtilizacao: stamp?.ultimaUtilizacao,
       cor: stamp?.cor ?? COR_POR_CATEGORIA[categoria],
+      imagemUrl: imagemUrl || undefined,
+      posicaoLivre: stamp?.posicaoLivre,
     };
     onSave(result);
   }
@@ -122,7 +140,7 @@ export function StampEditorDrawer({
         <DrawerHeader>
           <DrawerTitle>{stamp ? "Editar carimbo" : "Criar carimbo"}</DrawerTitle>
           <DrawerDescription>
-            {stamp ? `A editar «${stamp.nome}»` : "Defina as propriedades do novo carimbo institucional."}
+            {stamp ? `A editar «${stamp.nome}»` : "Defina a unidade proprietária e as propriedades do novo carimbo institucional."}
           </DrawerDescription>
         </DrawerHeader>
         <DrawerBody>
@@ -131,6 +149,27 @@ export function StampEditorDrawer({
               <div>
                 <Label required>Nome do carimbo</Label>
                 <Input value={nome} onChange={(e) => setNome(e.target.value)} placeholder="Ex: Aprovado pela Direcção-Geral" />
+              </div>
+              <div>
+                <Label>Imagem do carimbo</Label>
+                <div className="flex items-center gap-3">
+                  {imagemUrl && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={imagemUrl} alt="Carimbo" className="h-14 w-auto rounded border border-graphite-200 bg-graphite-50 object-contain p-1" />
+                  )}
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg"
+                    disabled={uploading}
+                    onChange={(e) => { const file = e.target.files?.[0]; if (file) void handleImageUpload(file); }}
+                    className="text-[13px] text-graphite-600 file:mr-3 file:rounded-md file:border-0 file:bg-graphite-100 file:px-3 file:py-1.5 file:text-[13px] file:font-medium file:text-graphite-700 hover:file:bg-graphite-200"
+                  />
+                </div>
+                <FieldHint>
+                  {imagemUrl
+                    ? "Ao aplicar este carimbo num documento, poderá posicionar a imagem livremente."
+                    : "Opcional. Sem imagem, o carimbo continua a ser gerado como texto na posição predefinida abaixo."}
+                </FieldHint>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -143,11 +182,11 @@ export function StampEditorDrawer({
                   </Select>
                 </div>
                 <div>
-                  <Label required>Unidade</Label>
+                  <Label required>Unidade proprietária</Label>
                   <Select value={unidade} onValueChange={setUnidade}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      {UNIDADE_OPTIONS.map((u) => <SelectItem key={u} value={u}>{u}</SelectItem>)}
+                      {unidadeOptions.map((u) => <SelectItem key={u} value={u}>{u}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>

@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Eye } from "lucide-react";
 import type { ExpedientStatus } from "@/types";
 import { STATUS_META } from "@/lib/status";
@@ -42,6 +43,8 @@ export function ExpedientTableClient({
   dense?: boolean;
   initialSearch?: string;
 }) {
+  const router = useRouter();
+  const prefetched = React.useRef(new Set<string>());
   const [search, setSearch] = React.useState(initialSearch);
   const deferredSearch = React.useDeferredValue(search);
   const [statusFilter, setStatusFilter] = React.useState<"todos" | ExpedientStatus>("todos");
@@ -110,6 +113,24 @@ export function ExpedientTableClient({
         : { key, direction: "asc" }
     );
     setPage(1);
+  }
+
+  function prefetchOnIntent(href: string) {
+    if (prefetched.current.has(href)) return;
+    prefetched.current.add(href);
+    router.prefetch(href);
+  }
+
+  function openRow(event: React.MouseEvent<HTMLTableRowElement>, href: string) {
+    if ((event.target as HTMLElement).closest("a, button, input, select, textarea, [role='button']")) return;
+    router.push(href);
+  }
+
+  function openRowWithKeyboard(event: React.KeyboardEvent<HTMLTableRowElement>, href: string) {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    if ((event.target as HTMLElement).closest("a, button, input, select, textarea, [role='button']")) return;
+    event.preventDefault();
+    router.push(href);
   }
 
   return (
@@ -218,11 +239,21 @@ export function ExpedientTableClient({
                 const status = STATUS_META[expedient.estado];
 
                 return (
-                  <tr key={expedient.id} className="group hover:bg-graphite-50">
+                  <tr
+                    key={expedient.id}
+                    tabIndex={0}
+                    role="link"
+                    aria-label={`Abrir expediente ${expedient.protocolo}: ${expedient.assunto}`}
+                    className="group cursor-pointer bg-white transition-colors hover:bg-graphite-50 focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-cfm-500"
+                    onClick={(event) => openRow(event, href)}
+                    onKeyDown={(event) => openRowWithKeyboard(event, href)}
+                    onPointerEnter={() => prefetchOnIntent(href)}
+                    onPointerDown={() => prefetchOnIntent(href)}
+                  >
                     <td className={cn("px-3 align-middle", cellPadding)}>
                       <Link
                         href={href}
-                        prefetch
+                        prefetch={false}
                         className="inline-flex items-center gap-1 whitespace-nowrap font-semibold text-cfm-800 underline-offset-2 hover:text-cfm-950 hover:underline focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cfm-500/30"
                         aria-label={`Abrir expediente ${expedient.protocolo}`}
                       >
@@ -232,7 +263,7 @@ export function ExpedientTableClient({
                     <td className={cn("px-3 align-middle", cellPadding)} title={expedient.assunto}>
                       <Link
                         href={href}
-                        prefetch
+                        prefetch={false}
                         className="block max-w-[380px] truncate font-medium text-graphite-800 hover:text-cfm-800 hover:underline focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cfm-500/30"
                       >
                         {expedient.assunto}
@@ -268,7 +299,7 @@ export function ExpedientTableClient({
                     <td className={cn("px-3 text-center align-middle", cellPadding)}>
                       <Link
                         href={href}
-                        prefetch
+                        prefetch={false}
                         title={`Consultar ${expedient.protocolo}`}
                         aria-label={`Consultar expediente ${expedient.protocolo}`}
                         className="inline-flex size-7 items-center justify-center rounded-sm border border-transparent text-graphite-500 hover:border-graphite-300 hover:bg-graphite-50 hover:text-navy-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-navy-500/30"

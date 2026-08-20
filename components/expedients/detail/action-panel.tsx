@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   Archive,
@@ -20,7 +21,8 @@ import {
   Undo2,
   XCircle,
 } from "lucide-react";
-import type { Expedient } from "@/types";
+import type { Expedient, FreePosition, Signature, Stamp as StampDefinition } from "@/types";
+import { StampPositionPicker } from "@/components/documents/stamp-position-picker";
 import { ACTIONS_BY_STATUS, type ActionDef } from "@/lib/expedient-actions";
 import { Button } from "@/components/ui/button";
 import { Textarea, Label } from "@/components/ui/input";
@@ -28,9 +30,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogBody, DialogFooter } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { useToast } from "@/hooks/use-toast";
-import { organizationalUnits } from "@/data/organization";
-import { stamps } from "@/data/stamps";
-import { signatures } from "@/data/signatures";
+import { useCatalogs } from "@/lib/catalogs";
 import { cn } from "@/lib/utils";
 import { useSession } from "@/lib/session";
 
@@ -53,28 +53,41 @@ const ACTION_ICONS: Record<string, React.ComponentType<{ className?: string }>> 
   XCircle,
 };
 
-type ActionExpedient = Pick<Expedient, "id" | "estado" | "protocolo" | "assunto">;
+type ActionExpedient = Pick<Expedient, "id" | "estado" | "protocolo" | "assunto" | "precisaEscalarDirector">;
 
 const PROFILE_ACTIONS: Record<string, Set<string>> = {
-  remetente: new Set(["resposta", "confirmar", "arquivar"]),
+  remetente: new Set(["submeter", "resposta", "confirmar", "arquivar"]),
   secretaria: new Set(["receber", "protocolar", "encaminhar", "carimbo", "disponibilizar", "arquivar", "notificar"]),
-  superior: new Set(["encaminhar", "parecer", "esclarecimento", "aprovar", "rejeitar", "devolver", "resposta", "assinatura", "disponibilizar", "retomar", "escalar"]),
+  superior: new Set(["encaminhar", "parecer", "esclarecimento", "aprovar", "rejeitar", "devolver", "resposta", "carimbo", "assinatura", "disponibilizar", "retomar", "escalar"]),
   administracao: new Set(Object.values(ACTIONS_BY_STATUS).flat().map((action) => action.key)),
 };
 
-export function ActionPanel({ expedient }: { expedient: ActionExpedient }) {
+export function ActionPanel({ expedient, principalPdfUrl }: { expedient: ActionExpedient; principalPdfUrl?: string }) {
   const { toast } = useToast();
   const { perfilNavegacao } = useSession();
   const router = useRouter();
-  const actions = (ACTIONS_BY_STATUS[expedient.estado] ?? []).filter((action) => PROFILE_ACTIONS[perfilNavegacao]?.has(action.key));
+  const blockDirectApproval = perfilNavegacao === "superior" && expedient.precisaEscalarDirector;
+  const actions = (ACTIONS_BY_STATUS[expedient.estado] ?? [])
+    .filter((action) => PROFILE_ACTIONS[perfilNavegacao]?.has(action.key))
+    .filter((action) => !(blockDirectApproval && action.key === "aprovar"));
   const [activeAction, setActiveAction] = React.useState<ActionDef | null>(null);
+  const [authorizations, setAuthorizations] = React.useState<{stamps:StampDefinition[];signatures:Signature[]}>({stamps:[],signatures:[]});
 
-  async function complete(action: ActionDef, message: string, target?: string) {
+  React.useEffect(() => {
+    let cancelled = false;
+    void fetch("/api/document-authorizations", { cache: "no-store" })
+      .then(async (response) => response.ok ? response.json() : { stamps: [], signatures: [] })
+      .then((value) => { if (!cancelled) setAuthorizations(value); })
+      .catch(() => undefined);
+    return () => { cancelled = true; };
+  }, []);
+
+  async function complete(action: ActionDef, message: string, target?: string, posicao?: FreePosition) {
     try {
       const response = await fetch(`/api/expedients/${expedient.id}/actions`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ action: action.key, note: message, target }),
+        body: JSON.stringify({ action: action.key, note: message, target, posicao }),
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error ?? "Não foi possível registar a acção.");
@@ -86,7 +99,7 @@ export function ActionPanel({ expedient }: { expedient: ActionExpedient }) {
     }
   }
 
-  if (actions.length === 0) {
+  if (actions.length === 0 && expedient.estado !== "rascunho") {
     return (
       <div className="rounded-lg border border-graphite-200 bg-graphite-50 px-4 py-5 text-center">
         <CheckCircle2 className="mx-auto mb-2 size-5 text-graphite-400" />
@@ -98,6 +111,18 @@ export function ActionPanel({ expedient }: { expedient: ActionExpedient }) {
 
   return (
     <div className="space-y-2">
+      {blockDirectApproval && (
+        <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs leading-relaxed text-amber-800">
+          Este tipo de documento exige aprovação da direcção. Encaminhe para a unidade superior — não pode aprovar directamente aqui.
+        </p>
+      )}
+      {expedient.estado === "rascunho" && (
+        <Button asChild className="w-full justify-start">
+          <Link href={`/expedientes/novo?rascunho=${expedient.id}`}>
+            <FileEdit className="size-3.5" /> Continuar edição
+          </Link>
+        </Button>
+      )}
       {actions.map((action) => {
         const Icon = ACTION_ICONS[action.icon];
         return (
@@ -111,8 +136,11 @@ export function ActionPanel({ expedient }: { expedient: ActionExpedient }) {
         <ActionDialog
           action={activeAction}
           expedient={expedient}
+          principalPdfUrl={principalPdfUrl}
           onClose={() => setActiveAction(null)}
-          onComplete={(msg, target) => complete(activeAction, msg, target)}
+          onComplete={(msg, target, posicao) => complete(activeAction, msg, target, posicao)}
+          stamps={authorizations.stamps}
+          signatures={authorizations.signatures}
         />
       )}
     </div>
@@ -122,19 +150,32 @@ export function ActionPanel({ expedient }: { expedient: ActionExpedient }) {
 function ActionDialog({
   action,
   expedient,
+  principalPdfUrl,
   onClose,
   onComplete,
+  stamps,
+  signatures,
 }: {
   action: ActionDef;
   expedient: ActionExpedient;
+  principalPdfUrl?: string;
   onClose: () => void;
-  onComplete: (message: string, target?: string) => void;
+  onComplete: (message: string, target?: string, posicao?: FreePosition) => void;
+  stamps: StampDefinition[];
+  signatures: Signature[];
 }) {
+  const { organizationalUnits } = useCatalogs();
   const [note, setNote] = React.useState("");
   const [target, setTarget] = React.useState("");
   const [stampId, setStampId] = React.useState(stamps[0]?.id ?? "");
   const [signatureId, setSignatureId] = React.useState(signatures[0]?.id ?? "");
   const [pin, setPin] = React.useState("");
+  const [positioning, setPositioning] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!stamps.some((item) => item.id === stampId)) setStampId(stamps[0]?.id ?? "");
+    if (!signatures.some((item) => item.id === signatureId)) setSignatureId(signatures[0]?.id ?? "");
+  }, [signatureId, signatures, stampId, stamps]);
 
   if (action.kind === "confirm") {
     return (
@@ -222,6 +263,48 @@ function ActionDialog({
 
   if (action.kind === "stamp") {
     const selected = stamps.find((s) => s.id === stampId);
+    if (selected?.imagemUrl && principalPdfUrl) {
+      if (positioning) {
+        return (
+          <StampPositionPicker
+            open
+            onOpenChange={(v) => !v && setPositioning(false)}
+            pdfUrl={principalPdfUrl}
+            imageUrl={selected.imagemUrl}
+            itemName={selected.nome}
+            initialPosition={selected.posicaoLivre}
+            onConfirm={(posicao) => onComplete(`Carimbo "${selected.nome}" aplicado ao documento.`, stampId, posicao)}
+          />
+        );
+      }
+      return (
+        <Dialog open onOpenChange={(v) => !v && onClose()}>
+          <DialogContent size="sm">
+            <DialogHeader>
+              <DialogTitle>Aplicar carimbo</DialogTitle>
+              <DialogDescription>{expedient.protocolo} · {expedient.assunto}</DialogDescription>
+            </DialogHeader>
+            <DialogBody className="space-y-3.5">
+              <div>
+                <Label required>Carimbo</Label>
+                <Select value={stampId} onValueChange={setStampId}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {stamps.filter((s) => s.activo).map((s) => (
+                      <SelectItem key={s.id} value={s.id}>{s.nome}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </DialogBody>
+            <DialogFooter>
+              <Button variant="secondary" onClick={onClose}>Cancelar</Button>
+              <Button disabled={!selected} onClick={() => setPositioning(true)}>Continuar e posicionar</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      );
+    }
     return (
       <Dialog open onOpenChange={(v) => !v && onClose()}>
         <DialogContent size="md">
@@ -265,7 +348,7 @@ function ActionDialog({
           </DialogBody>
           <DialogFooter>
             <Button variant="secondary" onClick={onClose}>Cancelar</Button>
-            <Button onClick={() => onComplete(`Carimbo "${selected?.nome}" aplicado ao documento.`)}>Aplicar carimbo</Button>
+            <Button disabled={!selected} onClick={() => onComplete(`Carimbo "${selected?.nome}" aplicado ao documento.`, stampId)}>Aplicar carimbo</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -274,6 +357,23 @@ function ActionDialog({
 
   if (action.kind === "signature") {
     const selected = signatures.find((s) => s.id === signatureId);
+    const pinOk = !selected?.requerPin || pin.length >= 4;
+    const canPosition = Boolean(selected?.imagemUrl && principalPdfUrl);
+
+    if (positioning && selected?.imagemUrl && principalPdfUrl) {
+      return (
+        <StampPositionPicker
+          open
+          onOpenChange={(v) => !v && setPositioning(false)}
+          pdfUrl={principalPdfUrl}
+          imageUrl={selected.imagemUrl}
+          itemName={selected.proprietario}
+          initialPosition={selected.posicaoLivre}
+          onConfirm={(posicao) => onComplete(`Documento assinado digitalmente por ${selected.proprietario}.`, signatureId, posicao)}
+        />
+      );
+    }
+
     return (
       <Dialog open onOpenChange={(v) => !v && onClose()}>
         <DialogContent size="sm">
@@ -282,6 +382,7 @@ function ActionDialog({
             <DialogDescription>{expedient.protocolo} · {expedient.assunto}</DialogDescription>
           </DialogHeader>
           <DialogBody className="space-y-3.5">
+            {signatures.length === 0 && <p className="border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">Não existe uma assinatura activa associada ao seu utilizador. A Administração deve registá-la individualmente.</p>}
             <div>
               <Label required>Assinatura</Label>
               <Select value={signatureId} onValueChange={setSignatureId}>
@@ -309,8 +410,15 @@ function ActionDialog({
           </DialogBody>
           <DialogFooter>
             <Button variant="secondary" onClick={onClose}>Cancelar</Button>
-            <Button disabled={selected?.requerPin && pin.length < 4} onClick={() => onComplete(`Documento assinado digitalmente por ${selected?.proprietario}.`)}>
-              Assinar documento
+            <Button
+              disabled={!selected || !pinOk}
+              onClick={() =>
+                canPosition
+                  ? setPositioning(true)
+                  : onComplete(`Documento assinado digitalmente por ${selected?.proprietario}.`, signatureId)
+              }
+            >
+              {canPosition ? "Continuar e posicionar" : "Assinar documento"}
             </Button>
           </DialogFooter>
         </DialogContent>

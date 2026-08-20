@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Eye, EyeOff, Lock, LogIn, Mail, ShieldCheck } from "lucide-react";
+import { Eye, EyeOff, Lock, LogIn, Mail } from "lucide-react";
 import { AuthShell } from "@/components/layout/auth-shell";
 import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
@@ -101,13 +101,6 @@ export default function LoginPage() {
           {loading ? "A entrar…" : "Entrar"}
         </Button>
       </form>
-
-      <div className="mt-5 flex items-start gap-2 rounded-md border border-graphite-150 bg-graphite-25 px-3 py-2.5 text-2xs leading-relaxed text-graphite-500">
-        <ShieldCheck className="mt-0.5 size-3.5 shrink-0 text-graphite-400" aria-hidden />
-        Ligação protegida. Utilize apenas as suas credenciais institucionais.
-      </div>
-
-      <p className="mt-4 text-center text-2xs text-graphite-400">Versão 1.0.0 · Sistema de Gestão de Expediente</p>
     </AuthShell>
   );
 }

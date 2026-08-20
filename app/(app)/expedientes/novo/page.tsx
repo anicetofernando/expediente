@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowLeft,
   ArrowRight,
@@ -19,7 +19,8 @@ import { Stepper } from "@/components/shared/stepper";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { useToast } from "@/hooks/use-toast";
-import { useCatalogs } from "@/lib/catalogs";
+import { CatalogsProvider, useCatalogs } from "@/lib/catalogs";
+import { useSession } from "@/lib/session";
 import type { Confidentiality, Priority } from "@/types";
 import {
   initialWizardState,
@@ -32,6 +33,7 @@ import { StepDocument } from "@/components/expedients/wizard/step-document";
 import { StepAttachments } from "@/components/expedients/wizard/step-attachments";
 import { StepStampSignature } from "@/components/expedients/wizard/step-stamp-signature";
 import { StepReview } from "@/components/expedients/wizard/step-review";
+import { isValidFutureOrTodayDate } from "@/lib/date-only";
 
 const STEPS = [
   { label: "Dados", description: "Dados gerais" },
@@ -54,13 +56,14 @@ function canProceed(step: number, state: WizardState) {
         state.assunto &&
         state.prioridade &&
         state.confidencialidade &&
-        state.prazo
+        state.prazo &&
+        isValidFutureOrTodayDate(state.prazo)
       );
     case 1:
       return !!state.origemDocumento;
     case 2:
       if (state.origemDocumento === "sistema") return !!state.modeloId && !!state.conteudo.replace(/<[^>]*>/g, "").trim();
-      if (state.origemDocumento === "importado" || state.origemDocumento === "digitalizado") {
+      if (state.origemDocumento === "importado") {
         return !!state.ficheiroNome;
       }
       return state.origemDocumento === "apenas-processo";
@@ -85,11 +88,13 @@ function WizardProgress({
   );
 }
 
-export default function NovoExpedientePage() {
+function NovoExpedienteContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const draftId = searchParams.get("rascunho") ?? "";
   const { toast } = useToast();
+  const { user } = useSession();
   const {
-    catalogReady,
     priorities,
     confidentialities,
     stampChoices,
@@ -99,6 +104,7 @@ export default function NovoExpedientePage() {
   const [cancelOpen, setCancelOpen] = React.useState(false);
   const [submitted, setSubmitted] = React.useState<null | { id: string; protocolo: string; rascunho: boolean }>(null);
   const [saving, setSaving] = React.useState(false);
+  const [draftLoading, setDraftLoading] = React.useState(Boolean(draftId));
   const defaultsApplied = React.useRef(false);
 
   const createInitialState = React.useCallback((): WizardState => {
@@ -114,25 +120,45 @@ export default function NovoExpedientePage() {
 
     return {
       ...initialWizardState,
+      remetente: user.nome,
       prioridade: (priority?.code ?? "") as Priority | "",
       confidencialidade: (confidentiality?.code ?? "") as Confidentiality | "",
       carimbo: (stampChoice?.code ?? "") as StampChoice | "",
     };
-  }, [confidentialities, priorities, stampChoices]);
+  }, [confidentialities, priorities, stampChoices, user.nome]);
 
   React.useEffect(() => {
-    if (!catalogReady || defaultsApplied.current) return;
+    if (defaultsApplied.current) return;
     defaultsApplied.current = true;
     setState((current) => {
       const defaults = createInitialState();
       return {
         ...current,
+        remetente: current.remetente || defaults.remetente,
         prioridade: current.prioridade || defaults.prioridade,
         confidencialidade: current.confidencialidade || defaults.confidencialidade,
         carimbo: current.carimbo || defaults.carimbo,
       };
     });
-  }, [catalogReady, createInitialState]);
+  }, [createInitialState]);
+
+  React.useEffect(() => {
+    if (!draftId) return;
+    let cancelled = false;
+    setDraftLoading(true);
+    void fetch(`/api/expedients/${draftId}/draft`, { cache: "no-store" })
+      .then(async (response) => {
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error ?? "Nao foi possivel abrir o rascunho.");
+        if (!cancelled) setState({ ...initialWizardState, ...result.draft });
+      })
+      .catch((error) => {
+        toast({ title: "Rascunho indisponivel", description: error instanceof Error ? error.message : "Erro inesperado.", variant: "destructive" });
+        router.replace("/expedientes/meus");
+      })
+      .finally(() => { if (!cancelled) setDraftLoading(false); });
+    return () => { cancelled = true; };
+  }, [draftId, router, toast]);
 
   function update(patch: Partial<WizardState>) {
     setState((previous) => ({ ...previous, ...patch }));
@@ -146,7 +172,7 @@ export default function NovoExpedientePage() {
       form.set("data", JSON.stringify({ ...fields, rascunho, anexos: anexos.map(({ ficheiro: _file, ...meta }) => meta) }));
       if (ficheiro) form.set("mainFile", ficheiro);
       anexos.forEach((anexo) => { if (anexo.ficheiro) form.append("attachments", anexo.ficheiro); });
-      const response = await fetch("/api/expedients", { method: "POST", body: form });
+      const response = await fetch(draftId ? `/api/expedients/${draftId}/draft` : "/api/expedients", { method: draftId ? "PUT" : "POST", body: form });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error ?? "Não foi possível guardar o expediente.");
       toast({ title: rascunho ? "Rascunho guardado" : "Expediente submetido", variant: "success" });
@@ -159,12 +185,16 @@ export default function NovoExpedientePage() {
     }
   }
 
+  if (draftLoading) {
+    return <div className="flex min-h-[520px] items-center justify-center text-sm text-graphite-500">A abrir o rascunho…</div>;
+  }
+
   if (submitted) {
     return (
       <div className="flex min-h-full flex-col">
         <PageHeader
-          title="Novo expediente"
-          breadcrumb={[{ label: "Expediente" }, { label: "Novo expediente" }]}
+          title={draftId ? "Rascunho actualizado" : "Novo expediente"}
+          breadcrumb={[{ label: "Expediente" }, { label: draftId ? "Editar rascunho" : "Novo expediente" }]}
         />
 
         <div className="mx-auto flex w-full max-w-[1600px] flex-1 px-3 py-3 sm:px-4 lg:px-5 lg:py-4 2xl:px-6">
@@ -194,6 +224,10 @@ export default function NovoExpedientePage() {
                   <Button
                     variant="secondary"
                     onClick={() => {
+                      if (draftId) {
+                        router.push("/expedientes/novo");
+                        return;
+                      }
                       setState(createInitialState());
                       setSubmitted(null);
                       setStep(0);
@@ -220,8 +254,8 @@ export default function NovoExpedientePage() {
   return (
     <div className="flex min-h-full flex-col">
       <PageHeader
-        title="Novo expediente"
-        breadcrumb={[{ label: "Expediente" }, { label: "Novo expediente" }]}
+          title={draftId ? "Editar rascunho" : "Novo expediente"}
+          breadcrumb={[{ label: "Expediente" }, { label: draftId ? "Editar rascunho" : "Novo expediente" }]}
         actions={
           <Button variant="toolbar" size="sm" onClick={() => setCancelOpen(true)}>
             <X className="size-3.5" />
@@ -254,6 +288,12 @@ export default function NovoExpedientePage() {
             </Button>
 
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              {draftId && step < 5 && (
+                <Button variant="secondary" onClick={() => persist(true)} loading={saving} disabled={saving || !isValidFutureOrTodayDate(state.prazo)}>
+                  <Save className="size-3.5" />
+                  Guardar alterações
+                </Button>
+              )}
               {step === 5 ? (
                 <>
                   <Button variant="secondary" onClick={() => persist(true)} loading={saving} disabled={saving}>
@@ -286,8 +326,12 @@ export default function NovoExpedientePage() {
         description="Os dados não guardados serão perdidos."
         confirmLabel="Cancelar expediente"
         destructive
-        onConfirm={() => router.push("/expedientes")}
+        onConfirm={() => router.push(draftId ? `/expedientes/${draftId}` : "/expedientes")}
       />
     </div>
   );
+}
+
+export default function NovoExpedientePage() {
+  return <CatalogsProvider><NovoExpedienteContent /></CatalogsProvider>;
 }

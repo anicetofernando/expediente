@@ -1,9 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { UserPlus, MoreVertical, KeyRound, Pencil, Ban, CheckCircle2, Users } from "lucide-react";
+import { UserPlus, MoreVertical, KeyRound, Pencil, Ban, CheckCircle2, Trash2, Users } from "lucide-react";
 import type { OrganizationalUnit, Profile, User } from "@/types";
-import { unitById } from "@/data/organization";
 import { PageHeader } from "@/components/shared/page-header";
 import { StatCard } from "@/components/shared/stat-card";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
@@ -59,6 +58,7 @@ export function UserManagement({
   const [createOpen, setCreateOpen] = React.useState(false);
   const [editingUser, setEditingUser] = React.useState<User | null>(null);
   const [deactivateTarget, setDeactivateTarget] = React.useState<User | null>(null);
+  const [deleteTarget, setDeleteTarget] = React.useState<User | null>(null);
 
   const profileById = React.useCallback((id: string) => profiles.find((p) => p.id === id), [profiles]);
 
@@ -127,6 +127,16 @@ export function UserManagement({
     setUsers((prev) => prev.map((x) => (x.id === deactivateTarget.id ? { ...x, estado: "inactivo" } : x)));
     toast({ title: "Utilizador desactivado", description: `${deactivateTarget.nome} perdeu o acesso ao sistema.`, variant: "warning" });
     setDeactivateTarget(null);
+  }
+
+  async function handleDeleteConfirmed() {
+    if (!deleteTarget) return;
+    const response = await fetch(`/api/users/${deleteTarget.id}`, { method: "DELETE" });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) { toast({ title: "Eliminação falhou", description: result.error, variant: "destructive" }); setDeleteTarget(null); return; }
+    setUsers((prev) => prev.filter((x) => x.id !== deleteTarget.id));
+    toast({ title: "Utilizador eliminado", description: `${deleteTarget.nome} foi removido do sistema.`, variant: "success" });
+    setDeleteTarget(null);
   }
 
   const activeFilterCount = (unidadeFilter !== "todas" ? 1 : 0) + (perfilFilter !== "todos" ? 1 : 0) + (estadoFilter !== "todos" ? 1 : 0);
@@ -218,7 +228,7 @@ export function UserManagement({
                   </TableHead>
                   <TableBody>
                     {paged.map((u) => {
-                      const unidade = unitById(u.unidadeId);
+                      const unidade = units.find((unit) => unit.id === u.unidadeId);
                       return (
                         <TableRow key={u.id}>
                           <TableCell>
@@ -271,6 +281,9 @@ export function UserManagement({
                                     <CheckCircle2 className="size-3.5" /> Activar
                                   </DropdownMenuItem>
                                 )}
+                                <DropdownMenuItem destructive onClick={() => setDeleteTarget(u)}>
+                                  <Trash2 className="size-3.5" /> Eliminar
+                                </DropdownMenuItem>
                               </DropdownMenuContent>
                             </DropdownMenu>
                           </TableCell>
@@ -306,6 +319,15 @@ export function UserManagement({
         confirmLabel="Desactivar"
         destructive
         onConfirm={handleDeactivateConfirmed}
+      />
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => !open && setDeleteTarget(null)}
+        title="Eliminar utilizador"
+        description={deleteTarget ? `${deleteTarget.nome} será removido permanentemente do sistema. Se tiver expedientes, documentos ou histórico associado, a eliminação será recusada — desactive a conta nesse caso.` : undefined}
+        confirmLabel="Eliminar"
+        destructive
+        onConfirm={handleDeleteConfirmed}
       />
     </div>
   );

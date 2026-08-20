@@ -9,8 +9,10 @@ import {
   Plus,
   RotateCcw,
   TicketCheck,
+  Trash2,
 } from "lucide-react";
 import { PageHeader } from "@/components/shared/page-header";
+import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { StatCard } from "@/components/shared/stat-card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -157,6 +159,7 @@ function formatNumber(sequence: NumberingSequence, value = sequence.actual) {
 export default function NumeracaoPage() {
   const { toast } = useToast();
   const [sequences, setSequences] = useDatabaseSetting<NumberingSequence[]>("numbering", INITIAL_SEQUENCES);
+  const [deleteTarget, setDeleteTarget] = React.useState<NumberingSequence | null>(null);
   const [search, setSearch] = React.useState("");
   const [status, setStatus] = React.useState("todas");
   const [open, setOpen] = React.useState(false);
@@ -258,6 +261,13 @@ export default function NumeracaoPage() {
       }`,
       variant: active ? "success" : "warning",
     });
+  }
+
+  function deleteSequenceConfirmed() {
+    if (!deleteTarget) return;
+    setSequences((current) => current.filter((item) => item.id !== deleteTarget.id));
+    toast({ title: "Sequência eliminada", description: `${deleteTarget.nome} foi removida.`, variant: "success" });
+    setDeleteTarget(null);
   }
 
   return (
@@ -412,15 +422,20 @@ export default function NumeracaoPage() {
                         </div>
                       </TableCell>
                       <TableCell>
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          disabled={!sequence.activa}
-                          onClick={() => reserveNext(sequence)}
-                        >
-                          <TicketCheck className="size-3.5" />
-                          Reservar
-                        </Button>
+                        <div className="flex items-center gap-1">
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            disabled={!sequence.activa}
+                            onClick={() => reserveNext(sequence)}
+                          >
+                            <TicketCheck className="size-3.5" />
+                            Reservar
+                          </Button>
+                          <Button variant="ghost" size="icon-sm" aria-label={`Eliminar ${sequence.nome}`} onClick={() => setDeleteTarget(sequence)}>
+                            <Trash2 className="size-3.5" />
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -548,6 +563,15 @@ export default function NumeracaoPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => !open && setDeleteTarget(null)}
+        title="Eliminar sequência"
+        description={deleteTarget ? `${deleteTarget.nome} será removida permanentemente.` : undefined}
+        confirmLabel="Eliminar"
+        destructive
+        onConfirm={deleteSequenceConfirmed}
+      />
     </div>
   );
 }

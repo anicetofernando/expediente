@@ -20,3 +20,22 @@ export async function PATCH(request: Request, { params }: { params: { id: string
   await audit({ userId: session.user.id, action: "Perfil actualizado", entityType: "Perfil", entityId: params.id });
   return NextResponse.json({ ok: true });
 }
+
+const CORE_SLUGS = new Set(["remetente", "secretaria", "superior", "administracao"]);
+
+export async function DELETE(request: Request, { params }: { params: { id: string } }) {
+  const session = await getCurrentSession();
+  if (!session || session.perfilNavegacao !== "administracao") return NextResponse.json({ error: "Acesso negado." }, { status: 403 });
+  const existing = await query<{ slug: string; name: string }>("SELECT slug,name FROM profiles WHERE id=$1", [params.id]);
+  if (!existing.rows[0]) return NextResponse.json({ error: "Perfil nao encontrado." }, { status: 404 });
+  if (CORE_SLUGS.has(existing.rows[0].slug)) return NextResponse.json({ error: "Este e' um perfil essencial do sistema e nao pode ser eliminado." }, { status: 400 });
+  try {
+    await query("DELETE FROM profiles WHERE id=$1", [params.id]);
+    await audit({ userId: session.user.id, action: "Perfil eliminado", entityType: "Perfil", entityId: params.id, details: { nome: existing.rows[0].name } });
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    if (message.includes("violates foreign key constraint")) return NextResponse.json({ error: "Este perfil tem utilizadores atribuidos e nao pode ser eliminado. Reatribua-os a outro perfil primeiro." }, { status: 409 });
+    return NextResponse.json({ error: message || "Nao foi possivel eliminar." }, { status: 400 });
+  }
+}

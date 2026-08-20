@@ -11,6 +11,7 @@ import {
   RefreshCw,
   ShieldCheck,
   ShieldX,
+  Trash2,
 } from "lucide-react";
 import type { Signature } from "@/types";
 import { signatures as initialSignatures } from "@/data/signatures";
@@ -52,6 +53,7 @@ import {
   TableHeaderCell,
   TableRow,
 } from "@/components/ui/table";
+import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { formatDate } from "@/lib/utils";
 import { useDatabaseSetting } from "@/lib/use-database-setting";
@@ -77,10 +79,40 @@ export default function AssinaturasPage() {
   const [search, setSearch] = React.useState("");
   const [status, setStatus] = React.useState("todos");
   const [open, setOpen] = React.useState(false);
+  const [users, setUsers] = React.useState<Array<{id:string;nome:string;email:string;cargo:string;unidade:string;estado:string}>>([]);
+  const [userId, setUserId] = React.useState("");
   const [nome, setNome] = React.useState("");
   const [cargo, setCargo] = React.useState("");
   const [unidade, setUnidade] = React.useState("");
   const [validadeFim, setValidadeFim] = React.useState("2027-12-31");
+  const [deleteTarget, setDeleteTarget] = React.useState<Signature | null>(null);
+  const [imagemUrl, setImagemUrl] = React.useState("");
+  const [uploadingImage, setUploadingImage] = React.useState(false);
+
+  async function handleImageUpload(file: File) {
+    setUploadingImage(true);
+    try {
+      const form = new FormData();
+      form.set("file", file);
+      const response = await fetch("/api/admin/assets", { method: "POST", body: form });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error ?? "Falha ao carregar a imagem.");
+      setImagemUrl(result.url);
+    } catch (error) {
+      toast({ title: "Não foi possível carregar a imagem", description: error instanceof Error ? error.message : undefined, variant: "destructive" });
+    } finally {
+      setUploadingImage(false);
+    }
+  }
+
+  React.useEffect(() => {
+    let cancelled = false;
+    void fetch("/api/users", { cache: "no-store" })
+      .then(async (response) => response.ok ? response.json() : { users: [] })
+      .then((result) => { if (!cancelled) setUsers(result.users ?? []); })
+      .catch(() => undefined);
+    return () => { cancelled = true; };
+  }, []);
 
   const filtered = React.useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -103,24 +135,31 @@ export default function AssinaturasPage() {
   const usageCount = items.reduce((total, item) => total + item.utilizacoes, 0);
 
   function resetForm() {
+    setUserId("");
     setNome("");
     setCargo("");
     setUnidade("");
     setValidadeFim("2027-12-31");
+    setImagemUrl("");
   }
 
   function createSignature() {
+    const owner = users.find((user) => user.id === userId);
+    if (!owner) return;
     const signature: Signature = {
       id: `sig-${Date.now()}`,
-      proprietario: nome.trim(),
-      cargo: cargo.trim(),
-      unidade: unidade.trim(),
+      utilizadorId: owner.id,
+      email: owner.email,
+      proprietario: owner.nome,
+      cargo: owner.cargo,
+      unidade: owner.unidade,
       validadeInicio: new Date().toISOString().slice(0, 10),
       validadeFim,
       documentosPermitidos: ["Despacho", "Ofício"],
       requerPin: true,
       estado: "activa",
       utilizacoes: 0,
+      imagemUrl: imagemUrl || undefined,
     };
     setItems((current) => [signature, ...current]);
     setOpen(false);
@@ -169,11 +208,22 @@ export default function AssinaturasPage() {
     });
   }
 
+  function deleteConfirmed() {
+    if (!deleteTarget) return;
+    setItems((current) => current.filter((signature) => signature.id !== deleteTarget.id));
+    toast({
+      title: "Assinatura eliminada",
+      description: `A assinatura de ${deleteTarget.proprietario} foi removida permanentemente.`,
+      variant: "success",
+    });
+    setDeleteTarget(null);
+  }
+
   return (
     <div>
       <PageHeader
         title="Assinaturas"
-        description="Gestão de assinaturas digitais autorizadas, validade e mecanismos de segurança."
+        description="Assinaturas individuais ligadas a um único utilizador, com validade e mecanismos de segurança."
         breadcrumb={[
           { label: "Administração" },
           { label: "Assinaturas" },
@@ -344,6 +394,11 @@ export default function AssinaturasPage() {
                                 </DropdownMenuItem>
                               </>
                             )}
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem destructive onClick={() => setDeleteTarget(item)}>
+                              <Trash2 className="size-3.5" />
+                              Eliminar
+                            </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </TableCell>
@@ -378,20 +433,23 @@ export default function AssinaturasPage() {
           <DialogHeader>
             <DialogTitle>Registar assinatura digital</DialogTitle>
             <DialogDescription>
-              Associe um certificado de assinatura a um responsável autorizado.
+              Associe a assinatura a um único utilizador. Assinaturas não são partilhadas pela unidade ou departamento.
             </DialogDescription>
           </DialogHeader>
           <DialogBody className="grid gap-4 sm:grid-cols-2">
             <div>
               <Label htmlFor="signature-owner" required>
-                Proprietário
+                Utilizador proprietário
               </Label>
-              <Input
-                id="signature-owner"
-                value={nome}
-                onChange={(event) => setNome(event.target.value)}
-                placeholder="Nome completo"
-              />
+              <Select value={userId} onValueChange={(value) => {
+                const owner = users.find((user) => user.id === value);
+                setUserId(value); setNome(owner?.nome ?? ""); setCargo(owner?.cargo ?? ""); setUnidade(owner?.unidade ?? "");
+              }}>
+                <SelectTrigger id="signature-owner"><SelectValue placeholder="Seleccione o utilizador" /></SelectTrigger>
+                <SelectContent>
+                  {users.filter((user) => user.estado === "activo").map((user) => <SelectItem key={user.id} value={user.id}>{user.nome} — {user.unidade}</SelectItem>)}
+                </SelectContent>
+              </Select>
             </div>
             <div>
               <Label htmlFor="signature-job" required>
@@ -400,7 +458,7 @@ export default function AssinaturasPage() {
               <Input
                 id="signature-job"
                 value={cargo}
-                onChange={(event) => setCargo(event.target.value)}
+                readOnly
                 placeholder="Cargo institucional"
               />
             </div>
@@ -411,7 +469,7 @@ export default function AssinaturasPage() {
               <Input
                 id="signature-unit"
                 value={unidade}
-                onChange={(event) => setUnidade(event.target.value)}
+                readOnly
                 placeholder="Unidade orgânica"
               />
             </div>
@@ -426,6 +484,25 @@ export default function AssinaturasPage() {
                 onChange={(event) => setValidadeFim(event.target.value)}
               />
             </div>
+            <div className="sm:col-span-2">
+              <Label>Imagem da assinatura</Label>
+              <div className="flex items-center gap-3">
+                {imagemUrl && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={imagemUrl} alt="Assinatura" className="h-14 w-auto rounded border border-graphite-200 bg-graphite-50 object-contain p-1" />
+                )}
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg"
+                  disabled={uploadingImage}
+                  onChange={(event) => { const file = event.target.files?.[0]; if (file) void handleImageUpload(file); }}
+                  className="text-[13px] text-graphite-600 file:mr-3 file:rounded-md file:border-0 file:bg-graphite-100 file:px-3 file:py-1.5 file:text-[13px] file:font-medium file:text-graphite-700 hover:file:bg-graphite-200"
+                />
+              </div>
+              <p className="mt-1.5 text-2xs text-graphite-500">
+                {imagemUrl ? "Ao assinar um documento, poderá posicionar a imagem livremente." : "Opcional. Sem imagem, a assinatura continua a ser gerada como texto."}
+              </p>
+            </div>
           </DialogBody>
           <DialogFooter>
             <Button variant="secondary" onClick={() => setOpen(false)}>
@@ -433,6 +510,7 @@ export default function AssinaturasPage() {
             </Button>
             <Button
               disabled={
+                !userId ||
                 !nome.trim() ||
                 !cargo.trim() ||
                 !unidade.trim() ||
@@ -446,6 +524,15 @@ export default function AssinaturasPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => !open && setDeleteTarget(null)}
+        title="Eliminar assinatura"
+        description={deleteTarget ? `A assinatura de ${deleteTarget.proprietario} será removida permanentemente. Documentos já assinados mantêm o registo histórico.` : undefined}
+        confirmLabel="Eliminar"
+        destructive
+        onConfirm={deleteConfirmed}
+      />
     </div>
   );
 }

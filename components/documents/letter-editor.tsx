@@ -3,8 +3,9 @@
 import * as React from "react";
 import { AlignCenter, AlignJustify, AlignLeft, AlignRight, Bold, Italic, List, ListOrdered, Printer, Redo2, Underline, Undo2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import type { DocumentTemplate } from "@/types";
 
-export function LetterEditor({ value, onChange, title = "Carta institucional" }: { value: string; onChange: (html: string) => void; title?: string }) {
+export function LetterEditor({ value, onChange, title = "Carta institucional", template }: { value: string; onChange: (html: string) => void; title?: string; template?: DocumentTemplate }) {
   const editorRef = React.useRef<HTMLDivElement>(null);
 
   React.useEffect(() => {
@@ -25,7 +26,9 @@ export function LetterEditor({ value, onChange, title = "Carta institucional" }:
   function print() {
     const popup = window.open("", "_blank", "noopener,noreferrer");
     if (!popup) return;
-    popup.document.write(`<!doctype html><html><head><title>${title}</title><style>body{font:12pt Arial;line-height:1.5;max-width:190mm;margin:15mm auto}@media print{body{margin:0}}</style></head><body>${editorRef.current?.innerHTML ?? ""}</body></html>`);
+    const logoHeader = template?.logotipo && template.logotipoPosicao === "cabecalho" ? `<img src="${template.logotipo}" style="display:block;max-height:20mm;max-width:45mm;margin:0 auto 4mm">` : "";
+    const logoFooter = template?.logotipo && template.logotipoPosicao === "rodape" ? `<img src="${template.logotipo}" style="display:block;max-height:14mm;max-width:35mm;margin:0 auto 3mm">` : "";
+    popup.document.write(`<!doctype html><html><head><title>${title}</title><style>@page{size:A4;margin:20mm}body{font:12pt Arial;line-height:1.5}header{text-align:center;border-bottom:1px solid #ccd3dc;padding-bottom:5mm;margin-bottom:10mm}footer{text-align:center;border-top:1px solid #ccd3dc;padding-top:4mm;margin-top:12mm;color:#667085;font-size:9pt}</style></head><body><header>${logoHeader}${template?.cabecalho ?? "CFM — Portos e Caminhos de Ferro de Moçambique"}</header>${editorRef.current?.innerHTML ?? ""}<footer>${logoFooter}${template?.rodape ?? "Correspondência institucional"}</footer></body></html>`);
     popup.document.close();
     popup.focus();
     popup.print();
@@ -60,11 +63,11 @@ export function LetterEditor({ value, onChange, title = "Carta institucional" }:
         <button type="button" title="Refazer" onMouseDown={(e) => e.preventDefault()} onClick={() => command("redo")} className="flex size-7 items-center justify-center text-graphite-600 hover:bg-graphite-50"><Redo2 className="size-3.5" /></button>
         <button type="button" title="Imprimir pré-visualização" onClick={print} className="ml-auto flex size-7 items-center justify-center text-graphite-600 hover:bg-graphite-50"><Printer className="size-3.5" /></button>
       </div>
-      <div className="max-h-[620px] overflow-auto p-4 sm:p-7">
-        <div className="mx-auto min-h-[720px] w-full max-w-[794px] bg-white px-[9%] py-[8%] shadow-card">
+      <div className="h-[78vh] min-h-[720px] max-h-[920px] overflow-auto p-4 sm:p-7">
+        <div className="mx-auto min-h-[1123px] w-full max-w-[794px] bg-white px-[9%] py-[8%] shadow-card">
           <div className="mb-8 border-b border-graphite-200 pb-4 text-center">
-            <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-cfm-900">CFM — Portos e Caminhos de Ferro de Moçambique</p>
-            <p className="mt-1 text-2xs text-graphite-400">Correspondência institucional</p>
+            {template?.logotipo && template.logotipoPosicao === "cabecalho" && <img src={template.logotipo} alt="Logótipo" className="mx-auto mb-3 max-h-20 max-w-48 object-contain" />}
+            <p className="whitespace-pre-line text-[11px] font-bold uppercase tracking-[0.12em] text-cfm-900">{template?.cabecalho ?? "CFM — Portos e Caminhos de Ferro de Moçambique"}</p>
           </div>
           <div
             ref={editorRef}
@@ -76,8 +79,12 @@ export function LetterEditor({ value, onChange, title = "Carta institucional" }:
             data-placeholder="Escreva a carta aqui…"
             onInput={emit}
             onBlur={emit}
-            className={cn("letter-editor min-h-[560px] text-[13px] leading-6 text-graphite-800 outline-none", "empty:before:pointer-events-none empty:before:text-graphite-350 empty:before:content-[attr(data-placeholder)]")}
+            className={cn("letter-editor min-h-[820px] text-[13px] leading-6 text-graphite-800 outline-none", "empty:before:pointer-events-none empty:before:text-graphite-350 empty:before:content-[attr(data-placeholder)]")}
           />
+          <div className="mt-8 border-t border-graphite-200 pt-4 text-center text-2xs text-graphite-500">
+            {template?.logotipo && template.logotipoPosicao === "rodape" && <img src={template.logotipo} alt="Logótipo" className="mx-auto mb-2 max-h-14 max-w-36 object-contain" />}
+            <p className="whitespace-pre-line">{template?.rodape ?? "Correspondência institucional"}</p>
+          </div>
         </div>
       </div>
     </div>

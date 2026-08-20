@@ -53,7 +53,7 @@ function baseExpedient(overrides = {}) {
   return {
     tipo: "td-carta", unidadeOrigem: "u-doc", remetente: "Felismina Cossa", destinatario: "u-doc",
     assunto: "TESTE E2E - Pedido de intervencao", prioridade: "alta", confidencialidade: "interno", prazo: due,
-    origemDocumento: "sistema", modeloId: "mod-carta", conteudo: "<p><strong>Exmo. Senhor,</strong></p><p>Solicitamos uma intervenção de teste.</p><p>Com os melhores cumprimentos.</p>",
+    origemDocumento: "sistema", modeloId: "tpl-oficio", conteudo: "<p><strong>Exmo. Senhor,</strong></p><p>Solicitamos uma intervenção de teste.</p><p>Com os melhores cumprimentos.</p>",
     ficheiroNome: "", numPaginas: 1, carimbo: "nao", carimboId: "", solicitarAssinatura: false, posicaoPredefinida: true, anexos: [], rascunho: false,
     ...overrides,
   };
@@ -71,9 +71,21 @@ async function createExpedient(cookie, data, files = {}) {
   return result;
 }
 
+async function updateDraft(cookie, id, data, files = {}) {
+  const form = new FormData();
+  form.set("data", JSON.stringify(data));
+  if (files.main) form.set("mainFile", files.main);
+  for (const attachment of files.attachments ?? []) form.append("attachments", attachment);
+  const response = await fetch(`${base}/api/expedients/${id}/draft`, { method: "PUT", headers: { cookie }, body: form });
+  const result = await response.json();
+  if (!response.ok) throw new Error(`update draft: ${response.status} ${JSON.stringify(result)}`);
+  return result;
+}
+
 async function action(cookie, id, actionName, extra = {}) {
   const { data } = await jsonRequest(cookie, `/api/expedients/${id}/actions`, { method: "POST", body: JSON.stringify({ action: actionName, note: `Teste: ${actionName}`, ...extra }) });
   check(`action ${actionName}`, data.ok === true);
+  return data;
 }
 
 async function cleanup() {
@@ -111,7 +123,11 @@ try {
   check("all institutional users authenticate", institutionalAccounts.length === 17, { users: institutionalAccounts.length });
 
   const sender = await login("felismina.cossa@cfm.co.mz");
-  const written = await createExpedient(sender, baseExpedient());
+  const pastForm = new FormData();
+  pastForm.set("data", JSON.stringify(baseExpedient({ assunto: "TESTE E2E - Prazo inválido", prazo: new Date(Date.now() - 86400000).toISOString().slice(0, 10) })));
+  const pastResponse = await fetch(`${base}/api/expedients`, { method: "POST", headers: { cookie: sender }, body: pastForm });
+  check("past delivery date rejected", pastResponse.status === 400, { status: pastResponse.status });
+  const written = await createExpedient(sender, baseExpedient({ carimbo: "automatico", solicitarAssinatura: true }));
   check("written letter created", !!written.id && written.protocolo.startsWith("CFM/DOC/"), { protocol: written.protocolo });
   const detail = await fetch(`${base}/expedientes/${written.id}`, { headers: { cookie: sender } });
   check("sender reads own expedient", detail.status === 200, { status: detail.status });
@@ -125,15 +141,48 @@ try {
   check("attached letter created", !!attached.id, { protocol: attached.protocolo });
 
   const draft = await createExpedient(sender, baseExpedient({ assunto: "TESTE E2E - Rascunho", rascunho: true }));
-  check("draft created", !!draft.id);
-  await action(sender, draft.id, "submeter");
+  check("draft created without official sequence", !!draft.id && draft.protocolo.startsWith("RASCUNHO-"), { protocol: draft.protocolo });
+  const editableDraft = await jsonRequest(sender, `/api/expedients/${draft.id}/draft`);
+  check("draft can be reopened for editing", editableDraft.data.draft?.assunto === "TESTE E2E - Rascunho" && /^\d{4}-\d{2}-\d{2}$/.test(editableDraft.data.draft?.prazo), { dueDate: editableDraft.data.draft?.prazo });
+  const inboxWithDraft = await fetch(`${base}/expedientes/caixa-entrada`, { headers: { cookie: sender } });
+  check("draft excluded from inbox", inboxWithDraft.status === 200 && !(await inboxWithDraft.text()).includes(draft.protocolo));
+  const editedDraft = await updateDraft(sender, draft.id, baseExpedient({ assunto: "TESTE E2E - Rascunho editado", rascunho: true }));
+  check("draft changes persist", editedDraft.rascunho === true && editedDraft.protocolo === draft.protocolo);
+  const submittedDraft = await action(sender, draft.id, "submeter");
+  check("draft receives official protocol on submission", submittedDraft.protocolo?.startsWith("CFM/DOC/"), { protocol: submittedDraft.protocolo });
+
+  const privateDraft = await createExpedient(sender, baseExpedient({ assunto: "TESTE E2E - Rascunho privado da Secretaria", rascunho: true }));
 
   const secretary = await login("cremilda.nhantumbo@cfm.co.mz");
+  const secretaryReception = await fetch(`${base}/secretaria`, { headers: { cookie: secretary } });
+  const secretaryReceptionHtml = await secretaryReception.text();
+  check("obsolete digitization menu removed from secretary", secretaryReception.status === 200 && !secretaryReceptionHtml.includes("DigitalizaÃ§Ãµes"), { status: secretaryReception.status });
+  const secretaryConsultation = await fetch(`${base}/expedientes`, { headers: { cookie: secretary } });
+  const secretaryConsultationHtml = await secretaryConsultation.text();
+  check("secretary consultation opens submitted expedient", secretaryConsultation.status === 200 && secretaryConsultationHtml.includes(submittedDraft.protocolo), { status: secretaryConsultation.status });
+  check("expedient rows are directly clickable", secretaryConsultationHtml.includes('role="link"') && secretaryConsultationHtml.includes('tabindex="0"'));
+  check("private draft excluded from secretary consultation", !secretaryConsultationHtml.includes(privateDraft.protocolo));
+  const secretaryBook = await fetch(`${base}/livro`, { headers: { cookie: secretary } });
+  check("private draft excluded from secretary book", secretaryBook.status === 200 && !(await secretaryBook.text()).includes(privateDraft.protocolo), { status: secretaryBook.status });
+  const secretaryDetail = await fetch(`${base}/expedientes/${written.id}`, { headers: { cookie: secretary } });
+  check("secretary opens expedient details", secretaryDetail.status === 200, { status: secretaryDetail.status });
+  const privateDraftDetail = await fetch(`${base}/expedientes/${privateDraft.id}`, { headers: { cookie: secretary } });
+  const privateDraftDetailHtml = await privateDraftDetail.text();
+  check(
+    "secretary cannot read another user's private draft",
+    !privateDraftDetailHtml.includes(privateDraft.protocolo) && !privateDraftDetailHtml.includes("TESTE E2E - Rascunho privado da Secretaria"),
+    { status: privateDraftDetail.status }
+  );
+  const secretaryAuthorizations = await jsonRequest(secretary, "/api/document-authorizations");
+  check("secretary only sees unit stamps", secretaryAuthorizations.data.stamps.length > 0 && secretaryAuthorizations.data.stamps.every((stamp) => stamp.unidade === "Secretaria Geral" || stamp.unidade === "Global"));
+  check("secretary has no shared departmental signature", secretaryAuthorizations.data.signatures.length === 0);
   await action(secretary, written.id, "receber");
   await action(secretary, written.id, "protocolar");
   await action(secretary, written.id, "encaminhar", { target: "u-doc" });
 
   const approver = await login("fatima.momade@cfm.co.mz");
+  const approverAuthorizations = await jsonRequest(approver, "/api/document-authorizations");
+  check("approver only sees own individual signature", approverAuthorizations.data.signatures.length === 1 && approverAuthorizations.data.signatures[0].email === "fatima.momade@cfm.co.mz");
   await action(approver, written.id, "aprovar");
   await action(approver, written.id, "assinatura");
   await action(approver, written.id, "disponibilizar");
@@ -186,9 +235,15 @@ try {
 
   const client = new pg.Client({ connectionString: process.env.DATABASE_URL });
   await client.connect();
-  const database = await client.query(`SELECT e.status,(SELECT count(*)::int FROM documents d WHERE d.expedient_id=e.id) documents,(SELECT count(*)::int FROM timeline_events t WHERE t.expedient_id=e.id) events,(SELECT count(*)::int FROM comments c WHERE c.expedient_id=e.id) comments FROM expedients e WHERE e.id=$1`, [written.id]);
+  const database = await client.query(`SELECT e.status,(SELECT count(*)::int FROM documents d WHERE d.expedient_id=e.id) documents,(SELECT count(*)::int FROM timeline_events t WHERE t.expedient_id=e.id) events,(SELECT count(*)::int FROM comments c WHERE c.expedient_id=e.id) comments,(SELECT id::text FROM documents d WHERE d.expedient_id=e.id AND d.document_kind='principal' LIMIT 1) document_id,(SELECT stamped FROM documents d WHERE d.expedient_id=e.id AND d.document_kind='principal' LIMIT 1) stamped,(SELECT signed FROM documents d WHERE d.expedient_id=e.id AND d.document_kind='principal' LIMIT 1) signed,(SELECT stamp_metadata IS NOT NULL AND signature_metadata IS NOT NULL FROM documents d WHERE d.expedient_id=e.id AND d.document_kind='principal' LIMIT 1) output_metadata,(SELECT template_metadata IS NOT NULL FROM documents d WHERE d.expedient_id=e.id AND d.document_kind='principal' LIMIT 1) template_saved,(SELECT signature_metadata->>'proprietario' FROM documents d WHERE d.expedient_id=e.id AND d.document_kind='principal' LIMIT 1) signer FROM expedients e WHERE e.id=$1`, [written.id]);
   await client.end();
   check("database final state", database.rows[0]?.status === "arquivado" && database.rows[0]?.documents === 1 && database.rows[0]?.events >= 10 && database.rows[0]?.comments === 1, database.rows[0]);
+  check("stamp and signature persisted", database.rows[0]?.stamped === true && database.rows[0]?.signed === true && database.rows[0]?.output_metadata === true, database.rows[0]);
+  check("template layout snapshot persisted", database.rows[0]?.template_saved === true, database.rows[0]);
+  check("correct individual signed document", database.rows[0]?.signer === "Fátima Momade", database.rows[0]);
+  const pdfResponse = await fetch(`${base}/api/documents/${database.rows[0].document_id}/pdf?download=1`, { headers: { cookie: sender } });
+  const pdfBytes = Buffer.from(await pdfResponse.arrayBuffer());
+  check("final PDF downloads and matches PDF format", pdfResponse.ok && pdfResponse.headers.get("content-type") === "application/pdf" && pdfResponse.headers.get("content-disposition")?.startsWith("attachment") && pdfBytes.subarray(0, 4).toString() === "%PDF", { status: pdfResponse.status, bytes: pdfBytes.length });
 
   process.stdout.write(`${JSON.stringify({ ok: true, checks }, null, 2)}\n`);
 } finally {

@@ -15,7 +15,9 @@ import {
   Network,
   Pencil,
   Phone,
+  Plus,
   SearchX,
+  Trash2,
   UserRound,
   Users,
 } from "lucide-react";
@@ -23,6 +25,7 @@ import type { OrganizationalUnit, User } from "@/types";
 import { useCatalogs } from "@/lib/catalogs";
 import { PageHeader } from "@/components/shared/page-header";
 import { StatCard } from "@/components/shared/stat-card";
+import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -350,6 +353,8 @@ function UnitDetailsDrawer({
   open,
   onOpenChange,
   onSave,
+  onDelete,
+  startInEditing,
 }: {
   unit: OrganizationalUnit | null;
   units: OrganizationalUnit[];
@@ -357,8 +362,10 @@ function UnitDetailsDrawer({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSave: (unit: OrganizationalUnit) => void;
+  onDelete?: (unit: OrganizationalUnit) => void;
+  startInEditing?: boolean;
 }) {
-  const [editing, setEditing] = React.useState(false);
+  const [editing, setEditing] = React.useState(Boolean(startInEditing));
   const [values, setValues] = React.useState<UnitFormValues | null>(
     unit ? valuesFromUnit(unit) : null
   );
@@ -366,9 +373,9 @@ function UnitDetailsDrawer({
   React.useEffect(() => {
     if (open && unit) {
       setValues(valuesFromUnit(unit));
-      setEditing(false);
+      setEditing(Boolean(startInEditing));
     }
-  }, [open, unit]);
+  }, [open, unit, startInEditing]);
 
   if (!unit || !values) return null;
   const currentUnit = unit;
@@ -396,7 +403,6 @@ function UnitDetailsDrawer({
     values.nome.trim().length > 0 &&
     values.sigla.trim().length > 0 &&
     values.codigo.trim().length > 0 &&
-    values.responsavelId.length > 0 &&
     !duplicateCode;
 
   function setValue<K extends keyof UnitFormValues>(
@@ -869,6 +875,12 @@ function UnitDetailsDrawer({
           <Button variant="secondary" onClick={() => onOpenChange(false)}>
             Fechar
           </Button>
+          {onDelete && (
+            <Button variant="destructive" onClick={() => onDelete(currentUnit)}>
+              <Trash2 className="size-4" aria-hidden />
+              Eliminar
+            </Button>
+          )}
           <Button onClick={() => setEditing(true)}>
             <Pencil className="size-4" aria-hidden />
             Editar unidade
@@ -904,6 +916,8 @@ export function OrgStructure({
   const [selectedUnitId, setSelectedUnitId] = React.useState<string | null>(
     null
   );
+  const [creatingUnit, setCreatingUnit] = React.useState<OrganizationalUnit | null>(null);
+  const [deleteTarget, setDeleteTarget] = React.useState<OrganizationalUnit | null>(null);
 
   const unitById = React.useMemo(
     () => new Map(units.map((unit) => [unit.id, unit])),
@@ -1042,6 +1056,17 @@ export function OrgStructure({
   }
 
   function saveUnit(updatedUnit: OrganizationalUnit) {
+    const isNew = !units.some((unit) => unit.id === updatedUnit.id);
+    if (isNew) {
+      setUnits((current) => [...current, updatedUnit]);
+      setCreatingUnit(null);
+      toast({
+        title: "Unidade criada",
+        description: `${updatedUnit.sigla} foi adicionada à estrutura.`,
+        variant: "success",
+      });
+      return;
+    }
     setUnits((current) =>
       current.map((unit) => (unit.id === updatedUnit.id ? updatedUnit : unit))
     );
@@ -1050,6 +1075,43 @@ export function OrgStructure({
       description: `As alterações de ${updatedUnit.sigla} foram guardadas.`,
       variant: "success",
     });
+  }
+
+  function startCreatingUnit() {
+    const id = `u-${Date.now().toString(36)}`;
+    setCreatingUnit({
+      id,
+      nome: "",
+      sigla: "",
+      codigo: "",
+      tipo: "departamento",
+      parentId: null,
+      responsavelId: "",
+      contactos: {},
+      estado: "activo",
+    });
+  }
+
+  function requestDeleteUnit(unit: OrganizationalUnit) {
+    const hasChildren = units.some((item) => item.parentId === unit.id);
+    const hasMembers = users.some((user) => user.unidadeId === unit.id);
+    if (hasChildren) {
+      toast({ title: "Não é possível eliminar", description: `${unit.sigla} tem unidades subordinadas. Remova-as ou reatribua-as primeiro.`, variant: "destructive" });
+      return;
+    }
+    if (hasMembers) {
+      toast({ title: "Não é possível eliminar", description: `${unit.sigla} tem utilizadores atribuídos. Mova-os para outra unidade primeiro.`, variant: "destructive" });
+      return;
+    }
+    setDeleteTarget(unit);
+  }
+
+  function deleteUnitConfirmed() {
+    if (!deleteTarget) return;
+    setUnits((current) => current.filter((unit) => unit.id !== deleteTarget.id));
+    setSelectedUnitId(null);
+    toast({ title: "Unidade eliminada", description: `${deleteTarget.sigla} foi removida da estrutura.`, variant: "success" });
+    setDeleteTarget(null);
   }
 
   return (
@@ -1062,18 +1124,24 @@ export function OrgStructure({
           { label: "Estrutura organizacional" },
         ]}
         actions={
-          <Button
-            variant="secondary"
-            onClick={toggleAll}
-            disabled={filtersActive}
-          >
-            {allExpanded ? (
-              <ChevronsDownUp className="size-4" aria-hidden />
-            ) : (
-              <ChevronsUpDown className="size-4" aria-hidden />
-            )}
-            {allExpanded ? "Recolher estrutura" : "Expandir estrutura"}
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="secondary"
+              onClick={toggleAll}
+              disabled={filtersActive}
+            >
+              {allExpanded ? (
+                <ChevronsDownUp className="size-4" aria-hidden />
+              ) : (
+                <ChevronsUpDown className="size-4" aria-hidden />
+              )}
+              {allExpanded ? "Recolher estrutura" : "Expandir estrutura"}
+            </Button>
+            <Button onClick={startCreatingUnit}>
+              <Plus className="size-4" aria-hidden />
+              Nova unidade
+            </Button>
+          </div>
         }
       />
 
@@ -1234,6 +1302,27 @@ export function OrgStructure({
           if (!open) setSelectedUnitId(null);
         }}
         onSave={saveUnit}
+        onDelete={requestDeleteUnit}
+      />
+      <UnitDetailsDrawer
+        unit={creatingUnit}
+        units={units}
+        users={users}
+        open={!!creatingUnit}
+        startInEditing
+        onOpenChange={(open) => {
+          if (!open) setCreatingUnit(null);
+        }}
+        onSave={saveUnit}
+      />
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => !open && setDeleteTarget(null)}
+        title="Eliminar unidade orgânica"
+        description={deleteTarget ? `${deleteTarget.sigla} — ${deleteTarget.nome} será removida permanentemente da estrutura.` : undefined}
+        confirmLabel="Eliminar"
+        destructive
+        onConfirm={deleteUnitConfirmed}
       />
     </div>
   );

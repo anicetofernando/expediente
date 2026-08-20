@@ -13,7 +13,7 @@ const config: Config = {
   theme: {
     extend: {
       fontFamily: {
-        sans: ["var(--font-inter)", "Segoe UI", "system-ui", "sans-serif"],
+        sans: ["Segoe UI", "Arial", "system-ui", "sans-serif"],
       },
       colors: {
         // Verde ferroviário CFM: marca, navegação e acções primárias.

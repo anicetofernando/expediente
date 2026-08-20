@@ -23,6 +23,7 @@ export interface DocumentTypeConfig {
   numeracaoPrefixo: string;
   exigeCarimbo: boolean;
   exigeAssinatura: boolean;
+  exigeAprovacaoDirector: boolean;
   workflowId: string;
   activo: boolean;
   ordem: number;
@@ -47,8 +48,7 @@ const defaultConfidentialities: CatalogOption[] = [
 const defaultDocumentOrigins: CatalogOption[] = [
   { id: "orig-sistema", code: "sistema", label: "Criar dentro do sistema", description: "Redigir uma carta directamente no editor institucional.", order: 1, active: true, isDefault: true },
   { id: "orig-importado", code: "importado", label: "Importar documento", description: "Carregar um ficheiro PDF, DOCX ou imagem já existente.", order: 2, active: true, isDefault: false },
-  { id: "orig-digitalizado", code: "digitalizado", label: "Digitalizar documento", description: "Carregar o resultado da digitalização de um documento físico.", order: 3, active: true, isDefault: false },
-  { id: "orig-processo", code: "apenas-processo", label: "Criar apenas o processo", description: "Abrir o processo e anexar o documento principal mais tarde.", order: 4, active: true, isDefault: false },
+  { id: "orig-processo", code: "apenas-processo", label: "Criar apenas o processo", description: "Abrir o processo e anexar o documento principal mais tarde.", order: 3, active: true, isDefault: false },
 ];
 
 const defaultStampChoices: CatalogOption[] = [
@@ -68,8 +68,32 @@ interface CatalogsSnapshot {
   stamps: Stamp[];
 }
 
+let cachedCatalogs: Partial<CatalogsSnapshot> | null | undefined;
+let catalogsRequest: Promise<Partial<CatalogsSnapshot> | null> | undefined;
+
+function loadCatalogs() {
+  if (cachedCatalogs !== undefined) return Promise.resolve(cachedCatalogs);
+  if (!catalogsRequest) {
+    catalogsRequest = fetch("/api/settings/catalogs", { cache: "no-store" })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("Nao foi possivel carregar os catalogos.");
+        const result = await response.json() as { catalogs: Partial<CatalogsSnapshot> | null };
+        cachedCatalogs = result.catalogs;
+        return result.catalogs;
+      })
+      .finally(() => { catalogsRequest = undefined; });
+  }
+  return catalogsRequest;
+}
+
 function buildDefaults(): CatalogsSnapshot {
   return { organizationalUnits: defaultOrganizationalUnits, priorities: defaultPriorities, confidentialities: defaultConfidentialities, documentOrigins: defaultDocumentOrigins, stampChoices: defaultStampChoices, documentTypes: defaultDocumentTypes, documentTemplates: defaultDocumentTemplates, stamps: defaultStamps };
+}
+
+function supportedDocumentOrigins(origins: CatalogOption[]) {
+  return origins
+    .filter((origin) => origin.code !== "digitalizado")
+    .map((origin, index) => ({ ...origin, order: index + 1 }));
 }
 
 interface CatalogsContextValue extends CatalogsSnapshot {
@@ -103,14 +127,14 @@ export function CatalogsProvider({ children }: { children: React.ReactNode }) {
 
   React.useEffect(() => {
     let cancelled = false;
-    void fetch("/api/settings/catalogs", { cache: "no-store" })
-      .then(async (response) => {
-        if (!response.ok) throw new Error("Nao foi possivel carregar os catalogos.");
-        return response.json() as Promise<{ catalogs: Partial<CatalogsSnapshot> | null }>;
-      })
-      .then(({ catalogs: parsed }) => {
+    void loadCatalogs()
+      .then((parsed) => {
         if (cancelled || !parsed) return;
-        const snapshot: CatalogsSnapshot = { ...defaults, ...parsed };
+        const merged: CatalogsSnapshot = { ...defaults, ...parsed };
+        const snapshot: CatalogsSnapshot = {
+          ...merged,
+          documentOrigins: supportedDocumentOrigins(merged.documentOrigins),
+        };
         setOrganizationalUnits(snapshot.organizationalUnits);
         setPriorities(snapshot.priorities);
         setConfidentialities(snapshot.confidentialities);
@@ -128,12 +152,16 @@ export function CatalogsProvider({ children }: { children: React.ReactNode }) {
 
   React.useEffect(() => {
     if (!catalogReady || perfilNavegacao !== "administracao") return;
-    const snapshot: CatalogsSnapshot = { organizationalUnits, priorities, confidentialities, documentOrigins, stampChoices, documentTypes, documentTemplates, stamps };
+    const snapshot: CatalogsSnapshot = { organizationalUnits, priorities, confidentialities, documentOrigins: supportedDocumentOrigins(documentOrigins), stampChoices, documentTypes, documentTemplates, stamps };
     const serialized = JSON.stringify(snapshot);
     if (serialized === persistedSnapshot.current) return;
     const timer = window.setTimeout(() => {
       void fetch("/api/settings/catalogs", { method: "PUT", headers: { "Content-Type": "application/json" }, body: serialized })
-        .then((response) => { if (response.ok) persistedSnapshot.current = serialized; });
+        .then((response) => {
+          if (!response.ok) return;
+          persistedSnapshot.current = serialized;
+          cachedCatalogs = snapshot;
+        });
     }, 500);
     return () => window.clearTimeout(timer);
   }, [catalogReady, perfilNavegacao, organizationalUnits, priorities, confidentialities, documentOrigins, stampChoices, documentTypes, documentTemplates, stamps]);

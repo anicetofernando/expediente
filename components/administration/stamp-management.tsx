@@ -4,6 +4,7 @@ import * as React from "react";
 import {
   Ban,
   CheckCircle2,
+  Trash2,
   History,
   MoreVertical,
   Pencil,
@@ -105,6 +106,7 @@ export function StampManagement() {
   const [editorSession, setEditorSession] = React.useState(0);
   const [usageStamp, setUsageStamp] = React.useState<Stamp | null>(null);
   const [deactivateTarget, setDeactivateTarget] = React.useState<Stamp | null>(null);
+  const [deleteTarget, setDeleteTarget] = React.useState<Stamp | null>(null);
 
   const unitOptions = React.useMemo(
     () => Array.from(new Set(stamps.map((stamp) => stamp.unidade))).sort((a, b) => a.localeCompare(b, "pt")),
@@ -223,6 +225,17 @@ export function StampManagement() {
       variant: "warning",
     });
     setDeactivateTarget(null);
+  }
+
+  function handleDeleteConfirmed() {
+    if (!deleteTarget) return;
+    setStamps((current) => current.filter((item) => item.id !== deleteTarget.id));
+    toast({
+      title: "Carimbo eliminado",
+      description: `«${deleteTarget.nome}» foi removido permanentemente do catálogo.`,
+      variant: "success",
+    });
+    setDeleteTarget(null);
   }
 
   function clearFilters() {
@@ -481,6 +494,10 @@ export function StampManagement() {
                                     Activar
                                   </DropdownMenuItem>
                                 )}
+                                <DropdownMenuItem destructive onClick={() => setDeleteTarget(stamp)}>
+                                  <Trash2 className="size-3.5" />
+                                  Eliminar
+                                </DropdownMenuItem>
                               </DropdownMenuContent>
                             </DropdownMenu>
                           </TableCell>
@@ -539,6 +556,21 @@ export function StampManagement() {
         confirmLabel="Desactivar"
         destructive
         onConfirm={handleDeactivateConfirmed}
+      />
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null);
+        }}
+        title="Eliminar carimbo"
+        description={
+          deleteTarget
+            ? `«${deleteTarget.nome}» será removido permanentemente do catálogo. Expedientes já carimbados com ele mantêm o registo histórico.`
+            : undefined
+        }
+        confirmLabel="Eliminar"
+        destructive
+        onConfirm={handleDeleteConfirmed}
       />
     </div>
   );
