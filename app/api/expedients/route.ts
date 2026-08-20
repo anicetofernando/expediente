@@ -55,6 +55,7 @@ export async function POST(request: NextRequest) {
     if (typeof raw !== "string") return NextResponse.json({ error: "Dados do expediente em falta." }, { status: 400 });
     const input = JSON.parse(raw) as CreateInput;
     if (session.perfilNavegacao === "remetente") input.remetente = session.user.nome;
+    input.unidadeOrigem = session.user.unidadeId;
     const required = [input.tipo,input.unidadeOrigem,input.remetente,input.destinatario,input.assunto,input.prioridade,input.confidencialidade,input.prazo,input.origemDocumento];
     if (required.some((value) => !value)) return NextResponse.json({ error: "Preencha todos os campos obrigatorios." }, { status: 400 });
     if (!isValidFutureOrTodayDate(input.prazo)) return NextResponse.json({ error: "A data de entrega nao pode ser anterior ao dia de hoje." }, { status: 400 });

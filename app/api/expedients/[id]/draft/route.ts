@@ -101,12 +101,13 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
     if (input.origemDocumento === "sistema" && !cleanHtml.replace(/<[^>]*>/g, "").trim()) throw new Error("Escreva o conteudo da carta.");
 
     const updated = await transaction(async (client) => {
-      const found = await client.query<{id:string;protocol:string;status:string;created_by:string}>(
-        "SELECT id,protocol,status,created_by FROM expedients WHERE id=$1 FOR UPDATE", [params.id],
+      const found = await client.query<{id:string;protocol:string;status:string;created_by:string;origin_unit_id:string}>(
+        "SELECT id,protocol,status,created_by,origin_unit_id FROM expedients WHERE id=$1 FOR UPDATE", [params.id],
       );
       const current = found.rows[0];
       if (!current) throw new Error("Rascunho nao encontrado.");
       if (current.status !== "rascunho" || (current.created_by !== session.user.id && session.perfilNavegacao !== "administracao")) throw new Error("Este rascunho ja nao pode ser editado.");
+      input.unidadeOrigem = current.origin_unit_id;
       const main = (await client.query<{id:string;source:string;storage_path:string|null}>(
         "SELECT id,source,storage_path FROM documents WHERE expedient_id=$1 AND document_kind='principal' LIMIT 1", [params.id],
       )).rows[0];

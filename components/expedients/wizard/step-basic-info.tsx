@@ -4,12 +4,14 @@ import * as React from "react";
 import { FieldHint, Label, Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useCatalogs } from "@/lib/catalogs";
+import { useSession } from "@/lib/session";
 import type { Priority, Confidentiality } from "@/types";
 import type { StepProps } from "./types";
 import { todayInMaputo } from "@/lib/date-only";
 
 export function StepBasicInfo({ state, update }: StepProps) {
   const today = todayInMaputo();
+  const { unitName } = useSession();
   const {
     documentTypes,
     organizationalUnits,
@@ -63,15 +65,9 @@ export function StepBasicInfo({ state, update }: StepProps) {
       </div>
 
       <div className="lg:col-span-4">
-        <Label required>Unidade de origem</Label>
-        <Select value={state.unidadeOrigem} onValueChange={(v) => update({ unidadeOrigem: v })}>
-          <SelectTrigger><SelectValue placeholder="Seleccione a unidade" /></SelectTrigger>
-          <SelectContent>
-            {availableUnits.map((unit) => (
-              <SelectItem key={unit.id} value={unit.id}>{unit.sigla} — {unit.nome}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <Label>Unidade de origem</Label>
+        <Input value={unitName} disabled readOnly />
+        <FieldHint>O departamento/unidade a que pertence — não é possível criar em nome de outra unidade.</FieldHint>
       </div>
 
       <div className="lg:col-span-4">

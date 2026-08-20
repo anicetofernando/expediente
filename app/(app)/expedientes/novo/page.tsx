@@ -115,10 +115,11 @@ function NovoExpedienteContent() {
     return {
       ...initialWizardState,
       remetente: user.nome,
+      unidadeOrigem: user.unidadeId,
       prioridade: (priority?.code ?? "") as Priority | "",
       confidencialidade: (confidentiality?.code ?? "") as Confidentiality | "",
     };
-  }, [confidentialities, priorities, user.nome]);
+  }, [confidentialities, priorities, user.nome, user.unidadeId]);
 
   React.useEffect(() => {
     if (defaultsApplied.current) return;
@@ -128,6 +129,7 @@ function NovoExpedienteContent() {
       return {
         ...current,
         remetente: current.remetente || defaults.remetente,
+        unidadeOrigem: defaults.unidadeOrigem,
         prioridade: current.prioridade || defaults.prioridade,
         confidencialidade: current.confidencialidade || defaults.confidencialidade,
       };
