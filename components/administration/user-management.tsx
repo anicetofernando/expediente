@@ -53,7 +53,7 @@ export function UserManagement({
   const [perfilFilter, setPerfilFilter] = React.useState("todos");
   const [estadoFilter, setEstadoFilter] = React.useState("todos");
   const [page, setPage] = React.useState(1);
-  const [pageSize, setPageSize] = React.useState(10);
+  const [pageSize, setPageSize] = React.useState(50);
 
   const [createOpen, setCreateOpen] = React.useState(false);
   const [editingUser, setEditingUser] = React.useState<User | null>(null);

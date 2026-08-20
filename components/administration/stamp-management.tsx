@@ -99,7 +99,7 @@ export function StampManagement() {
   const [unitFilter, setUnitFilter] = React.useState("todas");
   const [statusFilter, setStatusFilter] = React.useState("todos");
   const [page, setPage] = React.useState(1);
-  const [pageSize, setPageSize] = React.useState(10);
+  const [pageSize, setPageSize] = React.useState(50);
 
   const [editorOpen, setEditorOpen] = React.useState(false);
   const [editorStamp, setEditorStamp] = React.useState<Stamp | null>(null);
