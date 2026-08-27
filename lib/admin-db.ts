@@ -11,10 +11,10 @@ export async function listUsers():Promise<User[]> {
 }
 
 export async function listProfiles():Promise<Profile[]> {
-  const result=await query<{id:string;name:string;description:string;slug:Profile["tipoBase"];access_level:Profile["nivel"];scope:Profile["ambito"];permissions:string[];active:boolean;users_count:number}>(`
+  const result=await query<{id:string;name:string;description:string;slug:Profile["tipoBase"];access_level:Profile["nivel"];permissions:string[];active:boolean;users_count:number}>(`
     SELECT p.*,count(up.user_id)::int users_count FROM profiles p LEFT JOIN user_profiles up ON up.profile_id=p.id GROUP BY p.id ORDER BY p.name
   `);
-  return result.rows.map((row)=>({id:row.id,nome:row.name,descricao:row.description,tipoBase:row.slug,nivel:row.access_level,utilizadoresCount:row.users_count,permissoes:row.permissions,ambito:row.scope,estado:row.active?"activo":"inactivo"}));
+  return result.rows.map((row)=>({id:row.id,nome:row.name,descricao:row.description,tipoBase:row.slug,nivel:row.access_level,utilizadoresCount:row.users_count,permissoes:row.permissions,estado:row.active?"activo":"inactivo"}));
 }
 
 export async function listUnits():Promise<OrganizationalUnit[]> {

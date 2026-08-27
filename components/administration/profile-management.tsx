@@ -28,12 +28,6 @@ const NIVEL_LABEL: Record<Profile["nivel"], string> = {
   administracao: "Administração",
 };
 
-const AMBITO_LABEL: Record<Profile["ambito"], string> = {
-  global: "Global",
-  unidade: "Unidade",
-  sector: "Sector",
-};
-
 export function ProfileManagement({ initialProfiles, users }: { initialProfiles: Profile[]; users: User[] }) {
   const { toast } = useToast();
   const [profiles, setProfiles] = React.useState<Profile[]>(initialProfiles);
@@ -64,7 +58,7 @@ export function ProfileManagement({ initialProfiles, users }: { initialProfiles:
   }
 
   async function handleDuplicate(p: Profile) {
-    const response = await fetch("/api/profiles", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ nome: `${p.nome} (cópia)`, descricao: p.descricao, nivel: p.nivel, ambito: p.ambito }) });
+    const response = await fetch("/api/profiles", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ nome: `${p.nome} (cópia)`, descricao: p.descricao, nivel: p.nivel }) });
     const result = await response.json().catch(() => ({}));
     if (!response.ok || !result.profile) return toast({ title: "Não foi possível duplicar", description: result.error ?? "Tente novamente.", variant: "destructive" });
     await fetch(`/api/profiles/${result.profile.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ permissoes: p.permissoes }) });
@@ -118,11 +112,7 @@ export function ProfileManagement({ initialProfiles, users }: { initialProfiles:
             </CardHeader>
             <CardContent className="flex-1 space-y-3.5">
               <p className="text-[13px] leading-relaxed text-graphite-600">{p.descricao}</p>
-              <dl className="grid grid-cols-2 gap-3 border-t border-graphite-150 pt-3 text-[13px]">
-                <div>
-                  <dt className="text-2xs uppercase tracking-wide text-graphite-400">Âmbito</dt>
-                  <dd className="mt-0.5 font-medium text-graphite-800">{AMBITO_LABEL[p.ambito]}</dd>
-                </div>
+              <dl className="border-t border-graphite-150 pt-3 text-[13px]">
                 <div>
                   <dt className="flex items-center gap-1 text-2xs uppercase tracking-wide text-graphite-400"><Users2 className="size-3" /> Utilizadores</dt>
                   <dd className="mt-0.5 font-medium text-graphite-800">{p.utilizadoresCount}</dd>

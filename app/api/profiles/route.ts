@@ -23,9 +23,9 @@ export async function POST(request: Request) {
   const slug = `${base}-${Date.now().toString(36).slice(-5)}`;
   try {
     await query(
-      `INSERT INTO profiles(id,slug,name,description,access_level,scope,permissions,active)
-       VALUES($1,$2,$3,$4,$5,$6,'[]'::jsonb,true)`,
-      [id, slug, input.nome.trim(), input.descricao.trim(), input.nivel || "operacional", input.ambito || "unidade"],
+      `INSERT INTO profiles(id,slug,name,description,access_level,permissions,active)
+       VALUES($1,$2,$3,$4,$5,'[]'::jsonb,true)`,
+      [id, slug, input.nome.trim(), input.descricao.trim(), input.nivel || "operacional"],
     );
   } catch (error) {
     const message = error instanceof Error ? error.message : "";

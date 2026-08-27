@@ -11,7 +11,6 @@ export interface ProfileFormValues {
   nome: string;
   descricao: string;
   nivel: Profile["nivel"];
-  ambito: Profile["ambito"];
 }
 
 export function ProfileFormDialog({
@@ -25,10 +24,10 @@ export function ProfileFormDialog({
   onSubmit: (values: ProfileFormValues) => void | Promise<void>;
   initialProfile?: Profile | null;
 }) {
-  const [values, setValues] = React.useState<ProfileFormValues>({ nome: "", descricao: "", nivel: "operacional", ambito: "unidade" });
+  const [values, setValues] = React.useState<ProfileFormValues>({ nome: "", descricao: "", nivel: "operacional" });
 
   React.useEffect(() => {
-    if (open) setValues(initialProfile ? { nome: initialProfile.nome, descricao: initialProfile.descricao, nivel: initialProfile.nivel, ambito: initialProfile.ambito } : { nome: "", descricao: "", nivel: "operacional", ambito: "unidade" });
+    if (open) setValues(initialProfile ? { nome: initialProfile.nome, descricao: initialProfile.descricao, nivel: initialProfile.nivel } : { nome: "", descricao: "", nivel: "operacional" });
   }, [open, initialProfile]);
 
   const isValid = values.nome.trim().length > 0 && values.descricao.trim().length > 0;
@@ -68,30 +67,18 @@ export function ProfileFormDialog({
                 required
               />
             </div>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div>
-                <Label required>Nível</Label>
-                <Select value={values.nivel} onValueChange={(v) => setValues((s) => ({ ...s, nivel: v as Profile["nivel"] }))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="operacional">Operacional</SelectItem>
-                    <SelectItem value="supervisao">Supervisão</SelectItem>
-                    <SelectItem value="direccao">Direcção</SelectItem>
-                    <SelectItem value="administracao">Administração</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label required>Âmbito</Label>
-                <Select value={values.ambito} onValueChange={(v) => setValues((s) => ({ ...s, ambito: v as Profile["ambito"] }))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="global">Global</SelectItem>
-                    <SelectItem value="unidade">Unidade</SelectItem>
-                    <SelectItem value="sector">Sector</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+            <div>
+              <Label required>Nível</Label>
+              <Select value={values.nivel} onValueChange={(v) => setValues((s) => ({ ...s, nivel: v as Profile["nivel"] }))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="operacional">Operacional</SelectItem>
+                  <SelectItem value="supervisao">Supervisão</SelectItem>
+                  <SelectItem value="direccao">Direcção</SelectItem>
+                  <SelectItem value="administracao">Administração</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="mt-1.5 text-2xs text-graphite-500">Determina o tipo de acesso do perfil: Operacional funciona como Remetente, Supervisão/Direcção como Superior, e Administração como Administrador do Sistema.</p>
             </div>
           </DialogBody>
           <DialogFooter>

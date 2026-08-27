@@ -8,6 +8,7 @@ import { sanitizeDocumentHtml } from "@/lib/sanitize-html";
 import { templateSnapshot } from "@/lib/document-configuration";
 import { rememberStampSignaturePositions, resolveMandatoryStampSignature, signatureMetadataJson, stampMetadataJson } from "@/lib/stamping";
 import { saveFile } from "@/lib/file-storage";
+import { hasAllPermissions } from "@/lib/permissions";
 import type { FreePosition } from "@/types";
 
 export const runtime = "nodejs";
@@ -54,6 +55,9 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     const raw = form.get("data");
     if (typeof raw !== "string") throw new Error("Dados do despacho em falta.");
     const input = JSON.parse(raw) as DespachoInput;
+    if ((input.documentId || input.modo === "sistema") && !hasAllPermissions(session.profile.permissoes, ["carimbos.aplicar", "assinaturas.aplicar"])) {
+      throw new Error("O seu perfil nao tem permissao para aplicar carimbo/assinatura no despacho.");
+    }
     const filePart = form.get("file");
     const file = filePart instanceof File && filePart.size > 0 ? filePart : null;
     if (!input.documentId) {

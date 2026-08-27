@@ -41,3 +41,16 @@ export function hasActionPermission(permissoes: string[], action: string) {
 export function hasAdminAreaPermission(permissoes: string[], area: string) {
   return satisfies(permissoes, ADMIN_AREA_PERMISSIONS[area]);
 }
+
+// Verificacao ad-hoc (qualquer um dos ids satisfaz) para paginas/rotas fora do
+// admin e das accoes de expediente, ex.: livro, relatorios, anexos.
+export function hasPermission(permissoes: string[], ids: string[]) {
+  return satisfies(permissoes, ids);
+}
+
+// Verificacao ad-hoc que exige TODOS os ids (usada quando uma unica accao
+// aplica dois efeitos distintos, ex.: despacho aplica carimbo E assinatura).
+export function hasAllPermissions(permissoes: string[], ids: string[]) {
+  if (permissoes.includes("*")) return true;
+  return ids.every((id) => permissoes.includes(id));
+}

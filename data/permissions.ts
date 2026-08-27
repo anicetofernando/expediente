@@ -5,22 +5,17 @@ export const permissionModules: PermissionModule[] = [
     modulo: "Expedientes",
     permissoes: [
       { id: "expedientes.criar", label: "Criar expediente", descricao: "Iniciar novos processos de expediente." },
-      { id: "expedientes.ver.proprios", label: "Ver expedientes próprios", descricao: "Consultar apenas processos criados pelo próprio utilizador." },
-      { id: "expedientes.ver.unidade", label: "Ver expedientes da unidade", descricao: "Consultar todos os processos da unidade orgânica." },
-      { id: "expedientes.ver.todos", label: "Ver todos os expedientes", descricao: "Consultar processos de qualquer unidade orgânica." },
       { id: "expedientes.encaminhar", label: "Encaminhar", descricao: "Enviar o processo para outra unidade ou responsável." },
       { id: "expedientes.parecer", label: "Emitir parecer", descricao: "Registar parecer técnico sobre o processo." },
       { id: "expedientes.aprovar", label: "Aprovar / Rejeitar", descricao: "Tomar decisão final sobre o processo." },
       { id: "expedientes.devolver", label: "Devolver", descricao: "Devolver o processo para correcção." },
       { id: "expedientes.arquivar", label: "Arquivar", descricao: "Marcar o processo como concluído e arquivado." },
-      { id: "expedientes.eliminar", label: "Eliminar", descricao: "Remover permanentemente um expediente (acção crítica)." },
     ],
   },
   {
     modulo: "Documentos",
     permissoes: [
       { id: "documentos.anexar", label: "Anexar ficheiros", descricao: "Adicionar anexos a um processo." },
-      { id: "documentos.gerir", label: "Gerir documentos", descricao: "Editar, substituir ou remover documentos." },
       { id: "documentos.imprimir", label: "Imprimir", descricao: "Imprimir documentos do sistema." },
       { id: "documentos.exportar", label: "Exportar", descricao: "Descarregar documentos originais ou carimbados." },
       { id: "documentos.modelos.gerir", label: "Gerir modelos", descricao: "Criar e editar modelos de documento." },
@@ -30,10 +25,9 @@ export const permissionModules: PermissionModule[] = [
     modulo: "Secretaria",
     permissoes: [
       { id: "secretaria.receber", label: "Receber expediente", descricao: "Registar a recepção de documentos." },
-      { id: "secretaria.protocolar", label: "Protocolar", descricao: "Atribuir número de protocolo." },
-      { id: "secretaria.carimbar", label: "Aplicar carimbo", descricao: "Aplicar carimbos institucionais aos documentos." },
+      { id: "secretaria.protocolar", label: "Protocolar", descricao: "Atribuir número de protocolo e aplicar o carimbo/assinatura da unidade." },
       { id: "secretaria.encaminhar", label: "Encaminhar", descricao: "Distribuir processos às unidades responsáveis." },
-      { id: "livro.gerir", label: "Gerir livro de expediente", descricao: "Consultar, exportar e fechar o livro digital." },
+      { id: "livro.gerir", label: "Gerir livro de expediente", descricao: "Consultar o livro digital de expediente." },
     ],
   },
   {

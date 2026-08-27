@@ -12,6 +12,7 @@ import { resolveSecretaryId } from "@/lib/routing";
 import { saveFile } from "@/lib/file-storage";
 import { resolveMandatoryStampSignatureByUnitId, signatureMetadataJson, stampMetadataJson } from "@/lib/stamping";
 import { generateProtocolNumber } from "@/lib/numbering";
+import { hasPermission } from "@/lib/permissions";
 import type { DocumentTemplate, FreePosition } from "@/types";
 
 export const runtime = "nodejs";
@@ -98,6 +99,9 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
     const attachmentFiles = form.getAll("attachments").filter((part): part is File => part instanceof File && part.size > 0);
     if (mainFile) validateFile(mainFile);
     attachmentFiles.forEach(validateFile);
+    if (attachmentFiles.length > 0 && !hasPermission(session.profile.permissoes, ["documentos.anexar"])) {
+      throw new Error("O seu perfil nao tem permissao para anexar ficheiros.");
+    }
     const cleanHtml = input.origemDocumento === "sistema" ? sanitizeDocumentHtml(input.conteudo ?? "") : "";
     if (input.origemDocumento === "sistema" && !cleanHtml.replace(/<[^>]*>/g, "").trim()) throw new Error("Escreva o conteudo da carta.");
 

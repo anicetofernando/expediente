@@ -11,6 +11,7 @@ import { resolveSecretaryId } from "@/lib/routing";
 import { saveFile } from "@/lib/file-storage";
 import { resolveMandatoryStampSignatureByUnitId, signatureMetadataJson, stampMetadataJson } from "@/lib/stamping";
 import { generateProtocolNumber } from "@/lib/numbering";
+import { hasPermission } from "@/lib/permissions";
 import type { FreePosition } from "@/types";
 
 export const runtime = "nodejs";
@@ -50,6 +51,9 @@ export async function POST(request: NextRequest) {
   if (!session || !["remetente", "administracao"].includes(session.perfilNavegacao)) {
     return NextResponse.json({ error: "Sem permissao para criar expedientes." }, { status: 403 });
   }
+  if (!hasPermission(session.profile.permissoes, ["expedientes.criar"])) {
+    return NextResponse.json({ error: "O seu perfil nao tem permissao para criar expedientes." }, { status: 403 });
+  }
   try {
     const form = await request.formData();
     const raw = form.get("data");
@@ -66,6 +70,9 @@ export async function POST(request: NextRequest) {
     const attachmentFiles = form.getAll("attachments").filter((part): part is File => part instanceof File && part.size > 0);
     if (input.origemDocumento === "importado" && !mainFile) {
       return NextResponse.json({ error: "Seleccione o documento principal." }, { status: 400 });
+    }
+    if (attachmentFiles.length > 0 && !hasPermission(session.profile.permissoes, ["documentos.anexar"])) {
+      return NextResponse.json({ error: "O seu perfil nao tem permissao para anexar ficheiros." }, { status: 403 });
     }
     const cleanHtml = input.origemDocumento === "sistema" ? sanitizeDocumentHtml(input.conteudo ?? "") : "";
     if (input.origemDocumento === "sistema" && !cleanHtml.replace(/<[^>]*>/g, "").trim()) {

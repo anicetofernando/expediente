@@ -1,5 +1,5 @@
 import { PageHeader } from "@/components/shared/page-header";
-import { requireSession } from "@/lib/auth";
+import { requirePermission } from "@/lib/auth";
 import { listExpedients } from "@/lib/expedients-db";
 import type { ExpedientStatus } from "@/types";
 import { LivroBoard, type LivroRow } from "@/components/secretariat/livro-board";
@@ -48,7 +48,8 @@ function buildLivroRows(allExpedients: Awaited<ReturnType<typeof listExpedients>
 }
 
 export default async function LivroPage() {
-  const rows = buildLivroRows(await listExpedients(await requireSession(), "all"));
+  const session = await requirePermission(["secretaria", "administracao"], ["livro.gerir"]);
+  const rows = buildLivroRows(await listExpedients(session, "all"));
 
   return (
     <div className="flex h-full min-h-0 flex-col">

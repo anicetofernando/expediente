@@ -6,7 +6,7 @@ import { Table, TableContainer, TableHead, TableBody, TableRow, TableHeaderCell,
 import { PriorityBadge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { organizationalUnits } from "@/data/organization";
-import { requireSession } from "@/lib/auth";
+import { requirePermission } from "@/lib/auth";
 import { listExpedients } from "@/lib/expedients-db";
 import { formatDate } from "@/lib/utils";
 import { CheckCircle2 } from "lucide-react";
@@ -35,7 +35,8 @@ function unidadeMaisFrequente(unidades: string[]): string {
 }
 
 export default async function ProcessosAtrasadosPage() {
-  const allExpedients = await listExpedients(await requireSession(), "all");
+  const session = await requirePermission(["superior", "administracao"], ["relatorios.ver"]);
+  const allExpedients = await listExpedients(session, "all");
   const atrasados = allExpedients
     .filter((e) => e.atrasado === true || e.estado === "atrasado" || e.estado === "expirado")
     .map((e) => ({ ...e, dias: diasAtraso(e.prazo) }))

@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { SimpleTooltip } from "@/components/ui/tooltip";
+import { useSession } from "@/lib/session";
+import { hasPermission } from "@/lib/permissions";
 
 type VersionView = "pdf" | "original";
 
@@ -19,6 +21,9 @@ function pdfName(name: string) {
 }
 
 export function DocumentViewer({ document: doc }: { document: ExpedientDocument }) {
+  const { profile } = useSession();
+  const canExport = hasPermission(profile.permissoes, ["documentos.exportar"]);
+  const canPrint = hasPermission(profile.permissoes, ["documentos.imprimir"]);
   const [version, setVersion] = React.useState<VersionView>("pdf");
   const [fullscreen, setFullscreen] = React.useState(false);
   const pdfUrl = doc.pdfUrl ?? doc.downloadUrl;
@@ -71,14 +76,18 @@ export function DocumentViewer({ document: doc }: { document: ExpedientDocument 
             </SelectContent>
           </Select>
         )}
-        <SimpleTooltip label="Descarregar PDF">
-          <Button asChild variant="ghost" size="icon" className="size-8" disabled={!pdfUrl}>
-            <a href={pdfUrl ? withDownload(pdfUrl) : "#"} download={pdfName(doc.nome)} aria-label="Descarregar PDF"><Download className="size-4" /></a>
-          </Button>
-        </SimpleTooltip>
-        <SimpleTooltip label="Imprimir documento">
-          <Button variant="ghost" size="icon" className="size-8" onClick={printDocument} disabled={!pdfUrl}><Printer className="size-4" /></Button>
-        </SimpleTooltip>
+        {canExport && (
+          <SimpleTooltip label="Descarregar PDF">
+            <Button asChild variant="ghost" size="icon" className="size-8" disabled={!pdfUrl}>
+              <a href={pdfUrl ? withDownload(pdfUrl) : "#"} download={pdfName(doc.nome)} aria-label="Descarregar PDF"><Download className="size-4" /></a>
+            </Button>
+          </SimpleTooltip>
+        )}
+        {canPrint && (
+          <SimpleTooltip label="Imprimir documento">
+            <Button variant="ghost" size="icon" className="size-8" onClick={printDocument} disabled={!pdfUrl}><Printer className="size-4" /></Button>
+          </SimpleTooltip>
+        )}
         <SimpleTooltip label="Ecrã inteiro">
           <Button variant="ghost" size="icon" className="size-8" onClick={() => setFullscreen(true)} disabled={!viewUrl}><Maximize2 className="size-4" /></Button>
         </SimpleTooltip>

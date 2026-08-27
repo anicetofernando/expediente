@@ -1,14 +1,14 @@
 import { PageHeader } from "@/components/shared/page-header";
 import { StatCard } from "@/components/shared/stat-card";
 import { AuditLogTable } from "@/components/reports/audit-log-table";
-import { requireProfile } from "@/lib/auth";
+import { requirePermission } from "@/lib/auth";
 import { query } from "@/lib/db";
 import type { AuditEntry } from "@/types";
 
 export const metadata = { title: "Auditoria" };
 
 export default async function AuditoriaPage() {
-  await requireProfile("administracao");
+  await requirePermission(["administracao"], ["auditoria.ver"]);
   const result=await query<{id:string;created_at:string;user_name:string|null;action:string;entity_type:string;entity_id:string;details:Record<string,unknown>;ip:string|null;result:AuditEntry["resultado"]}>(`SELECT a.id::text,a.created_at,u.full_name user_name,a.action,a.entity_type,a.entity_id,a.details,a.ip::text,a.result FROM audit_logs a LEFT JOIN users u ON u.id=a.user_id ORDER BY a.created_at DESC LIMIT 1000`);
   const auditEntries:AuditEntry[]=result.rows.map((entry)=>({id:entry.id,data:new Date(entry.created_at).toISOString(),utilizador:entry.user_name??"Desconhecido",accao:entry.action,entidade:entry.entity_type,entidadeId:entry.entity_id,detalhes:typeof entry.details.message==="string"?entry.details.message:JSON.stringify(entry.details),ip:entry.ip??"—",resultado:entry.result}));
   const total = auditEntries.length;

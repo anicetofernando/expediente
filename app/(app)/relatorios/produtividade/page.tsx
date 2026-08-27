@@ -5,13 +5,14 @@ import { Table, TableContainer, TableHead, TableBody, TableRow, TableHeaderCell,
 import { UserAvatar } from "@/components/ui/avatar";
 import { TopProductivityChart } from "@/components/dashboard/charts";
 import { productivityByUser } from "@/lib/dashboard-metrics";
-import { requireSession } from "@/lib/auth";
+import { requirePermission } from "@/lib/auth";
 import { listExpedients } from "@/lib/expedients-db";
 
 export const metadata = { title: "Produtividade" };
 
 export default async function ProdutividadePage() {
-  const expedients = await listExpedients(await requireSession(), "all");
+  const session = await requirePermission(["superior", "administracao"], ["relatorios.ver"]);
+  const expedients = await listExpedients(session, "all");
   const linhas = productivityByUser(expedients);
   const maxConcluidos = Math.max(1, ...linhas.map((l) => l.concluidos));
 

@@ -65,7 +65,6 @@ export interface Profile {
   nivel: "operacional" | "supervisao" | "direccao" | "administracao";
   utilizadoresCount: number;
   permissoes: string[];
-  ambito: "global" | "unidade" | "sector";
   estado: "activo" | "inactivo";
 }
 

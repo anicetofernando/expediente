@@ -3,13 +3,14 @@ import { StatCard } from "@/components/shared/stat-card";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { StageAvgTimeChart } from "@/components/dashboard/charts";
 import { avgResponseTimeByUnit, coreStats } from "@/lib/dashboard-metrics";
-import { requireSession } from "@/lib/auth";
+import { requirePermission } from "@/lib/auth";
 import { listReportExpedients } from "@/lib/expedients-db";
 
 export const metadata = { title: "Tempos de resposta" };
 
 export default async function TemposRespostaPage() {
-  const expedients = await listReportExpedients(await requireSession());
+  const session = await requirePermission(["superior", "administracao"], ["relatorios.ver"]);
+  const expedients = await listReportExpedients(session);
   const stats = coreStats(expedients);
   const porUnidade = avgResponseTimeByUnit(expedients);
   const maisLenta = porUnidade[0];

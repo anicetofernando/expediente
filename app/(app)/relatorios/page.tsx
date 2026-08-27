@@ -11,13 +11,14 @@ import {
   DeadlineComplianceChart,
 } from "@/components/dashboard/charts";
 import { ExportReportButton, PeriodSelect } from "@/components/reports/report-controls";
-import { requireSession } from "@/lib/auth";
+import { requirePermission } from "@/lib/auth";
 import { listReportExpedients } from "@/lib/expedients-db";
 
 export const metadata = { title: "Visão estatística" };
 
 export default async function RelatoriosPage() {
-  const expedients = await listReportExpedients(await requireSession());
+  const session = await requirePermission(["superior", "administracao"], ["relatorios.ver"]);
+  const expedients = await listReportExpedients(session);
   const stats = coreStats(expedients);
 
   return (

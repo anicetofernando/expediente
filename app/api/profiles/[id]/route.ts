@@ -9,11 +9,11 @@ export async function PATCH(request: Request, { params }: { params: { id: string
   if (!input) return NextResponse.json({ error: "Dados invalidos." }, { status: 400 });
   const result = await query(
     `UPDATE profiles SET name=COALESCE($2,name),description=COALESCE($3,description),
-       access_level=COALESCE($4,access_level),scope=COALESCE($5,scope),
-       permissions=COALESCE($6::jsonb,permissions),active=COALESCE($7,active)
+       access_level=COALESCE($4,access_level),
+       permissions=COALESCE($5::jsonb,permissions),active=COALESCE($6,active)
      WHERE id=$1 RETURNING id`,
     [params.id, input.nome?.trim() || null, input.descricao?.trim() || null, input.nivel || null,
-      input.ambito || null, Array.isArray(input.permissoes) ? JSON.stringify(input.permissoes) : null,
+      Array.isArray(input.permissoes) ? JSON.stringify(input.permissoes) : null,
       typeof input.activo === "boolean" ? input.activo : null],
   );
   if (!result.rowCount) return NextResponse.json({ error: "Perfil nao encontrado." }, { status: 404 });

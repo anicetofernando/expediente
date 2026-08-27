@@ -122,7 +122,6 @@ async function readCurrentSession(): Promise<AuthSession | null> {
       nivel: row.access_level,
       utilizadoresCount: 1,
       permissoes: row.permissions,
-      ambito: row.profile_scope,
       estado: "activo",
     },
     perfilNavegacao: row.profile_slug,
@@ -150,6 +149,16 @@ export async function requireAdminArea(area: string) {
   const session = await requireProfile("administracao");
   const { hasAdminAreaPermission } = await import("@/lib/permissions");
   if (!hasAdminAreaPermission(session.profile.permissoes, area)) redirect(`/`);
+  return session;
+}
+
+// Para paginas fora do admin que ainda assim dependem de uma permissao
+// especifica (ex.: livro, relatorios) — restringe por tipo de perfil e,
+// dentro desse tipo, pela permissao concreta atribuida ao perfil.
+export async function requirePermission(allowed: PerfilNavegacao[], permissionIds: string[]) {
+  const session = await requireProfile(...allowed);
+  const { hasPermission } = await import("@/lib/permissions");
+  if (!hasPermission(session.profile.permissoes, permissionIds)) redirect(`/`);
   return session;
 }
 
