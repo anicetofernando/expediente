@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import type { Expedient } from "@/types";
 import {
-  User, Building2, CalendarClock, FileText, History as HistoryIcon,
+  User, Building2, CalendarClock, FileText, ArrowRight, History as HistoryIcon,
 } from "lucide-react";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { StatusBadge, PriorityBadge, ConfidentialityBadge } from "@/components/ui/badge";
@@ -52,8 +52,7 @@ export default async function ExpedientDetailPage({ params }: { params: { id: st
           </div>
         </div>
 
-        <div className="mt-3 grid gap-x-6 gap-y-2 border-t border-graphite-150 pt-3 sm:grid-cols-2 xl:grid-cols-4">
-          <MetaField icon={User} label="Responsável" value={expedient.responsavelActual} />
+        <div className="mt-3 grid gap-x-6 gap-y-2 border-t border-graphite-150 pt-3 sm:grid-cols-3">
           <MetaField icon={Building2} label="Unidade de origem" value={expedient.unidadeOrigem} />
           <MetaField icon={CalendarClock} label="Entrada" value={formatDate(expedient.dataEntrada)} />
           <MetaField icon={CalendarClock} label="Prazo" value={formatDate(expedient.prazo)} highlight={expedient.atrasado} />
@@ -72,19 +71,20 @@ export default async function ExpedientDetailPage({ params }: { params: { id: st
             </TabsList>
 
             <TabsContent value="visao-geral" className="pt-5">
-              <div className="space-y-5">
-                <dl className="grid grid-cols-1 gap-4 text-[13px] md:grid-cols-2 xl:grid-cols-4">
-                  <Field label="Remetente" value={`${expedient.remetente.nome}${expedient.remetente.unidade ? ` · ${expedient.remetente.unidade}` : ""}`} />
-                  <Field label="Destinatário" value={expedient.destinatario} />
-                  <Field label="Tipo de expediente" value={expedient.tipoLabel} />
-                  <Field label="Próxima etapa" value={expedient.proximaEtapa} />
-                  <Field label="Descrição" value={expedient.descricao} block />
-                  {expedient.observacoes && <Field label="Observações" value={expedient.observacoes} block />}
-                </dl>
-                <div className="min-h-[760px]">
-                  <p className="mb-2 text-[13px] font-semibold text-graphite-800">Documento principal</p>
-                  <div className="h-[78vh] min-h-[740px]">{principal ? <DocumentViewer document={principal} /> : <EmptyState title="Sem documento principal" />}</div>
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 gap-x-6 gap-y-2 border-b border-graphite-150 pb-4 text-[13px] sm:grid-cols-2 xl:grid-cols-4">
+                  <MetaField icon={User} label="Remetente" value={`${expedient.remetente.nome}${expedient.remetente.unidade ? ` · ${expedient.remetente.unidade}` : ""}`} />
+                  <MetaField icon={Building2} label="Destinatário" value={expedient.destinatario} />
+                  <MetaField icon={FileText} label="Tipo de expediente" value={expedient.tipoLabel} />
+                  <MetaField icon={ArrowRight} label="Próxima etapa" value={expedient.proximaEtapa} />
                 </div>
+                {(expedient.descricao || expedient.observacoes) && (
+                  <dl className="grid grid-cols-1 gap-4 text-[13px] sm:grid-cols-2">
+                    {expedient.descricao && <Field label="Descrição" value={expedient.descricao} block />}
+                    {expedient.observacoes && <Field label="Observações" value={expedient.observacoes} block />}
+                  </dl>
+                )}
+                <div className="h-[80vh] min-h-[760px]">{principal ? <DocumentViewer document={principal} /> : <EmptyState title="Sem documento principal" />}</div>
               </div>
 
               {expedient.processosRelacionados && expedient.processosRelacionados.length > 0 && (
