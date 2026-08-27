@@ -83,9 +83,11 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         const doc = await client.query<{ id: string }>("SELECT id FROM documents WHERE id=$1 AND expedient_id=$2 AND document_kind='resposta'", [input.documentId, exp.id]);
         if (!doc.rows[0]) throw new Error("Despacho nao encontrado.");
         const resolved = await resolveMandatoryStampSignature(client, session.user, session.unitName, session.perfilNavegacao);
+        const stampEntry = JSON.stringify(stampMetadataJson(resolved.stamp, session.user.nome, input.posicaoCarimbo));
+        const signatureEntry = JSON.stringify(signatureMetadataJson(resolved.signature, session.user, input.posicaoAssinatura));
         await client.query(
-          "UPDATE documents SET stamp_metadata=$2::jsonb,signature_metadata=$3::jsonb WHERE id=$1",
-          [input.documentId, JSON.stringify(stampMetadataJson(resolved.stamp, session.user.nome, input.posicaoCarimbo)), JSON.stringify(signatureMetadataJson(resolved.signature, session.user, input.posicaoAssinatura))],
+          "UPDATE documents SET stamp_metadata=$2::jsonb,signature_metadata=$3::jsonb,stamps_metadata=$4::jsonb,signatures_metadata=$5::jsonb WHERE id=$1",
+          [input.documentId, stampEntry, signatureEntry, `[${stampEntry}]`, `[${signatureEntry}]`],
         );
         await rememberStampSignaturePositions(client, resolved.stamp, resolved.signature, input.posicaoCarimbo, input.posicaoAssinatura);
         return { documentId: input.documentId, finalized: true };
@@ -96,11 +98,13 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         const clean = sanitizeDocumentHtml(input.conteudo ?? "");
         const template = await templateSnapshot(client, input.modeloId);
         const resolved = await resolveMandatoryStampSignature(client, session.user, session.unitName, session.perfilNavegacao);
+        const stampEntry = JSON.stringify(stampMetadataJson(resolved.stamp, session.user.nome));
+        const signatureEntry = JSON.stringify(signatureMetadataJson(resolved.signature, session.user));
         await client.query(
-          `INSERT INTO documents(id,expedient_id,name,document_kind,source,mime_type,size_bytes,page_count,content_html,confidentiality,created_by,stamp_id,stamped,signed,stamp_metadata,signature_metadata,template_metadata)
-           VALUES($1,$2,$3,'resposta','sistema','text/html',$4,1,$5,'interno',$6,$7,true,true,$8::jsonb,$9::jsonb,$10::jsonb)`,
+          `INSERT INTO documents(id,expedient_id,name,document_kind,source,mime_type,size_bytes,page_count,content_html,confidentiality,created_by,stamp_id,stamped,signed,stamp_metadata,signature_metadata,stamps_metadata,signatures_metadata,template_metadata)
+           VALUES($1,$2,$3,'resposta','sistema','text/html',$4,1,$5,'interno',$6,$7,true,true,$8::jsonb,$9::jsonb,$10::jsonb,$11::jsonb,$12::jsonb)`,
           [documentId, exp.id, `Despacho - ${exp.protocol}.html`, Buffer.byteLength(clean, "utf8"), clean, session.user.id, resolved.stamp.id,
-            JSON.stringify(stampMetadataJson(resolved.stamp, session.user.nome)), JSON.stringify(signatureMetadataJson(resolved.signature, session.user)), template ? JSON.stringify(template) : null],
+            stampEntry, signatureEntry, `[${stampEntry}]`, `[${signatureEntry}]`, template ? JSON.stringify(template) : null],
         );
       } else if (file) {
         const bytes = Buffer.from(await file.arrayBuffer());

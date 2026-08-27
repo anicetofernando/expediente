@@ -107,21 +107,21 @@ export interface ExpedientDocument {
   mimeType?: string;
   downloadUrl?: string;
   pdfUrl?: string;
-  carimboDetalhes?: {
+  carimbosDetalhes: {
     id?: string;
     nome: string;
     posicao?: string;
     aplicadoPor?: string;
     aplicadoEm?: string;
-  };
+  }[];
   assinaturaSolicitada?: boolean;
-  assinaturaDetalhes?: {
+  assinaturasDetalhes: {
     id?: string;
     proprietario: string;
     cargo?: string;
     aplicadoPor?: string;
     aplicadoEm?: string;
-  };
+  }[];
 }
 
 export interface Delegation {

@@ -131,7 +131,8 @@ export async function listDocuments(session: AuthSession): Promise<ListedDocumen
     id:string;expedient_id:string;protocol:string;subject:string;name:string;document_kind:ExpedientDocument["tipo"];
     source:ExpedientDocument["origem"];mime_type:string|null;size_bytes:string|number;page_count:number;
     confidentiality:Confidentiality;stamped:boolean;signed:boolean;version:number;created_at:string;creator_name:string;
-    stamp_metadata:{aplicadoEm?:string}|null;signature_metadata:{aplicadoEm?:string}|null;
+    stamps_metadata:{id?:string;nome:string;posicao?:string;aplicadoPor?:string;aplicadoEm?:string}[];
+    signatures_metadata:{id?:string;proprietario:string;cargo?:string;aplicadoPor?:string;aplicadoEm?:string}[];
   }>(`SELECT d.*,e.protocol,e.subject,u.full_name creator_name
         FROM documents d JOIN expedients e ON e.id=d.expedient_id JOIN users u ON u.id=d.created_by
        WHERE ${access.sql} ORDER BY d.created_at DESC`, access.params);
@@ -141,7 +142,8 @@ export async function listDocuments(session: AuthSession): Promise<ListedDocumen
     paginas:doc.page_count,tamanho:formatSize(Number(doc.size_bytes)),criadoEm:iso(doc.created_at),criadoPor:doc.creator_name,
     confidencialidade:doc.confidentiality,carimbado:doc.stamped,assinado:doc.signed,versao:doc.version,origem:doc.source,
     mimeType:doc.mime_type??undefined,downloadUrl:`/api/documents/${doc.id}`,
-    pdfUrl:`/api/documents/${doc.id}/pdf?v=${encodeURIComponent(doc.signature_metadata?.aplicadoEm ?? doc.stamp_metadata?.aplicadoEm ?? doc.created_at)}`,
+    pdfUrl:`/api/documents/${doc.id}/pdf?v=${encodeURIComponent(doc.signatures_metadata.at(-1)?.aplicadoEm ?? doc.stamps_metadata.at(-1)?.aplicadoEm ?? doc.created_at)}`,
+    carimbosDetalhes:doc.stamps_metadata,assinaturasDetalhes:doc.signatures_metadata,
     protocolo:doc.protocol,expedienteId:doc.expedient_id,assunto:doc.subject,
   }));
 }
@@ -179,6 +181,7 @@ interface DocumentRow {
   confidentiality: Confidentiality; stamped: boolean; signed: boolean; version: number; created_at: string; creator_name: string;
   stamp_id: string | null; signature_requested: boolean;
   stamp_metadata: Record<string, string> | null; signature_metadata: Record<string, string> | null;
+  stamps_metadata: Record<string, string>[]; signatures_metadata: Record<string, string>[];
 }
 interface TimelineRow { id: string; event_type: TimelineEvent["tipo"]; title: string; description: string; created_at: string; user_name: string | null; unit_name: string | null }
 interface CommentRow { id: string; body: string; internal: boolean; created_at: string; author_name: string; job_title: string }
@@ -203,20 +206,18 @@ export async function getExpedient(session: AuthSession, id: string) {
     paginas: doc.page_count, tamanho: formatSize(Number(doc.size_bytes)), criadoEm: iso(doc.created_at), criadoPor: doc.creator_name,
     confidencialidade: doc.confidentiality, carimbado: doc.stamped, assinado: doc.signed, versao: doc.version, origem: doc.source,
     conteudoHtml: doc.content_html ?? undefined, mimeType: doc.mime_type ?? undefined, downloadUrl: `/api/documents/${doc.id}`,
-    // O parametro v muda sempre que o carimbo/assinatura sao (re)aplicados (ex.: protocolar) —
+    // O parametro v muda sempre que um novo carimbo/assinatura e acrescentado (ex.: protocolar) —
     // sem isto o <iframe> do visualizador mantem o PDF antigo em cache, pois o src fica identico.
-    pdfUrl: `/api/documents/${doc.id}/pdf?v=${encodeURIComponent(doc.signature_metadata?.aplicadoEm ?? doc.stamp_metadata?.aplicadoEm ?? doc.created_at)}`,
-    carimboDetalhes: doc.stamp_metadata ? {
-      id: doc.stamp_metadata.id, nome: doc.stamp_metadata.nome ?? "Carimbo institucional",
-      posicao: doc.stamp_metadata.posicao, aplicadoPor: doc.stamp_metadata.aplicadoPor,
-      aplicadoEm: doc.stamp_metadata.aplicadoEm,
-    } : undefined,
+    pdfUrl: `/api/documents/${doc.id}/pdf?v=${encodeURIComponent(doc.signatures_metadata.at(-1)?.aplicadoEm ?? doc.stamps_metadata.at(-1)?.aplicadoEm ?? doc.created_at)}`,
+    carimbosDetalhes: doc.stamps_metadata.map((stamp) => ({
+      id: stamp.id, nome: stamp.nome ?? "Carimbo institucional",
+      posicao: stamp.posicao, aplicadoPor: stamp.aplicadoPor, aplicadoEm: stamp.aplicadoEm,
+    })),
     assinaturaSolicitada: doc.signature_requested,
-    assinaturaDetalhes: doc.signature_metadata ? {
-      id: doc.signature_metadata.id, proprietario: doc.signature_metadata.proprietario ?? "Assinatura institucional",
-      cargo: doc.signature_metadata.cargo, aplicadoPor: doc.signature_metadata.aplicadoPor,
-      aplicadoEm: doc.signature_metadata.aplicadoEm,
-    } : undefined,
+    assinaturasDetalhes: doc.signatures_metadata.map((signature) => ({
+      id: signature.id, proprietario: signature.proprietario ?? "Assinatura institucional",
+      cargo: signature.cargo, aplicadoPor: signature.aplicadoPor, aplicadoEm: signature.aplicadoEm,
+    })),
   }));
   expedient.timeline = timeline.rows.map((event) => ({ id:event.id,tipo:event.event_type,titulo:event.title,descricao:event.description,utilizador:event.user_name ?? "Sistema",unidade:event.unit_name ?? "—",data:iso(event.created_at) }));
   expedient.comentarios = comments.rows.map((comment): Comment => ({ id:comment.id,autor:comment.author_name,cargo:comment.job_title,data:iso(comment.created_at),texto:comment.body,interno:comment.internal }));

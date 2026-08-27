@@ -95,9 +95,13 @@ export async function POST(request:NextRequest,{params}:{params:{id:string}}){
       await client.query(`UPDATE expedients SET protocol=$2,status=COALESCE($3,status),responsible_user_id=$4,recipient_unit_id=$5,next_step=$6,priority=CASE WHEN $7='escalar' THEN 'urgente' ELSE priority END,completed_at=CASE WHEN $7='arquivar' THEN now() ELSE completed_at END,submitted_at=CASE WHEN $7='submeter' THEN now() ELSE submitted_at END,origin_secretary_id=COALESCE(origin_secretary_id,$8) WHERE id=$1`,[exp.id,protocol,next??null,responsible,recipient,nextStep,action,originSecretary]);
       if(action==="protocolar"){
         const resolved=await resolveMandatoryStampSignature(client,session.user,session.unitName,session.perfilNavegacao);
+        const stampEntry=stampMetadataJson(resolved.stamp,session.user.nome,input.posicaoCarimbo);
+        const signatureEntry=signatureMetadataJson(resolved.signature,session.user,input.posicaoAssinatura);
+        // O carimbo/assinatura da secretaria ACRESCENTAM-SE ao que ja estiver no documento
+        // (ex.: o do remetente, se aplicado na criacao) -- nenhuma marca anterior desaparece.
         await client.query(
-          "UPDATE documents SET stamped=true,signed=true,stamp_id=$2,stamp_metadata=$3::jsonb,signature_metadata=$4::jsonb WHERE expedient_id=$1 AND document_kind='principal'",
-          [exp.id,resolved.stamp.id,JSON.stringify(stampMetadataJson(resolved.stamp,session.user.nome,input.posicaoCarimbo)),JSON.stringify(signatureMetadataJson(resolved.signature,session.user,input.posicaoAssinatura))],
+          "UPDATE documents SET stamped=true,signed=true,stamp_id=$2,stamp_metadata=$3::jsonb,signature_metadata=$4::jsonb,stamps_metadata=stamps_metadata||$3::jsonb,signatures_metadata=signatures_metadata||$4::jsonb WHERE expedient_id=$1 AND document_kind='principal'",
+          [exp.id,resolved.stamp.id,JSON.stringify(stampEntry),JSON.stringify(signatureEntry)],
         );
         await rememberStampSignaturePositions(client,resolved.stamp,resolved.signature,input.posicaoCarimbo,input.posicaoAssinatura);
       }

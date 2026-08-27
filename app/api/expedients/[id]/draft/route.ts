@@ -144,29 +144,33 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
         let stampId: string | null = null;
         let stampMeta: string | null = null;
         let sigMeta: string | null = null;
+        let stampsMeta = "[]";
+        let sigsMeta = "[]";
         if (input.usarCarimboAssinatura) {
           const resolved = await resolveMandatoryStampSignatureByUnitId(client, input.unidadeOrigem, session.user, session.perfilNavegacao);
           stampId = resolved.stamp.id;
           stampMeta = JSON.stringify(stampMetadataJson(resolved.stamp, session.user.nome, input.posicaoCarimbo));
           sigMeta = JSON.stringify(signatureMetadataJson(resolved.signature, session.user, input.posicaoAssinatura));
+          stampsMeta = `[${stampMeta}]`;
+          sigsMeta = `[${sigMeta}]`;
         }
         if (main) {
           await client.query(
-            `UPDATE documents SET name=$2,source='sistema',mime_type='text/html',size_bytes=$3,page_count=1,storage_path=NULL,content_html=$4,confidentiality=$5,stamp_id=$6,signature_requested=$7,template_metadata=$8::jsonb,stamped=$7,signed=$7,stamp_metadata=$9::jsonb,signature_metadata=$10::jsonb WHERE id=$1`,
-            [main.id,`${input.assunto.trim()}.html`,Buffer.byteLength(cleanHtml,"utf8"),cleanHtml,input.confidencialidade,stampId,Boolean(stampId),template ? JSON.stringify(template) : null,stampMeta,sigMeta],
+            `UPDATE documents SET name=$2,source='sistema',mime_type='text/html',size_bytes=$3,page_count=1,storage_path=NULL,content_html=$4,confidentiality=$5,stamp_id=$6,signature_requested=$7,template_metadata=$8::jsonb,stamped=$7,signed=$7,stamp_metadata=$9::jsonb,signature_metadata=$10::jsonb,stamps_metadata=$11::jsonb,signatures_metadata=$12::jsonb WHERE id=$1`,
+            [main.id,`${input.assunto.trim()}.html`,Buffer.byteLength(cleanHtml,"utf8"),cleanHtml,input.confidencialidade,stampId,Boolean(stampId),template ? JSON.stringify(template) : null,stampMeta,sigMeta,stampsMeta,sigsMeta],
           );
         } else {
           const inserted = await client.query<{ id: string }>(
-            `INSERT INTO documents(expedient_id,name,document_kind,source,mime_type,size_bytes,page_count,content_html,confidentiality,created_by,stamp_id,stamped,signed,signature_requested,stamp_metadata,signature_metadata,template_metadata)
-             VALUES($1,$2,'principal','sistema','text/html',$3,1,$4,$5,$6,$7,$8,$8,$8,$9::jsonb,$10::jsonb,$11::jsonb) RETURNING id`,
-            [params.id,`${input.assunto.trim()}.html`,Buffer.byteLength(cleanHtml,"utf8"),cleanHtml,input.confidencialidade,session.user.id,stampId,Boolean(stampId),stampMeta,sigMeta,template ? JSON.stringify(template) : null],
+            `INSERT INTO documents(expedient_id,name,document_kind,source,mime_type,size_bytes,page_count,content_html,confidentiality,created_by,stamp_id,stamped,signed,signature_requested,stamp_metadata,signature_metadata,stamps_metadata,signatures_metadata,template_metadata)
+             VALUES($1,$2,'principal','sistema','text/html',$3,1,$4,$5,$6,$7,$8,$8,$8,$9::jsonb,$10::jsonb,$11::jsonb,$12::jsonb,$13::jsonb) RETURNING id`,
+            [params.id,`${input.assunto.trim()}.html`,Buffer.byteLength(cleanHtml,"utf8"),cleanHtml,input.confidencialidade,session.user.id,stampId,Boolean(stampId),stampMeta,sigMeta,stampsMeta,sigsMeta,template ? JSON.stringify(template) : null],
           );
           documentId = inserted.rows[0].id;
         }
       } else if (mainFile) {
         const stored = await persistFile(params.id, mainFile);
         if (main) {
-          await client.query(`UPDATE documents SET name=$2,source='importado',mime_type=$3,size_bytes=$4,page_count=$5,storage_path=$6,content_html=NULL,confidentiality=$7,stamp_id=NULL,signature_requested=false,template_metadata=NULL,stamped=false,signed=false,stamp_metadata=NULL,signature_metadata=NULL WHERE id=$1`, [main.id,mainFile.name,stored.mime,mainFile.size,Math.max(1,input.numPaginas??1),stored.relative,input.confidencialidade]);
+          await client.query(`UPDATE documents SET name=$2,source='importado',mime_type=$3,size_bytes=$4,page_count=$5,storage_path=$6,content_html=NULL,confidentiality=$7,stamp_id=NULL,signature_requested=false,template_metadata=NULL,stamped=false,signed=false,stamp_metadata=NULL,signature_metadata=NULL,stamps_metadata='[]'::jsonb,signatures_metadata='[]'::jsonb WHERE id=$1`, [main.id,mainFile.name,stored.mime,mainFile.size,Math.max(1,input.numPaginas??1),stored.relative,input.confidencialidade]);
         } else {
           const inserted = await client.query<{ id: string }>(`INSERT INTO documents(expedient_id,name,document_kind,source,mime_type,size_bytes,page_count,storage_path,confidentiality,created_by) VALUES($1,$2,'principal','importado',$3,$4,$5,$6,$7,$8) RETURNING id`, [params.id,mainFile.name,stored.mime,mainFile.size,Math.max(1,input.numPaginas??1),stored.relative,input.confidencialidade,session.user.id]);
           documentId = inserted.rows[0].id;

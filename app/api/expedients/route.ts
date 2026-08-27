@@ -107,16 +107,20 @@ export async function POST(request: NextRequest) {
         let stampId: string | null = null;
         let stampMeta: string | null = null;
         let sigMeta: string | null = null;
+        let stampsMeta = "[]";
+        let sigsMeta = "[]";
         if (input.usarCarimboAssinatura) {
           const resolved = await resolveMandatoryStampSignatureByUnitId(client, input.unidadeOrigem, session.user, session.perfilNavegacao);
           stampId = resolved.stamp.id;
           stampMeta = JSON.stringify(stampMetadataJson(resolved.stamp, session.user.nome, input.posicaoCarimbo));
           sigMeta = JSON.stringify(signatureMetadataJson(resolved.signature, session.user, input.posicaoAssinatura));
+          stampsMeta = `[${stampMeta}]`;
+          sigsMeta = `[${sigMeta}]`;
         }
         const inserted = await client.query<{ id: string }>(
-          `INSERT INTO documents(expedient_id,name,document_kind,source,mime_type,size_bytes,page_count,content_html,confidentiality,created_by,stamp_id,stamped,signed,stamp_metadata,signature_metadata,template_metadata)
-           VALUES($1,$2,'principal','sistema','text/html',$3,1,$4,$5,$6,$7,$8,$8,$9::jsonb,$10::jsonb,$11::jsonb) RETURNING id`,
-          [expedient.id,`${input.assunto.trim()}.html`,Buffer.byteLength(cleanHtml,"utf8"),cleanHtml,input.confidencialidade,session.user.id,stampId,Boolean(stampId),stampMeta,sigMeta,template ? JSON.stringify(template) : null],
+          `INSERT INTO documents(expedient_id,name,document_kind,source,mime_type,size_bytes,page_count,content_html,confidentiality,created_by,stamp_id,stamped,signed,stamp_metadata,signature_metadata,stamps_metadata,signatures_metadata,template_metadata)
+           VALUES($1,$2,'principal','sistema','text/html',$3,1,$4,$5,$6,$7,$8,$8,$9::jsonb,$10::jsonb,$11::jsonb,$12::jsonb,$13::jsonb) RETURNING id`,
+          [expedient.id,`${input.assunto.trim()}.html`,Buffer.byteLength(cleanHtml,"utf8"),cleanHtml,input.confidencialidade,session.user.id,stampId,Boolean(stampId),stampMeta,sigMeta,stampsMeta,sigsMeta,template ? JSON.stringify(template) : null],
         );
         documentId = inserted.rows[0].id;
       } else if (mainFile) {
