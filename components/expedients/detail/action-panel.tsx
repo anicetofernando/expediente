@@ -328,9 +328,16 @@ function ProtocolarDialog({
           {authorization.loading ? (
             <p className="text-[13px] text-graphite-500">A verificar o carimbo e a assinatura da sua unidade…</p>
           ) : readyToSign ? (
-            <p className="text-[13px] text-graphite-600">
-              Vai aplicar o carimbo de <strong>{authorization.stamp?.unidade}</strong> e a sua assinatura ({authorization.signature?.proprietario}) a este documento.
-            </p>
+            <>
+              <p className="text-[13px] text-graphite-600">
+                Vai aplicar o carimbo de <strong>{authorization.stamp?.unidade}</strong> e a sua assinatura ({authorization.signature?.proprietario}) a este documento.
+              </p>
+              {!authorization.signature?.imagemUrl && (
+                <p className="border border-info-200 bg-info-50 px-3 py-2 text-xs leading-relaxed text-info-800">
+                  A sua assinatura ainda não tem uma imagem carregada, por isso vai ser aplicada como texto num local fixo do documento — não pode ser arrastada para uma posição específica. Peça a um administrador para carregar a imagem em Administração → Assinaturas.
+                </p>
+              )}
+            </>
           ) : (
             <p className="border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-relaxed text-amber-800">
               {!authorization.stamp && "A sua unidade ainda não tem um carimbo configurado. "}

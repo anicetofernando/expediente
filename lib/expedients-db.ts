@@ -131,6 +131,7 @@ export async function listDocuments(session: AuthSession): Promise<ListedDocumen
     id:string;expedient_id:string;protocol:string;subject:string;name:string;document_kind:ExpedientDocument["tipo"];
     source:ExpedientDocument["origem"];mime_type:string|null;size_bytes:string|number;page_count:number;
     confidentiality:Confidentiality;stamped:boolean;signed:boolean;version:number;created_at:string;creator_name:string;
+    stamp_metadata:{aplicadoEm?:string}|null;signature_metadata:{aplicadoEm?:string}|null;
   }>(`SELECT d.*,e.protocol,e.subject,u.full_name creator_name
         FROM documents d JOIN expedients e ON e.id=d.expedient_id JOIN users u ON u.id=d.created_by
        WHERE ${access.sql} ORDER BY d.created_at DESC`, access.params);
@@ -139,7 +140,8 @@ export async function listDocuments(session: AuthSession): Promise<ListedDocumen
     formato:doc.mime_type?.includes("pdf") ? "pdf" : doc.mime_type?.includes("image") ? "imagem" : "docx",
     paginas:doc.page_count,tamanho:formatSize(Number(doc.size_bytes)),criadoEm:iso(doc.created_at),criadoPor:doc.creator_name,
     confidencialidade:doc.confidentiality,carimbado:doc.stamped,assinado:doc.signed,versao:doc.version,origem:doc.source,
-    mimeType:doc.mime_type??undefined,downloadUrl:`/api/documents/${doc.id}`,pdfUrl:`/api/documents/${doc.id}/pdf`,
+    mimeType:doc.mime_type??undefined,downloadUrl:`/api/documents/${doc.id}`,
+    pdfUrl:`/api/documents/${doc.id}/pdf?v=${encodeURIComponent(doc.signature_metadata?.aplicadoEm ?? doc.stamp_metadata?.aplicadoEm ?? doc.created_at)}`,
     protocolo:doc.protocol,expedienteId:doc.expedient_id,assunto:doc.subject,
   }));
 }
@@ -201,7 +203,9 @@ export async function getExpedient(session: AuthSession, id: string) {
     paginas: doc.page_count, tamanho: formatSize(Number(doc.size_bytes)), criadoEm: iso(doc.created_at), criadoPor: doc.creator_name,
     confidencialidade: doc.confidentiality, carimbado: doc.stamped, assinado: doc.signed, versao: doc.version, origem: doc.source,
     conteudoHtml: doc.content_html ?? undefined, mimeType: doc.mime_type ?? undefined, downloadUrl: `/api/documents/${doc.id}`,
-    pdfUrl: `/api/documents/${doc.id}/pdf`,
+    // O parametro v muda sempre que o carimbo/assinatura sao (re)aplicados (ex.: protocolar) —
+    // sem isto o <iframe> do visualizador mantem o PDF antigo em cache, pois o src fica identico.
+    pdfUrl: `/api/documents/${doc.id}/pdf?v=${encodeURIComponent(doc.signature_metadata?.aplicadoEm ?? doc.stamp_metadata?.aplicadoEm ?? doc.created_at)}`,
     carimboDetalhes: doc.stamp_metadata ? {
       id: doc.stamp_metadata.id, nome: doc.stamp_metadata.nome ?? "Carimbo institucional",
       posicao: doc.stamp_metadata.posicao, aplicadoPor: doc.stamp_metadata.aplicadoPor,

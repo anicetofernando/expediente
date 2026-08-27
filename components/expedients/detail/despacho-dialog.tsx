@@ -183,6 +183,11 @@ export function DespachoDialog({
                   Contacte a administração — não é possível escrever despachos no sistema sem os dois.
                 </p>
               )}
+              {!authorization.loading && readyToSign && !authorization.signature?.imagemUrl && (
+                <p className="border border-info-200 bg-info-50 px-3 py-2 text-xs leading-relaxed text-info-800">
+                  A sua assinatura ainda não tem uma imagem carregada, por isso vai ser aplicada como texto num local fixo do documento — não pode ser arrastada para uma posição específica. Peça a um administrador para carregar a imagem em Administração → Assinaturas.
+                </p>
+              )}
               <div>
                 <Label>Modelo</Label>
                 <Select value={modeloId} onValueChange={setModeloId}>
