@@ -34,25 +34,18 @@ export default async function ExpedientDetailPage({ params }: { params: { id: st
     <div>
       <div className="border-b border-graphite-200 bg-white px-4 py-3 lg:px-5">
         <Breadcrumb items={[{ label: "Expediente", href: "/expedientes" }, { label: expedient.protocolo }]} />
-        <div className="mt-2">
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-xs font-semibold text-navy-800">{expedient.protocolo}</span>
-              <span className="text-xs text-graphite-300">·</span>
-              <span className="text-xs text-graphite-500">{expedient.tipoLabel}</span>
-            </div>
-            <h1 className="mt-1 max-w-5xl text-lg font-semibold leading-snug text-graphite-900">
-              {expedient.assunto}
-            </h1>
-            <div className="mt-2 flex flex-wrap items-center gap-1.5">
-              <StatusBadge status={expedient.estado} />
-              <PriorityBadge priority={expedient.prioridade} />
-              <ConfidentialityBadge level={expedient.confidencialidade} />
-            </div>
+
+        <div className="mt-2.5 flex flex-wrap items-center gap-x-4 gap-y-1.5">
+          <h1 className="max-w-5xl text-[15px] font-semibold leading-snug text-graphite-900">{expedient.assunto}</h1>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <StatusBadge status={expedient.estado} />
+            <PriorityBadge priority={expedient.prioridade} />
+            <ConfidentialityBadge level={expedient.confidencialidade} />
           </div>
         </div>
 
-        <div className="mt-3 grid gap-x-6 gap-y-2 border-t border-graphite-150 pt-3 sm:grid-cols-3">
+        <div className="mt-2.5 grid grid-cols-2 gap-x-6 gap-y-2 border-t border-graphite-150 pt-2.5 sm:grid-cols-4">
+          <MetaField icon={FileText} label="Tipo" value={expedient.tipoLabel} />
           <MetaField icon={Building2} label="Unidade de origem" value={expedient.unidadeOrigem} />
           <MetaField icon={CalendarClock} label="Entrada" value={formatDate(expedient.dataEntrada)} />
           <MetaField icon={CalendarClock} label="Prazo" value={formatDate(expedient.prazo)} highlight={expedient.atrasado} />
