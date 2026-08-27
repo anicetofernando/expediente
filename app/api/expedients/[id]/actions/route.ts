@@ -7,6 +7,7 @@ import { dateValueInMaputo, isValidFutureOrTodayDate } from "@/lib/date-only";
 import { configuredDocumentTypes, requiresDirectorEscalation, resolveSecretaryId, secretaryOwnedUnitIds } from "@/lib/routing";
 import { rememberStampSignaturePositions, resolveMandatoryStampSignature, signatureMetadataJson, stampMetadataJson } from "@/lib/stamping";
 import { generateProtocolNumber } from "@/lib/numbering";
+import { hasActionPermission } from "@/lib/permissions";
 
 const PROFILE_ACTIONS: Record<string, Set<string>> = {
   remetente: new Set(["submeter","resposta","confirmar","arquivar"]),
@@ -38,6 +39,7 @@ export async function POST(request:NextRequest,{params}:{params:{id:string}}){
   try{input=await request.json();}catch{return NextResponse.json({error:"Pedido invalido."},{status:400});}
   const action=input.action??"";
   if(!PROFILE_ACTIONS[session.perfilNavegacao]?.has(action)) return NextResponse.json({error:"Acção não permitida para o seu perfil."},{status:403});
+  if(!hasActionPermission(session.profile.permissoes,action)) return NextResponse.json({error:"O seu perfil nao tem permissao para esta accao."},{status:403});
   try{
     const changed=await transaction(async(client)=>{
       const found=await client.query<{id:string;protocol:string;subject:string;status:string;created_by:string;origin_unit_id:string;recipient_unit_id:string;responsible_user_id:string|null;due_date:string|Date;document_type:string;origin_secretary_id:string|null}>("SELECT id,protocol,subject,status,created_by,origin_unit_id,recipient_unit_id,responsible_user_id,due_date,document_type,origin_secretary_id FROM expedients WHERE id=$1 FOR UPDATE",[params.id]);

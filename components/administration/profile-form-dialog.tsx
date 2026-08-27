@@ -1,15 +1,23 @@
 "use client";
 
 import * as React from "react";
-import type { Profile } from "@/types";
+import type { Profile, TipoBasePerfil } from "@/types";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogBody, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Input, Label, Textarea } from "@/components/ui/input";
+import { FieldHint, Input, Label, Textarea } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+
+const TIPO_BASE_LABELS: Record<TipoBasePerfil, string> = {
+  remetente: "Remetente",
+  secretaria: "Secretaria",
+  superior: "Superior / Chefia",
+  administracao: "Administração",
+};
 
 export interface ProfileFormValues {
   nome: string;
   descricao: string;
+  tipoBase: TipoBasePerfil;
   nivel: Profile["nivel"];
   ambito: Profile["ambito"];
 }
@@ -25,10 +33,10 @@ export function ProfileFormDialog({
   onSubmit: (values: ProfileFormValues) => void | Promise<void>;
   initialProfile?: Profile | null;
 }) {
-  const [values, setValues] = React.useState<ProfileFormValues>({ nome: "", descricao: "", nivel: "operacional", ambito: "unidade" });
+  const [values, setValues] = React.useState<ProfileFormValues>({ nome: "", descricao: "", tipoBase: "remetente", nivel: "operacional", ambito: "unidade" });
 
   React.useEffect(() => {
-    if (open) setValues(initialProfile ? { nome: initialProfile.nome, descricao: initialProfile.descricao, nivel: initialProfile.nivel, ambito: initialProfile.ambito } : { nome: "", descricao: "", nivel: "operacional", ambito: "unidade" });
+    if (open) setValues(initialProfile ? { nome: initialProfile.nome, descricao: initialProfile.descricao, tipoBase: initialProfile.tipoBase, nivel: initialProfile.nivel, ambito: initialProfile.ambito } : { nome: "", descricao: "", tipoBase: "remetente", nivel: "operacional", ambito: "unidade" });
   }, [open, initialProfile]);
 
   const isValid = values.nome.trim().length > 0 && values.descricao.trim().length > 0;
@@ -42,7 +50,7 @@ export function ProfileFormDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent size="md">
-        <form onSubmit={handleSubmit}>
+        <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
           <DialogHeader>
             <DialogTitle>{initialProfile ? "Editar perfil" : "Novo perfil"}</DialogTitle>
             <DialogDescription>{initialProfile ? "Actualize os dados do perfil de acesso." : "Defina um novo perfil de acesso. As permissões podem ser configuradas de seguida na matriz."}</DialogDescription>
@@ -57,6 +65,27 @@ export function ProfileFormDialog({
                 onChange={(e) => setValues((v) => ({ ...v, nome: e.target.value }))}
                 required
               />
+            </div>
+            <div>
+              <Label required>Tipo base</Label>
+              {initialProfile ? (
+                <>
+                  <Input value={TIPO_BASE_LABELS[values.tipoBase]} disabled readOnly />
+                  <FieldHint>O tipo base não pode ser alterado depois de criado — determina o que este perfil pode fazer no sistema.</FieldHint>
+                </>
+              ) : (
+                <>
+                  <Select value={values.tipoBase} onValueChange={(v) => setValues((s) => ({ ...s, tipoBase: v as TipoBasePerfil }))}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {(Object.keys(TIPO_BASE_LABELS) as TipoBasePerfil[]).map((tipo) => (
+                        <SelectItem key={tipo} value={tipo}>{TIPO_BASE_LABELS[tipo]}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FieldHint>Determina o que este perfil pode fazer no sistema — as permissões abaixo só afinam dentro deste tipo.</FieldHint>
+                </>
+              )}
             </div>
             <div>
               <Label htmlFor="descricao-perfil" required>Descrição</Label>

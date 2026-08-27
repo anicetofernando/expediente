@@ -52,12 +52,16 @@ export interface User {
   estado: "activo" | "inactivo" | "suspenso";
   ultimoAcesso?: string;
   telefone?: string;
+  precisaAlterarPalavraPasse?: boolean;
 }
+
+export type TipoBasePerfil = "remetente" | "secretaria" | "superior" | "administracao";
 
 export interface Profile {
   id: string;
   nome: string;
   descricao: string;
+  tipoBase: TipoBasePerfil;
   nivel: "operacional" | "supervisao" | "direccao" | "administracao";
   utilizadoresCount: number;
   permissoes: string[];

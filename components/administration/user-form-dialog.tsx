@@ -65,8 +65,7 @@ export function UserFormDialog({
 
   function selectDepartamento(id: string) {
     setDepartamentoId(id);
-    const children = units.filter((u) => u.parentId === id);
-    setValues((s) => ({ ...s, unidadeId: children.length > 0 ? "" : id }));
+    setValues((s) => ({ ...s, unidadeId: id }));
   }
 
   const isValid = values.nome.trim() && values.email.trim() && values.cargo.trim() && values.unidadeId && values.perfilId;
@@ -80,7 +79,7 @@ export function UserFormDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent size="md">
-        <form onSubmit={handleSubmit}>
+        <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
           <DialogHeader>
             <DialogTitle>{mode === "create" ? "Novo utilizador" : "Editar utilizador"}</DialogTitle>
             <DialogDescription>
@@ -136,16 +135,17 @@ export function UserFormDialog({
                 </Select>
               </div>
               <div>
-                <Label required={servicos.length > 0}>Serviço</Label>
+                <Label>Serviço</Label>
                 <Select
-                  value={servicos.some((u) => u.id === values.unidadeId) ? values.unidadeId : ""}
-                  onValueChange={(v) => setValues((s) => ({ ...s, unidadeId: v }))}
-                  disabled={!departamentoId || servicos.length === 0}
+                  value={servicos.some((u) => u.id === values.unidadeId) ? values.unidadeId : "sem-servico"}
+                  onValueChange={(v) => setValues((s) => ({ ...s, unidadeId: v === "sem-servico" ? departamentoId : v }))}
+                  disabled={!departamentoId}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder={servicos.length === 0 ? "Fica no departamento" : "Seleccionar serviço"} />
+                    <SelectValue placeholder="Seleccionar serviço" />
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="sem-servico">Fica no departamento (sem serviço específico)</SelectItem>
                     {servicos.map((u) => (
                       <SelectItem key={u.id} value={u.id}>{u.sigla} — {u.nome}</SelectItem>
                     ))}

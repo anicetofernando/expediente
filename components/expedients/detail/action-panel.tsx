@@ -25,6 +25,7 @@ import type { Expedient, FreePosition, Signature, Stamp as StampDefinition } fro
 import { StampPositionPicker } from "@/components/documents/stamp-position-picker";
 import { DespachoDialog } from "@/components/expedients/detail/despacho-dialog";
 import { ACTIONS_BY_STATUS, type ActionDef } from "@/lib/expedient-actions";
+import { hasActionPermission } from "@/lib/permissions";
 import { Button } from "@/components/ui/button";
 import { Textarea, Label } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -64,11 +65,12 @@ const PROFILE_ACTIONS: Record<string, Set<string>> = {
 
 export function ActionPanel({ expedient, principalPdfUrl }: { expedient: ActionExpedient; principalPdfUrl?: string }) {
   const { toast } = useToast();
-  const { perfilNavegacao } = useSession();
+  const { perfilNavegacao, profile } = useSession();
   const router = useRouter();
   const blockDirectApproval = perfilNavegacao === "superior" && expedient.precisaEscalarDirector;
   const actions = (ACTIONS_BY_STATUS[expedient.estado] ?? [])
     .filter((action) => PROFILE_ACTIONS[perfilNavegacao]?.has(action.key))
+    .filter((action) => hasActionPermission(profile.permissoes, action.key))
     .filter((action) => !(blockDirectApproval && action.key === "aprovar"));
   const [activeAction, setActiveAction] = React.useState<ActionDef | null>(null);
 

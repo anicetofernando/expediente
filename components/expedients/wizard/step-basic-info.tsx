@@ -46,8 +46,7 @@ export function StepBasicInfo({ state, update }: StepProps) {
 
   function selectDepartamento(id: string) {
     setDepartamentoId(id);
-    const children = availableUnits.filter((unit) => unit.parentId === id);
-    update({ destinatario: children.length > 0 ? "" : id });
+    update({ destinatario: id });
   }
 
   return (
@@ -90,14 +89,15 @@ export function StepBasicInfo({ state, update }: StepProps) {
       </div>
 
       <div className="lg:col-span-6">
-        <Label required={servicos.length > 0}>Serviço</Label>
+        <Label>Serviço</Label>
         <Select
-          value={servicos.some((unit) => unit.id === state.destinatario) ? state.destinatario : ""}
-          onValueChange={(v) => update({ destinatario: v })}
-          disabled={!departamentoId || servicos.length === 0}
+          value={servicos.some((unit) => unit.id === state.destinatario) ? state.destinatario : "sem-servico"}
+          onValueChange={(v) => update({ destinatario: v === "sem-servico" ? departamentoId : v })}
+          disabled={!departamentoId}
         >
-          <SelectTrigger><SelectValue placeholder={servicos.length === 0 ? "Vai directo ao departamento" : "Seleccione o serviço"} /></SelectTrigger>
+          <SelectTrigger><SelectValue placeholder="Seleccione o serviço" /></SelectTrigger>
           <SelectContent>
+            <SelectItem value="sem-servico">Vai directo ao departamento (sem serviço específico)</SelectItem>
             {servicos.map((unit) => (
               <SelectItem key={unit.id} value={unit.id}>{unit.sigla} — {unit.nome}</SelectItem>
             ))}

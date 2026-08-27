@@ -346,6 +346,26 @@ function valuesFromUnit(unit: OrganizationalUnit): UnitFormValues {
   };
 }
 
+function computeAutoCode(tipo: OrganizationalUnit["tipo"], parentId: string, units: OrganizationalUnit[]): string {
+  if (tipo === "direccao") {
+    const topLevel = units
+      .filter((item) => !item.codigo.includes("."))
+      .map((item) => Number.parseInt(item.codigo, 10))
+      .filter((value) => !Number.isNaN(value));
+    const next = (topLevel.length ? Math.max(...topLevel) : 0) + 1;
+    return String(next).padStart(2, "0");
+  }
+  const parent = units.find((item) => item.id === parentId);
+  if (!parent) return "";
+  const prefix = `${parent.codigo}.`;
+  const siblingNumbers = units
+    .filter((item) => item.codigo.startsWith(prefix))
+    .map((item) => Number.parseInt(item.codigo.slice(prefix.length), 10))
+    .filter((value) => !Number.isNaN(value));
+  const next = (siblingNumbers.length ? Math.max(...siblingNumbers) : 0) + 1;
+  return `${parent.codigo}.${next}`;
+}
+
 function UnitDetailsDrawer({
   unit,
   units,
@@ -355,6 +375,7 @@ function UnitDetailsDrawer({
   onSave,
   onDelete,
   startInEditing,
+  isCreating,
 }: {
   unit: OrganizationalUnit | null;
   units: OrganizationalUnit[];
@@ -364,6 +385,7 @@ function UnitDetailsDrawer({
   onSave: (unit: OrganizationalUnit) => void;
   onDelete?: (unit: OrganizationalUnit) => void;
   startInEditing?: boolean;
+  isCreating?: boolean;
 }) {
   const [editing, setEditing] = React.useState(Boolean(startInEditing));
   const [values, setValues] = React.useState<UnitFormValues | null>(
@@ -376,6 +398,13 @@ function UnitDetailsDrawer({
       setEditing(Boolean(startInEditing));
     }
   }, [open, unit, startInEditing]);
+
+  React.useEffect(() => {
+    if (!isCreating || !values) return;
+    const autoCode = computeAutoCode(values.tipo, values.parentId === "sem-parent" ? "" : values.parentId, units);
+    if (autoCode !== values.codigo) setValues((current) => (current ? { ...current, codigo: autoCode } : current));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isCreating, values?.tipo, values?.parentId, units]);
 
   if (!unit || !values) return null;
   const currentUnit = unit;
@@ -491,10 +520,14 @@ function UnitDetailsDrawer({
                 onChange={(event) => setValue("codigo", event.target.value)}
                 placeholder="Ex.: 05.3"
                 invalid={duplicateCode}
+                disabled={isCreating}
+                readOnly={isCreating}
               />
-              {duplicateCode && (
+              {isCreating ? (
+                <FieldHint>Gerado automaticamente a partir do tipo e da unidade superior.</FieldHint>
+              ) : duplicateCode ? (
                 <FieldHint error>Já existe uma unidade com este código.</FieldHint>
-              )}
+              ) : null}
             </div>
             <div>
               <Label required>Tipo de unidade</Label>
@@ -568,47 +601,6 @@ function UnitDetailsDrawer({
                 <FieldHint>
                   Unidades subordinadas não podem ser seleccionadas para evitar ciclos.
                 </FieldHint>
-              </div>
-              <div>
-                <Label required>Responsável</Label>
-                <Select
-                  value={values.responsavelId}
-                  onValueChange={(value) => setValue("responsavelId", value)}
-                >
-                  <SelectTrigger aria-label="Responsável da unidade">
-                    <SelectValue placeholder="Seleccionar responsável" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {users.map((user) => (
-                      <SelectItem key={user.id} value={user.id}>
-                        {user.nome} — {user.cargo}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label>Substituto</Label>
-                <Select
-                  value={values.substitutoId}
-                  onValueChange={(value) => setValue("substitutoId", value)}
-                >
-                  <SelectTrigger aria-label="Substituto do responsável">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="sem-substituto">
-                      Sem substituto definido
-                    </SelectItem>
-                    {users
-                      .filter((user) => user.id !== values.responsavelId)
-                      .map((user) => (
-                        <SelectItem key={user.id} value={user.id}>
-                          {user.nome} — {user.cargo}
-                        </SelectItem>
-                      ))}
-                  </SelectContent>
-                </Select>
               </div>
             </div>
           </div>
@@ -1310,6 +1302,7 @@ export function OrgStructure({
         users={users}
         open={!!creatingUnit}
         startInEditing
+        isCreating
         onOpenChange={(open) => {
           if (!open) setCreatingUnit(null);
         }}

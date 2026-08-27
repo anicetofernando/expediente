@@ -22,6 +22,7 @@ interface SessionRow {
   avatar_color: string;
   status: "activo" | "inactivo" | "suspenso";
   last_access_at: string | null;
+  must_change_password: boolean;
   profile_id: string;
   profile_slug: PerfilNavegacao;
   profile_name: string;
@@ -82,7 +83,7 @@ async function readCurrentSession(): Promise<AuthSession | null> {
   const payload = decode(cookies().get(COOKIE_NAME)?.value);
   if (!payload) return null;
   const result = await query<SessionRow>(`
-    SELECT u.id,u.full_name,u.email,u.job_title,u.unit_id,u.phone,u.avatar_color,u.status,u.last_access_at,
+    SELECT u.id,u.full_name,u.email,u.job_title,u.unit_id,u.phone,u.avatar_color,u.status,u.last_access_at,u.must_change_password,
            p.id profile_id,
            CASE WHEN p.slug IN ('remetente','secretaria','superior','administracao') THEN p.slug
                 WHEN p.access_level='administracao' THEN 'administracao'
@@ -111,11 +112,13 @@ async function readCurrentSession(): Promise<AuthSession | null> {
       estado: row.status,
       ultimoAcesso: row.last_access_at ?? undefined,
       telefone: row.phone ?? undefined,
+      precisaAlterarPalavraPasse: row.must_change_password,
     },
     profile: {
       id: row.profile_id,
       nome: row.profile_name,
       descricao: row.profile_description,
+      tipoBase: row.profile_slug,
       nivel: row.access_level,
       utilizadoresCount: 1,
       permissoes: row.permissions,
@@ -140,6 +143,13 @@ export async function requireSession() {
 export async function requireProfile(...allowed: PerfilNavegacao[]) {
   const session = await requireSession();
   if (!allowed.includes(session.perfilNavegacao)) redirect(`/`);
+  return session;
+}
+
+export async function requireAdminArea(area: string) {
+  const session = await requireProfile("administracao");
+  const { hasAdminAreaPermission } = await import("@/lib/permissions");
+  if (!hasAdminAreaPermission(session.profile.permissoes, area)) redirect(`/`);
   return session;
 }
 

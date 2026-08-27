@@ -1,8 +1,9 @@
 "use client";
 
 import * as React from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
-  Mail, Phone, Building2, IdCard, KeyRound, Smartphone, Bell, Globe, Moon,
+  AlertTriangle, Mail, Phone, Building2, IdCard, KeyRound, Smartphone, Bell, Globe, Moon,
 } from "lucide-react";
 import { useSession } from "@/lib/session";
 import { useCatalogs } from "@/lib/catalogs";
@@ -22,6 +23,8 @@ export function ProfileTabs() {
   const { user, profile, unitName } = useSession();
   const { organizationalUnits } = useCatalogs();
   const { toast } = useToast();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [currentPassword, setCurrentPassword] = React.useState("");
   const [newPassword, setNewPassword] = React.useState("");
   const [confirmPassword, setConfirmPassword] = React.useState("");
@@ -59,7 +62,7 @@ export function ProfileTabs() {
         </CardContent>
       </Card>
 
-      <Tabs defaultValue="pessoal">
+      <Tabs defaultValue={searchParams.get("seguranca") ? "seguranca" : "pessoal"}>
         <TabsList>
           <TabsTrigger value="pessoal">Informação pessoal</TabsTrigger>
           <TabsTrigger value="seguranca">Segurança</TabsTrigger>
@@ -90,6 +93,12 @@ export function ProfileTabs() {
         </TabsContent>
 
         <TabsContent value="seguranca" className="pt-5 space-y-5">
+          {user.precisaAlterarPalavraPasse && (
+            <div className="flex items-start gap-2.5 rounded-lg border border-amber-200 bg-amber-50 px-3.5 py-3 text-[13px] text-amber-800">
+              <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+              <span>A sua palavra-passe foi redefinida pela administração e é temporária. Defina uma nova palavra-passe para continuar a utilizar o sistema.</span>
+            </div>
+          )}
           <Card>
             <CardHeader><CardTitle>Palavra-passe</CardTitle></CardHeader>
             <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -107,6 +116,7 @@ export function ProfileTabs() {
                 if (!response.ok) return toast({ title: "Não foi possível actualizar", description: result.error, variant: "destructive" });
                 setCurrentPassword(""); setNewPassword(""); setConfirmPassword("");
                 toast({ title: "Palavra-passe actualizada", variant: "success" });
+                router.refresh();
               }}>
                 <KeyRound className="size-3.5" /> {changingPassword ? "A actualizar…" : "Actualizar palavra-passe"}
               </Button>
