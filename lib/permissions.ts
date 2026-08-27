@@ -30,6 +30,7 @@ export const ADMIN_AREA_PERMISSIONS: Record<string, string[]> = {
 
 function satisfies(permissoes: string[], required: string[] | undefined) {
   if (!required || required.length === 0) return true;
+  if (permissoes.includes("*")) return true;
   return required.some((id) => permissoes.includes(id));
 }
 
