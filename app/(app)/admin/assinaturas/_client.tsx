@@ -37,6 +37,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input, Label, SearchInput } from "@/components/ui/input";
+import { Combobox } from "@/components/ui/combobox";
 import {
   Select,
   SelectContent,
@@ -441,15 +442,18 @@ export function AssinaturasPageClient() {
               <Label htmlFor="signature-owner" required>
                 Utilizador proprietário
               </Label>
-              <Select value={userId} onValueChange={(value) => {
-                const owner = users.find((user) => user.id === value);
-                setUserId(value); setNome(owner?.nome ?? ""); setCargo(owner?.cargo ?? ""); setUnidade(owner?.unidade ?? "");
-              }}>
-                <SelectTrigger id="signature-owner"><SelectValue placeholder="Seleccione o utilizador" /></SelectTrigger>
-                <SelectContent>
-                  {users.filter((user) => user.estado === "activo").map((user) => <SelectItem key={user.id} value={user.id}>{user.nome} — {user.unidade}</SelectItem>)}
-                </SelectContent>
-              </Select>
+              <Combobox
+                id="signature-owner"
+                value={userId}
+                onValueChange={(value) => {
+                  const owner = users.find((user) => user.id === value);
+                  setUserId(value); setNome(owner?.nome ?? ""); setCargo(owner?.cargo ?? ""); setUnidade(owner?.unidade ?? "");
+                }}
+                placeholder="Seleccione o utilizador"
+                searchPlaceholder="Pesquisar por nome, cargo ou unidade…"
+                emptyMessage="Nenhum utilizador encontrado."
+                options={users.filter((user) => user.estado === "activo").map((user) => ({ value: user.id, label: `${user.nome} — ${user.unidade}`, description: `${user.cargo} ${user.email}` }))}
+              />
             </div>
             <div className="sm:col-span-2">
               <Label htmlFor="signature-unit" required>

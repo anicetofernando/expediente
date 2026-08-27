@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useRouter } from "next/navigation";
 import { UserPlus, MoreVertical, KeyRound, Pencil, Ban, CheckCircle2, Trash2, Users } from "lucide-react";
 import type { OrganizationalUnit, Profile, User } from "@/types";
 import { PageHeader } from "@/components/shared/page-header";
@@ -47,6 +48,7 @@ export function UserManagement({
   profiles: Profile[];
 }) {
   const { toast } = useToast();
+  const router = useRouter();
   const [users, setUsers] = React.useState<User[]>(initialUsers);
   const [search, setSearch] = React.useState("");
   const [unidadeFilter, setUnidadeFilter] = React.useState("todas");
@@ -148,7 +150,7 @@ export function UserManagement({
         description="Gestão de contas de acesso, unidades orgânicas e perfis atribuídos."
         breadcrumb={[{ label: "Administração" }, { label: "Utilizadores" }]}
         actions={
-          <Button onClick={() => setCreateOpen(true)}>
+          <Button onClick={() => { router.refresh(); setCreateOpen(true); }}>
             <UserPlus className="size-4" /> Novo utilizador
           </Button>
         }
@@ -265,7 +267,7 @@ export function UserManagement({
                                 </Button>
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="end">
-                                <DropdownMenuItem onClick={() => setEditingUser(u)}>
+                                <DropdownMenuItem onClick={() => { router.refresh(); setEditingUser(u); }}>
                                   <Pencil className="size-3.5" /> Editar
                                 </DropdownMenuItem>
                                 <DropdownMenuItem onClick={() => handleResetPassword(u)}>

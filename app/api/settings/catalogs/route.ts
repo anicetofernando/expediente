@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { audit, getCurrentSession } from "@/lib/auth";
 import { query, transaction } from "@/lib/db";
 
@@ -67,5 +68,6 @@ export async function PUT(request: Request) {
     );
   });
   await audit({ userId: session.user.id, action: "Catalogos actualizados", entityType: "Configuracao", entityId: "catalogs", details: { units: units.length } });
+  if (units.length > 0) revalidatePath("/admin/utilizadores");
   return NextResponse.json({ ok: true });
 }
