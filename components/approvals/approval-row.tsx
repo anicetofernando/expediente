@@ -2,7 +2,8 @@ import Link from "next/link";
 import { Eye } from "lucide-react";
 import type { ExpedientStatus, Priority } from "@/types";
 import { Button } from "@/components/ui/button";
-import { TableCell, TableRow } from "@/components/ui/table";
+import { TableCell } from "@/components/ui/table";
+import { NavigableTableRow } from "@/components/ui/navigable-table-row";
 import { PRIORITY_META, STATUS_META } from "@/lib/status";
 import { cn, formatDate } from "@/lib/utils";
 
@@ -25,7 +26,7 @@ export function ApprovalRow({ expedient }: { expedient: ApprovalTableRowData }) 
   const priority = PRIORITY_META[expedient.prioridade];
 
   return (
-    <TableRow className="group hover:bg-graphite-50">
+    <NavigableTableRow href={href} className="group">
       <TableCell className="w-[142px] py-1.5">
         <Link
           href={href}
@@ -90,6 +91,6 @@ export function ApprovalRow({ expedient }: { expedient: ApprovalTableRowData }) 
           </Link>
         </Button>
       </TableCell>
-    </TableRow>
+    </NavigableTableRow>
   );
 }

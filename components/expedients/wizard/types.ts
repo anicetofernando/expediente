@@ -47,7 +47,7 @@ export const initialWizardState: WizardState = {
   ficheiroNome: "",
   numPaginas: 0,
   anexos: [],
-  usarCarimboAssinatura: false,
+  usarCarimboAssinatura: true,
 };
 
 export interface StepProps {

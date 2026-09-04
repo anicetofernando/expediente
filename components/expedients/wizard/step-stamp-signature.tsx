@@ -2,12 +2,17 @@
 
 import * as React from "react";
 import { PenTool } from "lucide-react";
-import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { StampPositionPicker } from "@/components/documents/stamp-position-picker";
 import type { FreePosition, Signature, Stamp } from "@/types";
 import type { StepProps } from "./types";
 
+/**
+ * O carimbo e a assinatura do remetente na criacao sao obrigatorios (nao ha
+ * escolha) — e o que segue como "original" para o superior. O carimbo da
+ * Secretaria, mais tarde, aplica-se apenas a uma copia de protocolo separada,
+ * nunca a este documento.
+ */
 export function StepStampSignature({
   state,
   update,
@@ -28,6 +33,10 @@ export function StepStampSignature({
       .catch(() => { if (!cancelled) setAuthorization({ stamp: null, signature: null, loading: false }); });
     return () => { cancelled = true; };
   }, [state.origemDocumento, state.unidadeOrigem]);
+
+  React.useEffect(() => {
+    if (!state.usarCarimboAssinatura) update({ usarCarimboAssinatura: true });
+  }, [state.usarCarimboAssinatura, update]);
 
   if (state.origemDocumento !== "sistema") {
     return (
@@ -57,12 +66,12 @@ export function StepStampSignature({
 
   return (
     <div className="space-y-4">
-      <label className="flex items-center gap-3 border border-graphite-200 bg-white px-3.5 py-3">
+      <div className="flex items-center gap-3 border border-graphite-200 bg-white px-3.5 py-3">
         <span className="flex size-8 shrink-0 items-center justify-center border border-graphite-200 bg-graphite-50 text-navy-700">
           <PenTool className="size-4" />
         </span>
         <span className="min-w-0 flex-1">
-          <span className="block text-[13px] font-medium text-graphite-800">Usar carimbo e assinatura</span>
+          <span className="block text-[13px] font-medium text-graphite-800">Carimbo e assinatura do remetente (obrigatório)</span>
           <span className="block text-xs text-graphite-500">
             {authorization.loading
               ? "A verificar o carimbo e a assinatura da sua unidade…"
@@ -71,22 +80,17 @@ export function StepStampSignature({
                 : "Indisponível — veja o aviso abaixo"}
           </span>
         </span>
-        <Switch
-          checked={state.usarCarimboAssinatura}
-          onCheckedChange={(value) => update({ usarCarimboAssinatura: value, posicaoCarimbo: undefined, posicaoAssinatura: undefined })}
-          disabled={!readyToSign || authorization.loading}
-        />
-      </label>
+      </div>
 
       {!authorization.loading && !readyToSign && (
         <p className="border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-relaxed text-amber-800">
           {!authorization.stamp && "Esta unidade ainda não tem um carimbo configurado. "}
           {!authorization.signature && "Não tem uma assinatura configurada. "}
-          Contacte a administração — não é possível submeter apenas com um dos dois.
+          Contacte a administração — não é possível submeter sem os dois.
         </p>
       )}
 
-      {state.usarCarimboAssinatura && hasFreePositionImages && (
+      {readyToSign && hasFreePositionImages && (
         <div className="border border-graphite-200 bg-graphite-50 px-3.5 py-3">
           <p className="text-[13px] text-graphite-700">
             {hasPosition ? "Posição definida." : "Escolha onde o carimbo e a assinatura devem aparecer no documento."}

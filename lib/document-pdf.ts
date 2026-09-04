@@ -6,7 +6,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { createHash } from "node:crypto";
 import mammoth from "mammoth";
-import { PDFDocument, PDFPage, StandardFonts, rgb } from "pdf-lib";
+import { PDFDocument, PDFPage, StandardFonts, degrees, rgb } from "pdf-lib";
 import { loadFileByPathname } from "@/lib/file-storage";
 import type { DocumentTemplate } from "@/types";
 
@@ -51,6 +51,7 @@ export interface PdfDocumentInput {
   signatures: PdfSignatureMetadata[];
   template: Partial<DocumentTemplate> | null;
   institutionName?: string;
+  watermark?: string;
 }
 
 function escapeHtml(value: string) {
@@ -124,8 +125,8 @@ async function printableHtml(input: PdfDocumentInput, body: string) {
   const headerLogo = logo && input.template?.logotipoPosicao === "cabecalho" ? `<img class="brand-logo header-logo" src="${logo}" alt="Logótipo">` : "";
   const footerLogo = logo && input.template?.logotipoPosicao === "rodape" ? `<img class="brand-logo footer-logo" src="${logo}" alt="Logótipo">` : "";
   return `<!doctype html><html lang="pt"><head><meta charset="utf-8"><title>${escapeHtml(input.name)}</title><style>
-    @page{size:A4;margin:20mm 19mm 22mm}*{box-sizing:border-box}html,body{margin:0;padding:0;color:#1f2937;font-family:Arial,Helvetica,sans-serif;font-size:11.5pt;line-height:1.55}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}.brand-logo{display:block;object-fit:contain;margin-left:auto;margin-right:auto}.header-logo{max-height:20mm;max-width:48mm;margin-bottom:3mm}.footer-logo{max-height:14mm;max-width:38mm;margin-bottom:2mm}.institutional-header{margin:0 0 13mm;padding:0 0 5mm;border-bottom:1px solid #cad1dc;text-align:center}.institutional-header strong{display:block;color:#102f56;font-size:10pt;letter-spacing:.09em;text-transform:uppercase}.institutional-header span{display:block;margin-top:2mm;color:#687386;font-size:8.5pt}.content{overflow-wrap:anywhere}.content img{display:block;max-width:100%;height:auto;margin:0 auto}.content table{max-width:100%;border-collapse:collapse}.content td,.content th{padding:2mm;border:1px solid #cbd5e1}.template-footer{margin-top:14mm;padding-top:4mm;border-top:1px solid #cad1dc;color:#687386;font-size:8pt;text-align:center;break-inside:avoid}.document-validations{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:8mm 12mm;margin-top:18mm;padding-top:8mm;break-inside:avoid;page-break-inside:avoid}.stamp{display:flex;min-width:58mm;max-width:78mm;transform:rotate(-2deg);flex-direction:column;gap:1mm;border:2px solid #173f70;padding:3mm 5mm;color:#173f70;text-align:center;text-transform:uppercase}.stamp strong{font-size:10pt}.stamp span{font-size:8pt}.stamp small{font-size:6.5pt;text-transform:none}.signature{display:flex;min-width:64mm;flex-direction:column;border-top:1px solid #354052;padding-top:3mm;text-align:center}.signature-mark{margin-bottom:2mm;color:#177047;font-size:7pt;font-weight:700;text-transform:uppercase}.signature strong{font-size:9pt}.signature span,.signature small{font-size:7pt;color:#596579}.free-position{position:fixed;object-fit:contain;pointer-events:none}
-  </style></head><body><header class="institutional-header">${headerLogo}<strong>${headerText}</strong><span>${escapeHtml(input.protocol)} · ${escapeHtml(input.subject)}</span></header><main class="content">${body}</main><footer class="template-footer">${footerLogo}${footerText}</footer>${await decorations(input)}</body></html>`;
+    @page{size:A4;margin:20mm 19mm 22mm}*{box-sizing:border-box}html,body{margin:0;padding:0;color:#1f2937;font-family:Arial,Helvetica,sans-serif;font-size:11.5pt;line-height:1.55}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}.brand-logo{display:block;object-fit:contain;margin-left:auto;margin-right:auto}.header-logo{max-height:20mm;max-width:48mm;margin-bottom:3mm}.footer-logo{max-height:14mm;max-width:38mm;margin-bottom:2mm}.institutional-header{margin:0 0 13mm;padding:0 0 5mm;border-bottom:1px solid #cad1dc;text-align:center}.institutional-header strong{display:block;color:#102f56;font-size:10pt;letter-spacing:.09em;text-transform:uppercase}.institutional-header span{display:block;margin-top:2mm;color:#687386;font-size:8.5pt}.content{overflow-wrap:anywhere}.content img{display:block;max-width:100%;height:auto;margin:0 auto}.content table{max-width:100%;border-collapse:collapse}.content td,.content th{padding:2mm;border:1px solid #cbd5e1}.template-footer{margin-top:14mm;padding-top:4mm;border-top:1px solid #cad1dc;color:#687386;font-size:8pt;text-align:center;break-inside:avoid}.document-validations{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:8mm 12mm;margin-top:18mm;padding-top:8mm;break-inside:avoid;page-break-inside:avoid}.stamp{display:flex;min-width:58mm;max-width:78mm;transform:rotate(-2deg);flex-direction:column;gap:1mm;border:2px solid #173f70;padding:3mm 5mm;color:#173f70;text-align:center;text-transform:uppercase}.stamp strong{font-size:10pt}.stamp span{font-size:8pt}.stamp small{font-size:6.5pt;text-transform:none}.signature{display:flex;min-width:64mm;flex-direction:column;border-top:1px solid #354052;padding-top:3mm;text-align:center}.signature-mark{margin-bottom:2mm;color:#177047;font-size:7pt;font-weight:700;text-transform:uppercase}.signature strong{font-size:9pt}.signature span,.signature small{font-size:7pt;color:#596579}.free-position{position:fixed;object-fit:contain;pointer-events:none}.watermark{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%) rotate(-32deg);font-size:64pt;font-weight:800;letter-spacing:.15em;color:rgba(23,63,112,0.14);text-transform:uppercase;white-space:nowrap;pointer-events:none;z-index:0}
+  </style></head><body>${input.watermark ? `<div class="watermark">${escapeHtml(input.watermark)}</div>` : ""}<header class="institutional-header">${headerLogo}<strong>${headerText}</strong><span>${escapeHtml(input.protocol)} · ${escapeHtml(input.subject)}</span></header><main class="content">${body}</main><footer class="template-footer">${footerLogo}${footerText}</footer>${await decorations(input)}</body></html>`;
 }
 
 async function renderHtmlPdfServerless(html: string) {
@@ -209,10 +210,21 @@ function stampCoordinates(position: string | undefined, pageWidth: number, pageH
 
 async function decorateExistingPdf(input: PdfDocumentInput) {
   if (!input.sourceFile) throw new Error("Ficheiro PDF indisponivel.");
-  if (input.stamps.length === 0 && input.signatures.length === 0) return input.sourceFile;
+  if (input.stamps.length === 0 && input.signatures.length === 0 && !input.watermark) return input.sourceFile;
   const pdf = await PDFDocument.load(input.sourceFile, { ignoreEncryption: false });
   const regular = await pdf.embedFont(StandardFonts.Helvetica);
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
+  if (input.watermark) {
+    const label = plainText(input.watermark).toUpperCase();
+    for (const page of pdf.getPages()) {
+      const { width, height } = page.getSize();
+      const textWidth = bold.widthOfTextAtSize(label, 64);
+      page.drawText(label, {
+        x: width / 2 - textWidth / 2, y: height / 2, size: 64, font: bold,
+        color: rgb(0.09, 0.25, 0.44), opacity: 0.14, rotate: degrees(32),
+      });
+    }
+  }
   let fixedStampIndex = 0;
   for (const stamp of input.stamps) {
     if (stamp.imagemUrl && stamp.posicaoLivre) {
@@ -265,7 +277,7 @@ async function bodyFromInput(input: PdfDocumentInput) {
 export async function createDocumentPdf(input: PdfDocumentInput) {
   const key = createHash("sha256")
     .update(input.contentHtml ?? input.sourceFile ?? "")
-    .update(JSON.stringify({ protocol: input.protocol, stamps: input.stamps, signatures: input.signatures, template: input.template, institutionName: input.institutionName }))
+    .update(JSON.stringify({ protocol: input.protocol, stamps: input.stamps, signatures: input.signatures, template: input.template, institutionName: input.institutionName, watermark: input.watermark }))
     .digest("hex");
   const cached = outputCache.get(key);
   if (cached) return cached;

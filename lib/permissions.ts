@@ -6,13 +6,14 @@
  * what a profile type could already do.
  */
 export const ACTION_PERMISSIONS: Record<string, string[]> = {
+  receber_encaminhar: ["secretaria.receber", "secretaria.protocolar", "secretaria.encaminhar"],
   receber: ["secretaria.receber"],
   protocolar: ["secretaria.protocolar"],
   encaminhar: ["expedientes.encaminhar", "secretaria.encaminhar"],
   parecer: ["expedientes.parecer"],
   aprovar: ["expedientes.aprovar"],
   rejeitar: ["expedientes.aprovar"],
-  devolver: ["expedientes.devolver"],
+  devolver: ["expedientes.devolver", "expedientes.aprovar", "secretaria.receber", "secretaria.protocolar"],
   arquivar: ["expedientes.arquivar"],
 };
 

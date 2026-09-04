@@ -108,7 +108,21 @@ export function DocumentLibrary({ documents }: { documents: FlatDocument[] }) {
             </TableHead>
             <TableBody>
               {paged.map((doc) => (
-                <TableRow key={`${doc.expedienteId}-${doc.id}`}>
+                <TableRow
+                  key={`${doc.expedienteId}-${doc.id}`}
+                  clickable
+                  role="button"
+                  tabIndex={0}
+                  onClick={(event) => {
+                    if (!(event.target as HTMLElement).closest("a,button")) setPreview(doc);
+                  }}
+                  onKeyDown={(event) => {
+                    if ((event.key === "Enter" || event.key === " ") && !(event.target as HTMLElement).closest("a,button")) {
+                      event.preventDefault();
+                      setPreview(doc);
+                    }
+                  }}
+                >
                   <TableCell className="max-w-[260px]">
                     <button
                       type="button"

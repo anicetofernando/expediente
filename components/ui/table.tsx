@@ -33,10 +33,10 @@ export function TableRow({
       {...props}
       aria-selected={selected || props["aria-selected"]}
       className={cn(
-        "transition-colors duration-100",
+        "bg-white transition-colors duration-100",
         clickable &&
-          "cursor-pointer hover:bg-cfm-50/50 focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-cfm-500",
-        selected && "bg-cfm-50",
+          "cursor-pointer hover:bg-graphite-50 focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-cfm-500",
+        selected && "bg-graphite-100",
         className
       )}
     />

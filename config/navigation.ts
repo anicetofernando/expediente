@@ -29,7 +29,7 @@ export const perfisNavegacao: PerfilNavegacaoConfig[] = [
     id: "remetente",
     label: "Remetente",
     nivel: "operacional",
-    landingHref: "/painel",
+    landingHref: "/expedientes/caixa-saida",
   },
   {
     id: "secretaria",
@@ -56,21 +56,10 @@ export const navigation: NavGroupConfig[] = [
     label: "Expedientes",
     perfis: ["remetente"],
     items: [
-      { label: "Painel", href: "/painel", icon: "LayoutDashboard" },
       {
         label: "Novo expediente",
         href: "/expedientes/novo",
         icon: "FilePlus2",
-      },
-      {
-        label: "Meus expedientes",
-        href: "/expedientes/meus",
-        icon: "FolderKanban",
-      },
-      {
-        label: "Caixa de entrada",
-        href: "/expedientes/caixa-entrada",
-        icon: "Inbox",
       },
       {
         label: "Caixa de saída",
@@ -78,14 +67,9 @@ export const navigation: NavGroupConfig[] = [
         icon: "SendHorizontal",
       },
       {
-        label: "Pendentes",
-        href: "/expedientes/pendentes",
-        icon: "Clock3",
-      },
-      {
-        label: "Em análise",
-        href: "/expedientes/em-analise",
-        icon: "Search",
+        label: "Caixa de entrada",
+        href: "/expedientes/caixa-entrada",
+        icon: "Inbox",
       },
       {
         label: "Devolvidos",
@@ -103,9 +87,7 @@ export const navigation: NavGroupConfig[] = [
     label: "Secretaria",
     perfis: ["secretaria"],
     items: [
-      { label: "Recepção", href: "/secretaria", icon: "Inbox" },
-      { label: "Protocolos", href: "/secretaria/protocolos", icon: "Stamp" },
-      { label: "Encaminhamentos", href: "/secretaria/encaminhamentos", icon: "Forward" },
+      { label: "Recepção e encaminhamento", href: "/secretaria", icon: "Inbox" },
       { label: "Livro de expediente", href: "/livro", icon: "BookMarked" },
       {
         label: "Entregas pendentes",

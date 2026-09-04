@@ -161,6 +161,8 @@ export default async function ExpedientDetailPage({ params }: { params: { id: st
                   protocolo: expedient.protocolo,
                   assunto: expedient.assunto,
                   precisaEscalarDirector: expedient.precisaEscalarDirector,
+                  exigeCarimbo: expedient.exigeCarimbo,
+                  exigeAssinatura: expedient.exigeAssinatura,
                 }}
                 principalPdfUrl={principal?.pdfUrl}
               />

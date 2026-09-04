@@ -49,7 +49,7 @@ function buildLivroRows(allExpedients: Awaited<ReturnType<typeof listExpedients>
 
 export default async function LivroPage() {
   const session = await requirePermission(["secretaria", "administracao"], ["livro.gerir"]);
-  const rows = buildLivroRows(await listExpedients(session, "all"));
+  const rows = buildLivroRows(await listExpedients(session, "official-book"));
 
   return (
     <div className="flex h-full min-h-0 flex-col">

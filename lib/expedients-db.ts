@@ -85,12 +85,14 @@ function mapBase(row: ExpedientRow): Expedient {
     observacoes: row.notes ?? undefined,
     documentos: [], timeline: [], comentarios: [],
     precisaEscalarDirector: false,
+    exigeCarimbo: false,
+    exigeAssinatura: false,
     tipoLabel: row.document_type,
     atrasado: due < now && !["arquivado","cancelado","recebimento_confirmado"].includes(row.status),
   };
 }
 
-export type ExpedientView = "all" | "mine" | "inbox" | "outbox" | "pending" | "analysis" | "returned" | "completed" | "secretary-reception" | "secretary-protocols" | "secretary-forwarding" | "secretary-deliveries" | "approval" | "opinions" | "approval-history";
+export type ExpedientView = "all" | "mine" | "inbox" | "outbox" | "pending" | "analysis" | "returned" | "completed" | "secretary-reception" | "secretary-protocols" | "secretary-forwarding" | "secretary-deliveries" | "official-book" | "approval" | "opinions" | "approval-history";
 
 const VIEW_FILTERS: Record<ExpedientView, string> = {
   all: "TRUE",
@@ -101,10 +103,11 @@ const VIEW_FILTERS: Record<ExpedientView, string> = {
   analysis: "e.status='em_analise'",
   returned: "e.status IN ('devolvido','rejeitado')",
   completed: "e.status IN ('arquivado','aprovado','recebimento_confirmado')",
-  "secretary-reception": "e.status='submetido'",
+  "secretary-reception": "e.status IN ('submetido','recebido','protocolado')",
   "secretary-protocols": "e.status IN ('recebido','protocolado')",
   "secretary-forwarding": "e.status='protocolado'",
-  "secretary-deliveries": "e.status IN ('aprovado','disponivel_remetente','recebimento_confirmado')",
+  "secretary-deliveries": "e.status IN ('aprovado','rejeitado','disponivel_remetente')",
+  "official-book": "e.status <> 'rascunho' AND e.status <> 'cancelado' AND e.protocol NOT LIKE 'SUBMISSAO-%' AND e.protocol NOT LIKE 'RASCUNHO-%'",
   approval: "e.status IN ('encaminhado','em_analise','atrasado')",
   opinions: "e.status='aguardando_parecer'",
   "approval-history": "e.status IN ('aprovado','rejeitado','devolvido','arquivado')",
@@ -199,8 +202,11 @@ export async function getExpedient(session: AuthSession, id: string) {
   ]);
   const expedient = mapBase(row);
   const docTypes = await configuredDocumentTypes(db);
+  const documentType = docTypes.find((item) => item.id === row.document_type);
   expedient.precisaEscalarDirector = requiresDirectorEscalation(row.recipient_unit_type, row.document_type, docTypes);
-  expedient.tipoLabel = docTypes.find((item) => item.id === row.document_type)?.nome ?? row.document_type;
+  expedient.exigeCarimbo = Boolean(documentType?.exigeCarimbo);
+  expedient.exigeAssinatura = Boolean(documentType?.exigeAssinatura);
+  expedient.tipoLabel = documentType?.nome ?? row.document_type;
   expedient.documentos = documents.rows.map((doc) => ({
     id: doc.id, nome: doc.name, tipo: doc.document_kind, formato: doc.mime_type?.includes("pdf") ? "pdf" : doc.mime_type?.includes("image") ? "imagem" : "docx",
     paginas: doc.page_count, tamanho: formatSize(Number(doc.size_bytes)), criadoEm: iso(doc.created_at), criadoPor: doc.creator_name,

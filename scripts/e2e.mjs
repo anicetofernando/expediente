@@ -51,7 +51,7 @@ async function jsonRequest(cookie, pathname, options = {}) {
 function baseExpedient(overrides = {}) {
   const due = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
   return {
-    tipo: "td-carta", unidadeOrigem: "u-doc", remetente: "Felismina Cossa", destinatario: "u-doc",
+    tipo: "dt-oficio", unidadeOrigem: "u-doc", remetente: "Felismina Cossa", destinatario: "u-doc",
     assunto: "TESTE E2E - Pedido de intervencao", prioridade: "alta", confidencialidade: "interno", prazo: due,
     origemDocumento: "sistema", modeloId: "tpl-oficio", conteudo: "<p><strong>Exmo. Senhor,</strong></p><p>Solicitamos uma intervenção de teste.</p><p>Com os melhores cumprimentos.</p>",
     ficheiroNome: "", numPaginas: 1, carimbo: "nao", carimboId: "", solicitarAssinatura: false, posicaoPredefinida: true, anexos: [], rascunho: false,
@@ -127,8 +127,8 @@ try {
   pastForm.set("data", JSON.stringify(baseExpedient({ assunto: "TESTE E2E - Prazo inválido", prazo: new Date(Date.now() - 86400000).toISOString().slice(0, 10) })));
   const pastResponse = await fetch(`${base}/api/expedients`, { method: "POST", headers: { cookie: sender }, body: pastForm });
   check("past delivery date rejected", pastResponse.status === 400, { status: pastResponse.status });
-  const written = await createExpedient(sender, baseExpedient({ carimbo: "automatico", solicitarAssinatura: true }));
-  check("written letter created", !!written.id && written.protocolo.startsWith("CFM/DOC/"), { protocol: written.protocolo });
+  const written = await createExpedient(sender, baseExpedient());
+  check("written letter submitted with temporary reference", !!written.id && written.protocolo.startsWith("SUBMISSAO-"), { protocol: written.protocolo });
   const detail = await fetch(`${base}/expedientes/${written.id}`, { headers: { cookie: sender } });
   check("sender reads own expedient", detail.status === 200, { status: detail.status });
   const comment = await jsonRequest(sender, `/api/expedients/${written.id}/comments`, { method: "POST", body: JSON.stringify({ body: "Comentário funcional E2E", internal: false }) });
@@ -148,8 +148,8 @@ try {
   check("draft excluded from inbox", inboxWithDraft.status === 200 && !(await inboxWithDraft.text()).includes(draft.protocolo));
   const editedDraft = await updateDraft(sender, draft.id, baseExpedient({ assunto: "TESTE E2E - Rascunho editado", rascunho: true }));
   check("draft changes persist", editedDraft.rascunho === true && editedDraft.protocolo === draft.protocolo);
-  const submittedDraft = await action(sender, draft.id, "submeter");
-  check("draft receives official protocol on submission", submittedDraft.protocolo?.startsWith("CFM/DOC/"), { protocol: submittedDraft.protocolo });
+  const submittedDraft = await updateDraft(sender, draft.id, baseExpedient({ assunto: "TESTE E2E - Rascunho submetido", rascunho: false }));
+  check("draft receives temporary reference on submission", submittedDraft.protocolo?.startsWith("SUBMISSAO-"), { protocol: submittedDraft.protocolo });
 
   const privateDraft = await createExpedient(sender, baseExpedient({ assunto: "TESTE E2E - Rascunho privado da Secretaria", rascunho: true }));
 
@@ -163,7 +163,8 @@ try {
   check("expedient rows are directly clickable", secretaryConsultationHtml.includes('role="link"') && secretaryConsultationHtml.includes('tabindex="0"'));
   check("private draft excluded from secretary consultation", !secretaryConsultationHtml.includes(privateDraft.protocolo));
   const secretaryBook = await fetch(`${base}/livro`, { headers: { cookie: secretary } });
-  check("private draft excluded from secretary book", secretaryBook.status === 200 && !(await secretaryBook.text()).includes(privateDraft.protocolo), { status: secretaryBook.status });
+  const secretaryBookBeforeHtml = await secretaryBook.text();
+  check("drafts and unprocessed submissions excluded from official book", secretaryBook.status === 200 && !secretaryBookBeforeHtml.includes(privateDraft.protocolo) && !secretaryBookBeforeHtml.includes(written.protocolo), { status: secretaryBook.status });
   const secretaryDetail = await fetch(`${base}/expedientes/${written.id}`, { headers: { cookie: secretary } });
   check("secretary opens expedient details", secretaryDetail.status === 200, { status: secretaryDetail.status });
   const privateDraftDetail = await fetch(`${base}/expedientes/${privateDraft.id}`, { headers: { cookie: secretary } });
@@ -176,18 +177,17 @@ try {
   const secretaryAuthorizations = await jsonRequest(secretary, "/api/document-authorizations");
   check("secretary only sees unit stamps", secretaryAuthorizations.data.stamps.length > 0 && secretaryAuthorizations.data.stamps.every((stamp) => stamp.unidade === "Secretaria Geral" || stamp.unidade === "Global"));
   check("secretary has no shared departmental signature", secretaryAuthorizations.data.signatures.length === 0);
-  await action(secretary, written.id, "receber");
-  await action(secretary, written.id, "protocolar");
-  await action(secretary, written.id, "encaminhar", { target: "u-doc" });
+  const received = await action(secretary, written.id, "receber_encaminhar", { target: "u-doc" });
+  check("secretary assigns official protocol in one operation", received.protocolo?.startsWith("CFM/DOC/"), { protocol: received.protocolo });
+  const secretaryBookAfter = await fetch(`${base}/livro`, { headers: { cookie: secretary } });
+  check("officially received expedient enters book", secretaryBookAfter.status === 200 && (await secretaryBookAfter.text()).includes(received.protocolo));
 
   const approver = await login("fatima.momade@cfm.co.mz");
   const approverAuthorizations = await jsonRequest(approver, "/api/document-authorizations");
   check("approver only sees own individual signature", approverAuthorizations.data.signatures.length === 1 && approverAuthorizations.data.signatures[0].email === "fatima.momade@cfm.co.mz");
   await action(approver, written.id, "aprovar");
-  await action(approver, written.id, "assinatura");
-  await action(approver, written.id, "disponibilizar");
+  await action(secretary, written.id, "disponibilizar");
   await action(sender, written.id, "confirmar");
-  await action(secretary, written.id, "arquivar");
 
   const admin = await login("sandro.tivane@cfm.co.mz");
   const adminPage = await fetch(`${base}/admin/utilizadores`, { headers: { cookie: admin } });
@@ -237,7 +237,7 @@ try {
   await client.connect();
   const database = await client.query(`SELECT e.status,(SELECT count(*)::int FROM documents d WHERE d.expedient_id=e.id) documents,(SELECT count(*)::int FROM timeline_events t WHERE t.expedient_id=e.id) events,(SELECT count(*)::int FROM comments c WHERE c.expedient_id=e.id) comments,(SELECT id::text FROM documents d WHERE d.expedient_id=e.id AND d.document_kind='principal' LIMIT 1) document_id,(SELECT stamped FROM documents d WHERE d.expedient_id=e.id AND d.document_kind='principal' LIMIT 1) stamped,(SELECT signed FROM documents d WHERE d.expedient_id=e.id AND d.document_kind='principal' LIMIT 1) signed,(SELECT stamp_metadata IS NOT NULL AND signature_metadata IS NOT NULL FROM documents d WHERE d.expedient_id=e.id AND d.document_kind='principal' LIMIT 1) output_metadata,(SELECT template_metadata IS NOT NULL FROM documents d WHERE d.expedient_id=e.id AND d.document_kind='principal' LIMIT 1) template_saved,(SELECT signature_metadata->>'proprietario' FROM documents d WHERE d.expedient_id=e.id AND d.document_kind='principal' LIMIT 1) signer FROM expedients e WHERE e.id=$1`, [written.id]);
   await client.end();
-  check("database final state", database.rows[0]?.status === "arquivado" && database.rows[0]?.documents === 1 && database.rows[0]?.events >= 10 && database.rows[0]?.comments === 1, database.rows[0]);
+  check("database final state", database.rows[0]?.status === "arquivado" && database.rows[0]?.documents === 1 && database.rows[0]?.events >= 7 && database.rows[0]?.comments === 1, database.rows[0]);
   check("stamp and signature persisted", database.rows[0]?.stamped === true && database.rows[0]?.signed === true && database.rows[0]?.output_metadata === true, database.rows[0]);
   check("template layout snapshot persisted", database.rows[0]?.template_saved === true, database.rows[0]);
   check("correct individual signed document", database.rows[0]?.signer === "Fátima Momade", database.rows[0]);

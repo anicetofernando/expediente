@@ -10,9 +10,8 @@ import { dateValueInMaputo, isValidFutureOrTodayDate } from "@/lib/date-only";
 import { templateSnapshot } from "@/lib/document-configuration";
 import { resolveSecretaryId } from "@/lib/routing";
 import { saveFile } from "@/lib/file-storage";
-import { resolveMandatoryStampSignatureByUnitId, signatureMetadataJson, stampMetadataJson } from "@/lib/stamping";
-import { generateProtocolNumber } from "@/lib/numbering";
 import { hasPermission } from "@/lib/permissions";
+import { resolveMandatoryStampSignatureByUnitId, signatureMetadataJson, stampMetadataJson } from "@/lib/stamping";
 import type { DocumentTemplate, FreePosition } from "@/types";
 
 export const runtime = "nodejs";
@@ -22,7 +21,7 @@ interface DraftInput {
   prioridade: Priority; confidencialidade: Confidentiality; prazo: string;
   origemDocumento: "sistema" | "importado" | "apenas-processo";
   modeloId?: string; conteudo?: string; numPaginas?: number; rascunho?: boolean;
-  usarCarimboAssinatura?: boolean; posicaoCarimbo?: FreePosition; posicaoAssinatura?: FreePosition;
+  posicaoCarimbo?: FreePosition; posicaoAssinatura?: FreePosition;
   anexos?: Array<{ id: string; nome: string; descricao?: string; confidencialidade?: Confidentiality }>;
 }
 
@@ -59,7 +58,7 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
        WHERE e.id=$1 LIMIT 1`, [params.id]);
   const row = result.rows[0];
   if (!row) return NextResponse.json({ error: "Rascunho nao encontrado." }, { status: 404 });
-  if (row.status !== "rascunho" || (row.created_by !== session.user.id && session.perfilNavegacao !== "administracao")) {
+  if (!['rascunho', 'devolvido'].includes(row.status) || (row.created_by !== session.user.id && session.perfilNavegacao !== "administracao")) {
     return NextResponse.json({ error: "Este expediente nao pode ser editado como rascunho." }, { status: 403 });
   }
   const attachments = await query<{id:string;name:string;size_bytes:string;confidentiality:Confidentiality}>(
@@ -77,7 +76,7 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
       conteudo: row.content_html ?? "", ficheiroNome: row.source && row.source !== "sistema" ? row.name ?? "" : "",
       numPaginas: row.page_count ?? 0,
       anexos: attachments.rows.map((item) => ({ id:item.id,nome:item.name,tamanho:`${Math.max(1,Math.round(Number(item.size_bytes)/1024))} KB`,descricao:"",confidencialidade:item.confidentiality })),
-      usarCarimboAssinatura: Boolean(row.stamp_id),
+      usarCarimboAssinatura: origin === "sistema",
     },
   });
 }
@@ -111,7 +110,7 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
       );
       const current = found.rows[0];
       if (!current) throw new Error("Rascunho nao encontrado.");
-      if (current.status !== "rascunho" || (current.created_by !== session.user.id && session.perfilNavegacao !== "administracao")) throw new Error("Este rascunho ja nao pode ser editado.");
+      if (!['rascunho', 'devolvido'].includes(current.status) || (current.created_by !== session.user.id && session.perfilNavegacao !== "administracao")) throw new Error("Este rascunho ja nao pode ser editado.");
       input.unidadeOrigem = current.origin_unit_id;
       const main = (await client.query<{id:string;source:string;storage_path:string|null}>(
         "SELECT id,source,storage_path FROM documents WHERE expedient_id=$1 AND document_kind='principal' LIMIT 1", [params.id],
@@ -128,9 +127,7 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
         if (!secretaryId) throw new Error("Nao existe utilizador activo da Secretaria.");
         responsible = secretaryId;
         if (protocol.startsWith("RASCUNHO-")) {
-          const unit = await client.query<{acronym:string}>("SELECT acronym FROM organizational_units WHERE id=$1 AND active=true", [input.unidadeOrigem]);
-          if (!unit.rows[0]) throw new Error("Unidade de origem invalida.");
-          protocol = await generateProtocolNumber(client, input.unidadeOrigem, unit.rows[0].acronym, new Date().getFullYear());
+          protocol = `SUBMISSAO-${current.id.slice(0,8).toUpperCase()}`;
         }
       }
       await client.query(`UPDATE expedients SET protocol=$2,subject=$3,document_type=$4,status=$5,priority=$6,confidentiality=$7,sender_name=$8,origin_unit_id=$9,recipient_unit_id=$10,responsible_user_id=$11,origin_secretary_id=COALESCE(origin_secretary_id,$15),due_date=$12,next_step=$13,submitted_at=$14 WHERE id=$1`,
@@ -141,29 +138,22 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
         await client.query("DELETE FROM documents WHERE expedient_id=$1 AND document_kind='principal'", [params.id]);
         documentId = null;
       } else if (input.origemDocumento === "sistema") {
-        let stampId: string | null = null;
-        let stampMeta: string | null = null;
-        let sigMeta: string | null = null;
-        let stampsMeta = "[]";
-        let sigsMeta = "[]";
-        if (input.usarCarimboAssinatura) {
-          const resolved = await resolveMandatoryStampSignatureByUnitId(client, input.unidadeOrigem, session.user, session.perfilNavegacao);
-          stampId = resolved.stamp.id;
-          stampMeta = JSON.stringify(stampMetadataJson(resolved.stamp, session.user.nome, input.posicaoCarimbo));
-          sigMeta = JSON.stringify(signatureMetadataJson(resolved.signature, session.user, input.posicaoAssinatura));
-          stampsMeta = `[${stampMeta}]`;
-          sigsMeta = `[${sigMeta}]`;
-        }
+        // Obrigatorio, tal como na criacao: o remetente carimba e assina o original.
+        const resolved = await resolveMandatoryStampSignatureByUnitId(client, input.unidadeOrigem, session.user, session.perfilNavegacao);
+        const stampEntry = stampMetadataJson(resolved.stamp, session.user.nome, input.posicaoCarimbo);
+        const signatureEntry = signatureMetadataJson(resolved.signature, session.user, input.posicaoAssinatura);
         if (main) {
           await client.query(
-            `UPDATE documents SET name=$2,source='sistema',mime_type='text/html',size_bytes=$3,page_count=1,storage_path=NULL,content_html=$4,confidentiality=$5,stamp_id=$6,signature_requested=$7,template_metadata=$8::jsonb,stamped=$7,signed=$7,stamp_metadata=$9::jsonb,signature_metadata=$10::jsonb,stamps_metadata=$11::jsonb,signatures_metadata=$12::jsonb WHERE id=$1`,
-            [main.id,`${input.assunto.trim()}.html`,Buffer.byteLength(cleanHtml,"utf8"),cleanHtml,input.confidencialidade,stampId,Boolean(stampId),template ? JSON.stringify(template) : null,stampMeta,sigMeta,stampsMeta,sigsMeta],
+            `UPDATE documents SET name=$2,source='sistema',mime_type='text/html',size_bytes=$3,page_count=1,storage_path=NULL,content_html=$4,confidentiality=$5,stamp_id=$7,signature_requested=true,template_metadata=$6::jsonb,stamped=true,signed=true,stamp_metadata=$8::jsonb,signature_metadata=$9::jsonb,stamps_metadata=$10::jsonb,signatures_metadata=$11::jsonb WHERE id=$1`,
+            [main.id,`${input.assunto.trim()}.html`,Buffer.byteLength(cleanHtml,"utf8"),cleanHtml,input.confidencialidade,template ? JSON.stringify(template) : null,
+              resolved.stamp.id,JSON.stringify(stampEntry),JSON.stringify(signatureEntry),JSON.stringify([stampEntry]),JSON.stringify([signatureEntry])],
           );
         } else {
           const inserted = await client.query<{ id: string }>(
-            `INSERT INTO documents(expedient_id,name,document_kind,source,mime_type,size_bytes,page_count,content_html,confidentiality,created_by,stamp_id,stamped,signed,signature_requested,stamp_metadata,signature_metadata,stamps_metadata,signatures_metadata,template_metadata)
-             VALUES($1,$2,'principal','sistema','text/html',$3,1,$4,$5,$6,$7,$8,$8,$8,$9::jsonb,$10::jsonb,$11::jsonb,$12::jsonb,$13::jsonb) RETURNING id`,
-            [params.id,`${input.assunto.trim()}.html`,Buffer.byteLength(cleanHtml,"utf8"),cleanHtml,input.confidencialidade,session.user.id,stampId,Boolean(stampId),stampMeta,sigMeta,stampsMeta,sigsMeta,template ? JSON.stringify(template) : null],
+            `INSERT INTO documents(expedient_id,name,document_kind,source,mime_type,size_bytes,page_count,content_html,confidentiality,created_by,template_metadata,stamp_id,stamped,signed,stamp_metadata,signature_metadata,stamps_metadata,signatures_metadata)
+             VALUES($1,$2,'principal','sistema','text/html',$3,1,$4,$5,$6,$7::jsonb,$8,true,true,$9::jsonb,$10::jsonb,$11::jsonb,$12::jsonb) RETURNING id`,
+            [params.id,`${input.assunto.trim()}.html`,Buffer.byteLength(cleanHtml,"utf8"),cleanHtml,input.confidencialidade,session.user.id,template ? JSON.stringify(template) : null,
+              resolved.stamp.id,JSON.stringify(stampEntry),JSON.stringify(signatureEntry),JSON.stringify([stampEntry]),JSON.stringify([signatureEntry])],
           );
           documentId = inserted.rows[0].id;
         }

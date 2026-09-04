@@ -9,9 +9,8 @@ import { isValidFutureOrTodayDate } from "@/lib/date-only";
 import { templateSnapshot } from "@/lib/document-configuration";
 import { resolveSecretaryId } from "@/lib/routing";
 import { saveFile } from "@/lib/file-storage";
-import { resolveMandatoryStampSignatureByUnitId, signatureMetadataJson, stampMetadataJson } from "@/lib/stamping";
-import { generateProtocolNumber } from "@/lib/numbering";
 import { hasPermission } from "@/lib/permissions";
+import { resolveMandatoryStampSignatureByUnitId, signatureMetadataJson, stampMetadataJson } from "@/lib/stamping";
 import type { FreePosition } from "@/types";
 
 export const runtime = "nodejs";
@@ -21,7 +20,7 @@ interface CreateInput {
   prioridade: Priority; confidencialidade: Confidentiality; prazo: string;
   origemDocumento: "sistema" | "importado" | "apenas-processo";
   modeloId?: string; conteudo?: string; ficheiroNome?: string; numPaginas?: number; rascunho?: boolean;
-  usarCarimboAssinatura?: boolean; posicaoCarimbo?: FreePosition; posicaoAssinatura?: FreePosition;
+  posicaoCarimbo?: FreePosition; posicaoAssinatura?: FreePosition;
   anexos?: Array<{ nome: string; descricao?: string; confidencialidade?: Confidentiality }>;
 }
 
@@ -87,10 +86,9 @@ export async function POST(request: NextRequest) {
       const template = input.origemDocumento === "sistema" ? await templateSnapshot(client, input.modeloId) : null;
       if (input.origemDocumento === "sistema" && !template) throw new Error("Seleccione um modelo de documento activo.");
       const expedientId = randomUUID();
-      const year = new Date().getFullYear();
       let protocol = `RASCUNHO-${expedientId.slice(0,8).toUpperCase()}`;
       if (!input.rascunho) {
-        protocol = await generateProtocolNumber(client, input.unidadeOrigem, unit.rows[0].acronym, year);
+        protocol = `SUBMISSAO-${expedientId.slice(0,8).toUpperCase()}`;
       }
       const status = input.rascunho ? "rascunho" : "submetido";
       const responsible = input.rascunho ? session.user.id : await resolveSecretaryId(client, input.destinatario);
@@ -104,23 +102,16 @@ export async function POST(request: NextRequest) {
 
       let documentId: string | null = null;
       if (input.origemDocumento === "sistema") {
-        let stampId: string | null = null;
-        let stampMeta: string | null = null;
-        let sigMeta: string | null = null;
-        let stampsMeta = "[]";
-        let sigsMeta = "[]";
-        if (input.usarCarimboAssinatura) {
-          const resolved = await resolveMandatoryStampSignatureByUnitId(client, input.unidadeOrigem, session.user, session.perfilNavegacao);
-          stampId = resolved.stamp.id;
-          stampMeta = JSON.stringify(stampMetadataJson(resolved.stamp, session.user.nome, input.posicaoCarimbo));
-          sigMeta = JSON.stringify(signatureMetadataJson(resolved.signature, session.user, input.posicaoAssinatura));
-          stampsMeta = `[${stampMeta}]`;
-          sigsMeta = `[${sigMeta}]`;
-        }
+        // Obrigatorio: o remetente carimba e assina o documento original -- e o que
+        // segue, sem alteracoes, ate ao superior. A Secretaria nunca marca esta copia.
+        const resolved = await resolveMandatoryStampSignatureByUnitId(client, input.unidadeOrigem, session.user, session.perfilNavegacao);
+        const stampEntry = stampMetadataJson(resolved.stamp, session.user.nome, input.posicaoCarimbo);
+        const signatureEntry = signatureMetadataJson(resolved.signature, session.user, input.posicaoAssinatura);
         const inserted = await client.query<{ id: string }>(
-          `INSERT INTO documents(expedient_id,name,document_kind,source,mime_type,size_bytes,page_count,content_html,confidentiality,created_by,stamp_id,stamped,signed,stamp_metadata,signature_metadata,stamps_metadata,signatures_metadata,template_metadata)
-           VALUES($1,$2,'principal','sistema','text/html',$3,1,$4,$5,$6,$7,$8,$8,$9::jsonb,$10::jsonb,$11::jsonb,$12::jsonb,$13::jsonb) RETURNING id`,
-          [expedient.id,`${input.assunto.trim()}.html`,Buffer.byteLength(cleanHtml,"utf8"),cleanHtml,input.confidencialidade,session.user.id,stampId,Boolean(stampId),stampMeta,sigMeta,stampsMeta,sigsMeta,template ? JSON.stringify(template) : null],
+          `INSERT INTO documents(expedient_id,name,document_kind,source,mime_type,size_bytes,page_count,content_html,confidentiality,created_by,template_metadata,stamp_id,stamped,signed,stamp_metadata,signature_metadata,stamps_metadata,signatures_metadata)
+           VALUES($1,$2,'principal','sistema','text/html',$3,1,$4,$5,$6,$7::jsonb,$8,true,true,$9::jsonb,$10::jsonb,$11::jsonb,$12::jsonb) RETURNING id`,
+          [expedient.id,`${input.assunto.trim()}.html`,Buffer.byteLength(cleanHtml,"utf8"),cleanHtml,input.confidencialidade,session.user.id,template ? JSON.stringify(template) : null,
+            resolved.stamp.id,JSON.stringify(stampEntry),JSON.stringify(signatureEntry),JSON.stringify([stampEntry]),JSON.stringify([signatureEntry])],
         );
         documentId = inserted.rows[0].id;
       } else if (mainFile) {

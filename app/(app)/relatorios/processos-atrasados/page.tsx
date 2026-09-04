@@ -10,6 +10,7 @@ import { requirePermission } from "@/lib/auth";
 import { listExpedients } from "@/lib/expedients-db";
 import { formatDate } from "@/lib/utils";
 import { CheckCircle2 } from "lucide-react";
+import { NavigableTableRow } from "@/components/ui/navigable-table-row";
 
 export const metadata = { title: "Processos atrasados" };
 
@@ -87,7 +88,7 @@ export default async function ProcessosAtrasadosPage() {
                   </TableHead>
                   <TableBody>
                     {atrasados.map((e) => (
-                      <TableRow key={e.id}>
+                      <NavigableTableRow key={e.id} href={`/expedientes/${e.id}`}>
                         <TableCell className="whitespace-nowrap">
                           <Link href={`/expedientes/${e.id}`} className="font-medium text-navy-700 hover:underline">
                             {e.protocolo}
@@ -103,7 +104,7 @@ export default async function ProcessosAtrasadosPage() {
                         </TableCell>
                         <TableCell className="whitespace-nowrap tabular-nums">{formatDate(e.prazo)}</TableCell>
                         <TableCell className="text-right font-semibold tabular-nums text-crimson-600">{e.dias} d</TableCell>
-                      </TableRow>
+                      </NavigableTableRow>
                     ))}
                   </TableBody>
                 </Table>

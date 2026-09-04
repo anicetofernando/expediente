@@ -16,6 +16,7 @@ import { coreStats } from "@/lib/dashboard-metrics";
 import { requireSession } from "@/lib/auth";
 import { listExpedients } from "@/lib/expedients-db";
 import { cn, formatDate } from "@/lib/utils";
+import { NavigableTableRow } from "@/components/ui/navigable-table-row";
 
 export const metadata = { title: "Painel" };
 
@@ -100,7 +101,7 @@ export default async function PainelPage() {
             </TableHead>
             <TableBody>
               {prioritarios.map((expedient) => (
-                <TableRow key={expedient.id}>
+                <NavigableTableRow key={expedient.id} href={`/expedientes/${expedient.id}`}>
                   <TableCell>
                     <Link
                       href={`/expedientes/${expedient.id}`}
@@ -142,7 +143,7 @@ export default async function PainelPage() {
                       </Link>
                     </Button>
                   </TableCell>
-                </TableRow>
+                </NavigableTableRow>
               ))}
             </TableBody>
           </Table>

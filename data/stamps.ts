@@ -1,6 +1,7 @@
 import type { Stamp } from "@/types";
+import { organizationalUnits } from "@/data/organization";
 
-export const stamps: Stamp[] = [
+const configuredStamps: Stamp[] = [
   {
     id: "st-protocolo-geral",
     nome: "Protocolo Geral",
@@ -138,3 +139,22 @@ export const stamps: Stamp[] = [
     cor: "graphite",
   },
 ];
+
+const unitIdentityStamps: Stamp[] = organizationalUnits.map((unit) => ({
+  id: `st-unidade-${unit.id}`,
+  nome: `Carimbo institucional — ${unit.sigla}`,
+  categoria: "institucional",
+  unidade: unit.nome,
+  utilizadoresAutorizados: [],
+  etapasPermitidas: ["Aprovação", "Emissão"],
+  tiposDocumento: ["Todos"],
+  posicao: "inferior-direita",
+  tamanho: "medio",
+  transparencia: 0,
+  validadeDias: null,
+  activo: unit.estado === "activo",
+  utilizacoes: 0,
+  cor: "navy",
+}));
+
+export const stamps: Stamp[] = [...configuredStamps, ...unitIdentityStamps];

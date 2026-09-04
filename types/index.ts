@@ -92,7 +92,7 @@ export interface Sender {
 export interface ExpedientDocument {
   id: string;
   nome: string;
-  tipo: "principal" | "anexo" | "parecer" | "despacho" | "resposta";
+  tipo: "principal" | "anexo" | "parecer" | "despacho" | "resposta" | "protocolo";
   formato: "pdf" | "docx" | "imagem";
   paginas: number;
   tamanho: string;
@@ -193,6 +193,8 @@ export interface Expedient {
   comentarios: Comment[];
   atrasado: boolean;
   precisaEscalarDirector: boolean;
+  exigeCarimbo: boolean;
+  exigeAssinatura: boolean;
   tipoLabel: string;
   processosRelacionados?: { protocolo: string; assunto: string }[];
 }

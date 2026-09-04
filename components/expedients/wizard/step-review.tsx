@@ -141,9 +141,7 @@ export function StepReview({ state }: StepProps) {
         <ReviewSection title="Carimbo e assinatura" icon={Stamp}>
           <div className="flex items-center gap-2 px-3 py-3 text-[13px]">
             <PenTool className="size-3.5 text-navy-700" />
-            <span className="font-medium text-graphite-800">
-              {state.usarCarimboAssinatura ? "Carimbo do departamento e assinatura aplicados" : "Sem carimbo nem assinatura"}
-            </span>
+            <span className="font-medium text-graphite-800">Carimbo do departamento e assinatura do remetente aplicados</span>
           </div>
         </ReviewSection>
       )}

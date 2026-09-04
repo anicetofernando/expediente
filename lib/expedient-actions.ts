@@ -1,6 +1,6 @@
 import type { ExpedientStatus } from "@/types";
 
-export type ActionKind = "confirm" | "forward" | "protocolar" | "resposta" | "note" | "archive";
+export type ActionKind = "confirm" | "forward" | "receive-forward" | "resposta" | "note" | "archive";
 
 export interface ActionDef {
   key: string;
@@ -12,8 +12,7 @@ export interface ActionDef {
 
 const A = {
   submeter: { key: "submeter", label: "Submeter", icon: "Send", variant: "primary", kind: "confirm" } as ActionDef,
-  receber: { key: "receber", label: "Receber", icon: "Inbox", variant: "primary", kind: "confirm" } as ActionDef,
-  protocolar: { key: "protocolar", label: "Protocolar", icon: "Stamp", variant: "primary", kind: "protocolar" } as ActionDef,
+  receberEncaminhar: { key: "receber_encaminhar", label: "Receber e encaminhar", icon: "Stamp", variant: "primary", kind: "receive-forward" } as ActionDef,
   encaminhar: { key: "encaminhar", label: "Encaminhar", icon: "Forward", variant: "primary", kind: "forward" } as ActionDef,
   parecer: { key: "parecer", label: "Solicitar parecer", icon: "MessageSquareText", variant: "secondary", kind: "forward" } as ActionDef,
   esclarecimento: { key: "esclarecimento", label: "Solicitar esclarecimento", icon: "HelpCircle", variant: "secondary", kind: "note" } as ActionDef,
@@ -30,17 +29,17 @@ const A = {
 };
 
 export const ACTIONS_BY_STATUS: Record<ExpedientStatus, ActionDef[]> = {
-  rascunho: [A.submeter],
-  submetido: [A.receber],
-  recebido: [A.protocolar],
-  protocolado: [A.encaminhar],
+  rascunho: [],
+  submetido: [A.receberEncaminhar, A.devolver],
+  recebido: [A.receberEncaminhar, A.devolver],
+  protocolado: [A.receberEncaminhar, A.devolver],
   encaminhado: [A.encaminhar, A.parecer, A.devolver, A.aprovar],
   em_analise: [A.encaminhar, A.aprovar, A.rejeitar, A.devolver, A.parecer, A.esclarecimento],
   aguardando_parecer: [A.resposta, A.esclarecimento],
   aguardando_esclarecimento: [A.resposta],
-  devolvido: [A.resposta, A.encaminhar],
-  aprovado: [A.resposta, A.disponibilizar],
-  rejeitado: [A.notificar, A.arquivar],
+  devolvido: [],
+  aprovado: [A.disponibilizar],
+  rejeitado: [A.notificar],
   disponivel_remetente: [A.confirmar],
   recebimento_confirmado: [A.arquivar],
   arquivado: [],
