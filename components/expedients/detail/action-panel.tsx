@@ -81,7 +81,9 @@ export function ActionPanel({ expedient, principalPdfUrl }: { expedient: ActionE
                 ? "Aprovar e carimbar"
                 : "Aprovar",
         }
-      : action);
+      : action.key === "resposta" && perfilNavegacao === "remetente"
+        ? { ...action, label: "Responder" }
+        : action);
   const [activeAction, setActiveAction] = React.useState<ActionDef | null>(null);
 
   async function complete(action: ActionDef, message: string, target?: string, posicaoCarimbo?: FreePosition, posicaoAssinatura?: FreePosition) {
@@ -273,14 +275,22 @@ function ActionDialog({
       );
     }
     return (
-      <ConfirmDialog
-        open
-        onOpenChange={(v) => !v && onClose()}
-        title={`${action.label} — ${expedient.protocolo}`}
-        description={`Confirma a acção "${action.label}" sobre este expediente? Esta acção ficará registada no histórico e na auditoria do processo.`}
-        confirmLabel={action.label}
-        onConfirm={() => onComplete(`"${action.label}" aplicado a ${expedient.protocolo}.`)}
-      />
+      <Dialog open onOpenChange={(v) => !v && onClose()}>
+        <DialogContent size="sm">
+          <DialogHeader>
+            <DialogTitle>Responder — {expedient.protocolo}</DialogTitle>
+            <DialogDescription>{expedient.assunto} · continua no mesmo processo, sem novo número.</DialogDescription>
+          </DialogHeader>
+          <DialogBody>
+            <Label required>Resposta</Label>
+            <Textarea rows={5} placeholder="Escreva a sua resposta, esclarecimento ou correcção…" value={note} onChange={(e) => setNote(e.target.value)} />
+          </DialogBody>
+          <DialogFooter>
+            <Button variant="secondary" onClick={onClose}>Cancelar</Button>
+            <Button disabled={!note.trim()} onClick={() => onComplete(note)}>Responder</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     );
   }
 

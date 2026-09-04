@@ -185,6 +185,7 @@ interface DocumentRow {
   stamp_id: string | null; signature_requested: boolean;
   stamp_metadata: Record<string, string> | null; signature_metadata: Record<string, string> | null;
   stamps_metadata: Record<string, string>[]; signatures_metadata: Record<string, string>[];
+  document_number: string | null;
 }
 interface TimelineRow { id: string; event_type: TimelineEvent["tipo"]; title: string; description: string; created_at: string; user_name: string | null; unit_name: string | null }
 interface CommentRow { id: string; body: string; internal: boolean; created_at: string; author_name: string; job_title: string }
@@ -208,7 +209,7 @@ export async function getExpedient(session: AuthSession, id: string) {
   expedient.exigeAssinatura = Boolean(documentType?.exigeAssinatura);
   expedient.tipoLabel = documentType?.nome ?? row.document_type;
   expedient.documentos = documents.rows.map((doc) => ({
-    id: doc.id, nome: doc.name, tipo: doc.document_kind, formato: doc.mime_type?.includes("pdf") ? "pdf" : doc.mime_type?.includes("image") ? "imagem" : "docx",
+    id: doc.id, nome: doc.name, numero: doc.document_number ?? undefined, tipo: doc.document_kind, formato: doc.mime_type?.includes("pdf") ? "pdf" : doc.mime_type?.includes("image") ? "imagem" : "docx",
     paginas: doc.page_count, tamanho: formatSize(Number(doc.size_bytes)), criadoEm: iso(doc.created_at), criadoPor: doc.creator_name,
     confidencialidade: doc.confidentiality, carimbado: doc.stamped, assinado: doc.signed, versao: doc.version, origem: doc.source,
     conteudoHtml: doc.content_html ?? undefined, mimeType: doc.mime_type ?? undefined, downloadUrl: `/api/documents/${doc.id}`,

@@ -17,7 +17,7 @@ import { generateProtocolNumber } from "@/lib/numbering";
 import { hasActionPermission } from "@/lib/permissions";
 
 const PROFILE_ACTIONS: Record<string, Set<string>> = {
-  remetente: new Set(["confirmar"]),
+  remetente: new Set(["confirmar", "resposta"]),
   secretaria: new Set(["receber_encaminhar", "devolver", "disponibilizar", "notificar"]),
   superior: new Set(["encaminhar", "parecer", "esclarecimento", "aprovar", "rejeitar", "devolver", "resposta", "retomar", "escalar"]),
   administracao: new Set([
@@ -71,6 +71,7 @@ const ALLOWED_BY_STATUS: Record<string, string[]> = {
   em_analise: ["encaminhar", "aprovar", "rejeitar", "devolver", "parecer", "esclarecimento"],
   aguardando_parecer: ["resposta", "esclarecimento"],
   aguardando_esclarecimento: ["resposta"],
+  devolvido: ["resposta"],
   aprovado: ["disponibilizar"],
   rejeitado: ["notificar"],
   disponivel_remetente: ["confirmar"],
@@ -240,6 +241,40 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         responsible = await targetResponsible(client, input.target);
         recipient = input.target;
         nextStep = action === "parecer" ? "Emissao de parecer" : "Analise pela unidade destinataria";
+
+        if (action === "encaminhar") {
+          // "Tomei conhecimento": ao encaminhar (repassa a responsabilidade, nao volta
+          // para decidir -- ao contrario de "parecer"), a assinatura pessoal de quem
+          // encaminha fica registada no documento original, somando-se as anteriores.
+          const principal = await client.query<{ id: string; signatures_metadata: Array<{ id?: string }> | null }>(
+            "SELECT id,signatures_metadata FROM documents WHERE expedient_id=$1 AND document_kind='principal' LIMIT 1 FOR UPDATE",
+            [exp.id],
+          );
+          if (principal.rows[0]) {
+            const signatures = await configuredSignatures(client);
+            const signature = resolveUserSignature(signatures, session.user);
+            if (!signature) throw new Error("Nao tem uma assinatura individual activa. Configure-a em Administracao > Assinaturas antes de encaminhar.");
+            const signatureEntries = principal.rows[0].signatures_metadata ?? [];
+            if (!signatureEntries.some((entry) => entry.id === signature.id)) {
+              const entry = signatureMetadataJson(signature, session.user, signature.posicaoLivre);
+              signatureEntries.push(entry);
+              await client.query(
+                `UPDATE documents SET signed=true,signature_metadata=$2::jsonb,signatures_metadata=$3::jsonb WHERE id=$1`,
+                [principal.rows[0].id, JSON.stringify(entry), JSON.stringify(signatureEntries)],
+              );
+            }
+          }
+        }
+      }
+
+      if (action === "resposta" && exp.status === "devolvido") {
+        // A resposta do remetente a uma devolucao volta para quem devolveu -- nunca
+        // cria um processo novo, continua no mesmo expediente.
+        const lastHandler = await client.query<{ user_id: string | null }>(
+          "SELECT user_id FROM timeline_events WHERE expedient_id=$1 AND event_type IN ('devolucao','encaminhamento') ORDER BY created_at DESC LIMIT 1",
+          [exp.id],
+        );
+        if (lastHandler.rows[0]?.user_id) responsible = lastHandler.rows[0].user_id;
       }
 
       if (action === "aprovar") {
@@ -329,8 +364,10 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       }
       if (action === "devolver") {
         if (!input.note?.trim()) throw new Error("Indique o motivo da devolucao.");
-        responsible = exp.created_by;
-        nextStep = "Correccao pelo remetente";
+        // Tal como aprovar/rejeitar, a devolucao entrega sempre a secretaria de
+        // origem primeiro -- nunca directo ao remetente.
+        responsible = exp.origin_secretary_id ?? responsible;
+        nextStep = "Entrega ao remetente pela Secretaria para correccao";
       }
       if (action === "disponibilizar") {
         responsible = exp.created_by;

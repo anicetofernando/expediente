@@ -92,6 +92,7 @@ export interface Sender {
 export interface ExpedientDocument {
   id: string;
   nome: string;
+  numero?: string;
   tipo: "principal" | "anexo" | "parecer" | "despacho" | "resposta" | "protocolo";
   formato: "pdf" | "docx" | "imagem";
   paginas: number;

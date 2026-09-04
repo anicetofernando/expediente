@@ -9,6 +9,7 @@ import { templateSnapshot } from "@/lib/document-configuration";
 import { rememberStampSignaturePositions, resolveMandatoryStampSignature, signatureMetadataJson, stampMetadataJson } from "@/lib/stamping";
 import { saveFile } from "@/lib/file-storage";
 import { hasAllPermissions } from "@/lib/permissions";
+import { generateProtocolNumber } from "@/lib/numbering";
 import type { FreePosition } from "@/types";
 
 export const runtime = "nodejs";
@@ -94,6 +95,15 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       }
 
       const documentId = randomUUID();
+      // A resposta e uma carta propria, de outro departamento -- ganha o seu proprio
+      // numero de protocolo (gerado pela unidade de quem escreve), mesmo continuando
+      // associada a este mesmo expediente.
+      const respondingUnit = await client.query<{ acronym: string }>(
+        "SELECT acronym FROM organizational_units WHERE id=$1 AND active=true", [session.user.unidadeId],
+      );
+      const documentNumber = respondingUnit.rows[0]
+        ? await generateProtocolNumber(client, session.user.unidadeId, respondingUnit.rows[0].acronym, new Date().getFullYear())
+        : null;
       if (input.modo === "sistema") {
         const clean = sanitizeDocumentHtml(input.conteudo ?? "");
         const template = await templateSnapshot(client, input.modeloId);
@@ -101,19 +111,19 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         const stampEntry = JSON.stringify(stampMetadataJson(resolved.stamp, session.user.nome));
         const signatureEntry = JSON.stringify(signatureMetadataJson(resolved.signature, session.user));
         await client.query(
-          `INSERT INTO documents(id,expedient_id,name,document_kind,source,mime_type,size_bytes,page_count,content_html,confidentiality,created_by,stamp_id,stamped,signed,stamp_metadata,signature_metadata,stamps_metadata,signatures_metadata,template_metadata)
-           VALUES($1,$2,$3,'resposta','sistema','text/html',$4,1,$5,'interno',$6,$7,true,true,$8::jsonb,$9::jsonb,$10::jsonb,$11::jsonb,$12::jsonb)`,
+          `INSERT INTO documents(id,expedient_id,name,document_kind,source,mime_type,size_bytes,page_count,content_html,confidentiality,created_by,stamp_id,stamped,signed,stamp_metadata,signature_metadata,stamps_metadata,signatures_metadata,template_metadata,document_number)
+           VALUES($1,$2,$3,'resposta','sistema','text/html',$4,1,$5,'interno',$6,$7,true,true,$8::jsonb,$9::jsonb,$10::jsonb,$11::jsonb,$12::jsonb,$13)`,
           [documentId, exp.id, `Despacho - ${exp.protocol}.html`, Buffer.byteLength(clean, "utf8"), clean, session.user.id, resolved.stamp.id,
-            stampEntry, signatureEntry, `[${stampEntry}]`, `[${signatureEntry}]`, template ? JSON.stringify(template) : null],
+            stampEntry, signatureEntry, `[${stampEntry}]`, `[${signatureEntry}]`, template ? JSON.stringify(template) : null, documentNumber],
         );
       } else if (file) {
         const bytes = Buffer.from(await file.arrayBuffer());
         const storedName = `${randomUUID()}-${cleanName(file.name)}`;
         const relative = await saveFile("documents", `${exp.id}/${storedName}`, bytes, file.type || undefined);
         await client.query(
-          `INSERT INTO documents(id,expedient_id,name,document_kind,source,mime_type,size_bytes,page_count,storage_path,confidentiality,created_by)
-           VALUES($1,$2,$3,'resposta','importado',$4,$5,1,$6,'interno',$7)`,
-          [documentId, exp.id, file.name, file.type || "application/octet-stream", file.size, relative, session.user.id],
+          `INSERT INTO documents(id,expedient_id,name,document_kind,source,mime_type,size_bytes,page_count,storage_path,confidentiality,created_by,document_number)
+           VALUES($1,$2,$3,'resposta','importado',$4,$5,1,$6,'interno',$7,$8)`,
+          [documentId, exp.id, file.name, file.type || "application/octet-stream", file.size, relative, session.user.id, documentNumber],
         );
       }
       await client.query(

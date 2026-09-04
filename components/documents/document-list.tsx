@@ -26,7 +26,10 @@ export function DocumentList({ title, docs }: { title?: string; docs: Expedient[
                 <FileText className="size-4" />
               </span>
               <div className="min-w-0 flex-1">
-                <p className="truncate text-[13px] font-medium text-navy-700">{doc.nome}</p>
+                <p className="truncate text-[13px] font-medium text-navy-700">
+                  {doc.numero && <span className="mr-1.5 text-graphite-500">{doc.numero} ·</span>}
+                  {doc.nome}
+                </p>
                 <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-2xs text-graphite-400">
                   <span>{doc.paginas} pág.</span><span>·</span><span>{doc.tamanho}</span><span>·</span>
                   <span>{doc.origem}</span><span>·</span>
