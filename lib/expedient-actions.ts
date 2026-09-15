@@ -37,7 +37,7 @@ export const ACTIONS_BY_STATUS: Record<ExpedientStatus, ActionDef[]> = {
   em_analise: [A.encaminhar, A.aprovar, A.rejeitar, A.devolver, A.parecer, A.esclarecimento],
   aguardando_parecer: [A.resposta, A.esclarecimento],
   aguardando_esclarecimento: [A.resposta],
-  devolvido: [],
+  devolvido: [A.resposta],
   aprovado: [A.disponibilizar],
   rejeitado: [A.notificar],
   disponivel_remetente: [A.confirmar],

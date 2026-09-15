@@ -55,7 +55,7 @@ const ACTION_ICONS: Record<string, React.ComponentType<{ className?: string }>> 
 type ActionExpedient = Pick<Expedient, "id" | "estado" | "protocolo" | "assunto" | "precisaEscalarDirector" | "exigeCarimbo" | "exigeAssinatura">;
 
 const PROFILE_ACTIONS: Record<string, Set<string>> = {
-  remetente: new Set(["confirmar"]),
+  remetente: new Set(["confirmar", "resposta"]),
   secretaria: new Set(["receber_encaminhar", "devolver", "disponibilizar", "notificar"]),
   superior: new Set(["encaminhar", "parecer", "esclarecimento", "aprovar", "rejeitar", "devolver", "resposta", "retomar", "escalar"]),
   administracao: new Set(Object.values(ACTIONS_BY_STATUS).flat().map((action) => action.key)),
