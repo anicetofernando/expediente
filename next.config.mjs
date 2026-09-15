@@ -7,6 +7,8 @@ const nextConfig = {
     outputFileTracingIncludes: {
       "/api/documents/*/pdf/route": ["node_modules/@sparticuz/chromium/bin/**"],
       "/api/documents/*/pdf": ["node_modules/@sparticuz/chromium/bin/**"],
+      "/api/reports/export/route": ["node_modules/@sparticuz/chromium/bin/**"],
+      "/api/reports/export": ["node_modules/@sparticuz/chromium/bin/**"],
     },
   },
   // Evita que `next dev` substitua os chunks CSS/JS de um build que esteja
