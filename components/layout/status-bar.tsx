@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import {
   getActiveGroup,
@@ -8,6 +9,29 @@ import {
   getVisibleNavigation,
 } from "@/components/layout/navigation-model";
 import { useSession } from "@/lib/session";
+import { cn } from "@/lib/utils";
+
+function useOnlineStatus() {
+  const [online, setOnline] = useState(true);
+
+  useEffect(() => {
+    setOnline(navigator.onLine);
+    function handleOnline() {
+      setOnline(true);
+    }
+    function handleOffline() {
+      setOnline(false);
+    }
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, []);
+
+  return online;
+}
 
 const UNIT_STOP_WORDS = new Set(["a", "as", "de", "do", "da", "dos", "das", "e"]);
 
@@ -29,6 +53,7 @@ export function StatusBar() {
   const visibleGroups = getVisibleNavigation(perfilNavegacao);
   const activeHref = getActiveHref(pathname, visibleGroups);
   const activeGroup = getActiveGroup(pathname, visibleGroups, activeHref) ?? visibleGroups[0];
+  const online = useOnlineStatus();
 
   return (
     <footer
@@ -36,8 +61,11 @@ export function StatusBar() {
       aria-label="Estado do sistema"
     >
       <span className="flex items-center gap-1.5">
-        <span className="size-1.5 rounded-full bg-success-300" aria-hidden />
-        Ligado
+        <span
+          className={cn("size-1.5 rounded-full", online ? "bg-success-300" : "bg-crimson-400")}
+          aria-hidden
+        />
+        {online ? "Ligado" : "Sem ligação"}
       </span>
       <span className="h-3 w-px bg-white/15" aria-hidden />
       <span title={unitName}>Unidade: {abbreviateUnit(unitName)}</span>
