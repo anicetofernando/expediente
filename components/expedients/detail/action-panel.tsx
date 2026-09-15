@@ -52,7 +52,7 @@ const ACTION_ICONS: Record<string, React.ComponentType<{ className?: string }>> 
   XCircle,
 };
 
-type ActionExpedient = Pick<Expedient, "id" | "estado" | "protocolo" | "assunto" | "precisaEscalarDirector" | "exigeCarimbo" | "exigeAssinatura">;
+type ActionExpedient = Pick<Expedient, "id" | "estado" | "protocolo" | "assunto" | "precisaEscalarDirector" | "exigeCarimbo" | "exigeAssinatura" | "responsavelActualId">;
 
 const PROFILE_ACTIONS: Record<string, Set<string>> = {
   remetente: new Set(["confirmar", "resposta"]),
@@ -63,13 +63,25 @@ const PROFILE_ACTIONS: Record<string, Set<string>> = {
 
 export function ActionPanel({ expedient, principalPdfUrl }: { expedient: ActionExpedient; principalPdfUrl?: string }) {
   const { toast } = useToast();
-  const { perfilNavegacao, profile } = useSession();
+  const { perfilNavegacao, profile, user } = useSession();
   const router = useRouter();
   const blockDirectApproval = perfilNavegacao === "superior" && expedient.precisaEscalarDirector;
+  // Depois de encaminhar, a Secretaria deixa de poder devolver por iniciativa
+  // propria -- o processo ja esta em maos do superior. So ele pode devolve-lo
+  // a partir daqui (espelha a mesma regra aplicada no backend).
+  const blockSecretaryReturn = perfilNavegacao === "secretaria" && ["encaminhado", "em_analise"].includes(expedient.estado);
+  // Enquanto se aguarda parecer/esclarecimento, so quem recebeu o pedido (o
+  // responsavel actual) pode responder -- quem o solicitou fica apenas a
+  // aguardar, sem outras accoes disponiveis sobre este processo.
+  const isPendingHandoff = ["aguardando_parecer", "aguardando_esclarecimento"].includes(expedient.estado);
+  const isHandoffResponsible = expedient.responsavelActualId === user.id;
+  const blockNonResponsibleHandoff = isPendingHandoff && !isHandoffResponsible;
   const actions = (ACTIONS_BY_STATUS[expedient.estado] ?? [])
     .filter((action) => PROFILE_ACTIONS[perfilNavegacao]?.has(action.key))
     .filter((action) => hasActionPermission(profile.permissoes, action.key))
     .filter((action) => !(blockDirectApproval && action.key === "aprovar"))
+    .filter((action) => !(blockSecretaryReturn && action.key === "devolver"))
+    .filter((action) => !(blockNonResponsibleHandoff && (action.key === "resposta" || action.key === "esclarecimento")))
     .map((action) => action.key === "aprovar"
       ? {
           ...action,
@@ -101,6 +113,20 @@ export function ActionPanel({ expedient, principalPdfUrl }: { expedient: ActionE
     } catch (error) {
       toast({ title: "Acção não registada", description: error instanceof Error ? error.message : "Erro inesperado.", variant: "destructive" });
     }
+  }
+
+  if (actions.length === 0 && blockNonResponsibleHandoff) {
+    return (
+      <div className="rounded-lg border border-graphite-200 bg-graphite-50 px-4 py-5 text-center">
+        <ClipboardCheck className="mx-auto mb-2 size-5 text-graphite-400" />
+        <p className="text-[13px] font-medium text-graphite-600">
+          {expedient.estado === "aguardando_parecer" ? "A aguardar parecer" : "A aguardar esclarecimento"}
+        </p>
+        <p className="mt-1 text-2xs text-graphite-400">
+          O pedido já foi encaminhado. Não há nenhuma acção a fazer aqui até que seja respondido.
+        </p>
+      </div>
+    );
   }
 
   if (actions.length === 0 && !["rascunho", "devolvido"].includes(expedient.estado)) {

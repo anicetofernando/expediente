@@ -188,7 +188,7 @@ function NovoExpedienteContent() {
       })
       .catch((error) => {
         toast({ title: "Rascunho indisponivel", description: error instanceof Error ? error.message : "Erro inesperado.", variant: "destructive" });
-        router.replace("/expedientes/meus");
+        router.replace("/expedientes/caixa-saida");
       })
       .finally(() => { if (!cancelled) setDraftLoading(false); });
     return () => { cancelled = true; };
@@ -268,7 +268,7 @@ function NovoExpedienteContent() {
                 </h2>
                 <p className="mt-1.5 text-[13px] text-graphite-500">
                   {submitted.rascunho
-                    ? "Pode continuar a edição em Meus expedientes."
+                    ? "Pode continuar a edição em Caixa de saída."
                     : "O processo foi encaminhado para recepção e protocolo."}
                 </p>
                 <div className="mx-auto mt-5 inline-flex items-center gap-2 border border-graphite-200 bg-graphite-50 px-4 py-2.5">
@@ -294,9 +294,9 @@ function NovoExpedienteContent() {
                     Criar outro
                   </Button>
                   <Button asChild>
-                    <Link href="/expedientes/meus">
+                    <Link href="/expedientes/caixa-saida">
                       <FolderOpen className="size-3.5" />
-                      Meus expedientes
+                      Caixa de saída
                     </Link>
                   </Button>
                 </div>

@@ -98,6 +98,11 @@ export function StepStampSignature({
           <Button type="button" variant="secondary" className="mt-2" loading={preparing} onClick={openPositioning}>
             {hasPosition ? "Ajustar posição" : "Posicionar carimbo e assinatura"}
           </Button>
+          {preparing && (
+            <p className="mt-2 text-2xs text-graphite-400">
+              A gerar uma pré-visualização real do documento para posicionar o carimbo — pode demorar alguns segundos…
+            </p>
+          )}
         </div>
       )}
 

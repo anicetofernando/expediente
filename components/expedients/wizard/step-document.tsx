@@ -43,11 +43,11 @@ export function StepDocument({ state, update }: StepProps) {
         <section className="lg:col-span-5 lg:sticky lg:top-4 lg:self-start">
           <Label>Pré-visualização</Label>
           <div className="h-[78vh] min-h-[720px] max-h-[920px] overflow-y-auto border border-graphite-300 bg-graphite-50 p-3">
-            <div className="mx-auto min-h-[680px] max-w-[520px] border border-graphite-200 bg-white px-9 py-10 text-2xs">
+            <div className="mx-auto min-h-[680px] max-w-[520px] overflow-hidden border border-graphite-200 bg-white px-9 py-10 text-2xs [overflow-wrap:anywhere]">
               {template?.logotipo && template.logotipoPosicao === "cabecalho" && <img src={template.logotipo} alt="Logótipo" className="mx-auto mb-3 max-h-16 max-w-36 object-contain" />}
               <p className="whitespace-pre-line text-center text-[11px] font-semibold uppercase tracking-wide text-navy-800">{template?.cabecalho ?? "CFM — Portos e Caminhos de Ferro de Moçambique"}</p>
               <p className="mt-1 text-center text-2xs text-graphite-400">{template?.nome ?? "Modelo de documento"}</p>
-              {state.conteudo ? <div className="mt-6 text-[11px] leading-relaxed text-graphite-700" dangerouslySetInnerHTML={{ __html: state.conteudo }} /> : <div className="mt-6 text-[11px] text-graphite-400">O conteúdo do documento será apresentado nesta área.</div>}
+              {state.conteudo ? <div className="mt-6 text-[11px] leading-relaxed text-graphite-700 [overflow-wrap:anywhere]" dangerouslySetInnerHTML={{ __html: state.conteudo }} /> : <div className="mt-6 text-[11px] text-graphite-400">O conteúdo do documento será apresentado nesta área.</div>}
               <div className="mt-10 border-t border-graphite-200 pt-3 text-center text-[9px] text-graphite-500">
                 {template?.logotipo && template.logotipoPosicao === "rodape" && <img src={template.logotipo} alt="Logótipo" className="mx-auto mb-2 max-h-12 max-w-28 object-contain" />}
                 <p className="whitespace-pre-line">{template?.rodape ?? "Correspondência institucional"}</p>

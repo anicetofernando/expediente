@@ -154,6 +154,23 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       if (!ALLOWED_BY_STATUS[exp.status]?.includes(action)) {
         throw new Error("Esta accao nao e valida no estado actual do expediente.");
       }
+      // A partir do momento em que a Secretaria encaminha para o superior, deixa de
+      // poder devolver por iniciativa propria -- so o superior, ja com o processo em
+      // maos, pode decidir devolve-lo. Antes de encaminhar (submetido/recebido/
+      // protocolado), a devolucao continua a ser accao normal da Secretaria.
+      if (action === "devolver" && (exp.status === "encaminhado" || exp.status === "em_analise") && session.perfilNavegacao === "secretaria") {
+        throw new Error("O processo ja foi encaminhado -- so o superior pode devolve-lo a partir daqui.");
+      }
+      // Enquanto se aguarda parecer/esclarecimento, so quem recebeu o pedido
+      // (o responsavel actual) pode responder -- nao quem o solicitou.
+      if (
+        (action === "resposta" || action === "esclarecimento") &&
+        (exp.status === "aguardando_parecer" || exp.status === "aguardando_esclarecimento") &&
+        session.perfilNavegacao !== "administracao" &&
+        exp.responsible_user_id !== session.user.id
+      ) {
+        throw new Error("Este pedido ainda nao lhe foi atribuido -- aguarde que o responsavel actual responda.");
+      }
 
       const secretaryUnits = session.perfilNavegacao === "secretaria" ? await secretaryOwnedUnitIds(client, session.user.id) : [];
       const hasAccess = session.perfilNavegacao === "administracao"

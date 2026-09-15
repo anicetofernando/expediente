@@ -163,6 +163,7 @@ export default async function ExpedientDetailPage({ params }: { params: { id: st
                   precisaEscalarDirector: expedient.precisaEscalarDirector,
                   exigeCarimbo: expedient.exigeCarimbo,
                   exigeAssinatura: expedient.exigeAssinatura,
+                  responsavelActualId: expedient.responsavelActualId,
                 }}
                 principalPdfUrl={principal?.pdfUrl}
               />

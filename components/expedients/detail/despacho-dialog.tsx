@@ -133,7 +133,7 @@ export function DespachoDialog({
 
   return (
     <Dialog open onOpenChange={(v) => !v && onClose()}>
-      <DialogContent size="lg">
+      <DialogContent size="xl">
         <DialogHeader>
           <DialogTitle>Criar despacho / resposta</DialogTitle>
           <DialogDescription>{protocolo}</DialogDescription>
@@ -201,7 +201,7 @@ export function DespachoDialog({
               </div>
               <div>
                 <Label required>Texto do despacho</Label>
-                <LetterEditor value={conteudo} onChange={setConteudo} title="Despacho" template={template} />
+                <LetterEditor value={conteudo} onChange={setConteudo} title="Despacho" template={template} compact />
               </div>
             </div>
           )}
@@ -223,15 +223,20 @@ export function DespachoDialog({
             <Textarea rows={2} placeholder="Notas internas sobre este despacho…" value={note} onChange={(event) => setNote(event.target.value)} />
           </div>
         </DialogBody>
-        <DialogFooter>
-          <Button variant="secondary" onClick={onClose}>Cancelar</Button>
-          <Button
-            disabled={submitting || (modo === "sistema" && (!readyToSign || authorization.loading))}
-            loading={submitting}
-            onClick={() => (modo === "sistema" ? submitSistema() : submitImportado())}
-          >
-            {modo === "sistema" && hasFreePositionImages ? "Continuar e posicionar" : "Registar despacho"}
-          </Button>
+        <DialogFooter className="flex-col items-stretch gap-2 sm:flex-row sm:items-center sm:justify-end">
+          {submitting && modo === "sistema" && (
+            <p className="text-2xs text-graphite-400 sm:mr-auto">A gerar o documento — pode demorar alguns segundos…</p>
+          )}
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" onClick={onClose}>Cancelar</Button>
+            <Button
+              disabled={submitting || (modo === "sistema" && (!readyToSign || authorization.loading))}
+              loading={submitting}
+              onClick={() => (modo === "sistema" ? submitSistema() : submitImportado())}
+            >
+              {modo === "sistema" && hasFreePositionImages ? "Continuar e posicionar" : "Registar despacho"}
+            </Button>
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>

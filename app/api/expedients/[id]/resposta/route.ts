@@ -18,6 +18,26 @@ const ALLOWED_EXTENSIONS = new Set([".pdf", ".docx", ".jpg", ".jpeg", ".png"]);
 const MAX_FILE_SIZE = 20 * 1024 * 1024;
 const ALLOWED_STATUS = new Set(["aguardando_parecer", "aguardando_esclarecimento", "devolvido", "aprovado"]);
 
+/**
+ * Quando o despacho responde a um pedido de parecer/esclarecimento, o processo
+ * deixa de estar "a aguardar" e volta para quem o solicitou, para continuar a
+ * analise -- caso contrario ficaria preso em "aguardando_parecer" para sempre,
+ * mesmo depois de respondido.
+ */
+async function returnToRequesterIfPending(
+  client: Parameters<Parameters<typeof transaction>[0]>[0],
+  exp: { id: string; status: string; responsible_user_id: string | null },
+) {
+  if (exp.status !== "aguardando_parecer" && exp.status !== "aguardando_esclarecimento") return;
+  const eventType = exp.status === "aguardando_parecer" ? "parecer" : "esclarecimento";
+  const requester = await client.query<{ user_id: string | null }>(
+    "SELECT user_id FROM timeline_events WHERE expedient_id=$1 AND event_type=$2 ORDER BY created_at DESC LIMIT 1",
+    [exp.id, eventType],
+  );
+  const nextResponsible = requester.rows[0]?.user_id ?? exp.responsible_user_id;
+  await client.query("UPDATE expedients SET status='em_analise', responsible_user_id=$2 WHERE id=$1", [exp.id, nextResponsible]);
+}
+
 function cleanName(name: string) {
   return path.basename(name).replace(/[^a-zA-Z0-9._-]+/g, "_").slice(-160) || "documento";
 }
@@ -91,6 +111,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
           [input.documentId, stampEntry, signatureEntry, `[${stampEntry}]`, `[${signatureEntry}]`],
         );
         await rememberStampSignaturePositions(client, resolved.stamp, resolved.signature, input.posicaoCarimbo, input.posicaoAssinatura);
+        await returnToRequesterIfPending(client, exp);
         return { documentId: input.documentId, finalized: true };
       }
 
@@ -104,10 +125,12 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       const documentNumber = respondingUnit.rows[0]
         ? await generateProtocolNumber(client, session.user.unidadeId, respondingUnit.rows[0].acronym, new Date().getFullYear())
         : null;
+      let sistemaHasFreePositionImages = false;
       if (input.modo === "sistema") {
         const clean = sanitizeDocumentHtml(input.conteudo ?? "");
         const template = await templateSnapshot(client, input.modeloId);
         const resolved = await resolveMandatoryStampSignature(client, session.user, session.unitName, session.perfilNavegacao);
+        sistemaHasFreePositionImages = Boolean(resolved.stamp.imagemUrl || resolved.signature.imagemUrl);
         const stampEntry = JSON.stringify(stampMetadataJson(resolved.stamp, session.user.nome));
         const signatureEntry = JSON.stringify(signatureMetadataJson(resolved.signature, session.user));
         await client.query(
@@ -125,6 +148,11 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
            VALUES($1,$2,$3,'resposta','importado',$4,$5,1,$6,'interno',$7,$8)`,
           [documentId, exp.id, file.name, file.type || "application/octet-stream", file.size, relative, session.user.id, documentNumber],
         );
+      }
+      // So avanca o estado aqui quando este e o unico/ultimo passo -- se ainda falta
+      // posicionar carimbo/assinatura, a chamada seguinte (com documentId) e que fecha.
+      if (input.modo === "importado" || !sistemaHasFreePositionImages) {
+        await returnToRequesterIfPending(client, exp);
       }
       await client.query(
         `INSERT INTO timeline_events(expedient_id,event_type,title,description,user_id,unit_id) VALUES($1,'resposta','Despacho registado',$2,$3,$4)`,

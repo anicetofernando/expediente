@@ -3,10 +3,12 @@
 import * as React from "react";
 import { AlignCenter, AlignJustify, AlignLeft, AlignRight, Bold, Italic, List, ListOrdered, Printer, Redo2, Underline, Undo2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useToast } from "@/hooks/use-toast";
 import type { DocumentTemplate } from "@/types";
 
-export function LetterEditor({ value, onChange, title = "Carta institucional", template }: { value: string; onChange: (html: string) => void; title?: string; template?: DocumentTemplate }) {
+export function LetterEditor({ value, onChange, title = "Carta institucional", template, compact = false }: { value: string; onChange: (html: string) => void; title?: string; template?: DocumentTemplate; compact?: boolean }) {
   const editorRef = React.useRef<HTMLDivElement>(null);
+  const { toast } = useToast();
 
   React.useEffect(() => {
     const editor = editorRef.current;
@@ -25,13 +27,31 @@ export function LetterEditor({ value, onChange, title = "Carta institucional", t
 
   function print() {
     const popup = window.open("", "_blank", "noopener,noreferrer");
-    if (!popup) return;
+    if (!popup) {
+      toast({
+        title: "Não foi possível imprimir",
+        description: "O browser bloqueou a janela de impressão. Autorize pop-ups para este site e tente novamente.",
+        variant: "destructive",
+      });
+      return;
+    }
     const logoHeader = template?.logotipo && template.logotipoPosicao === "cabecalho" ? `<img src="${template.logotipo}" style="display:block;max-height:20mm;max-width:45mm;margin:0 auto 4mm">` : "";
     const logoFooter = template?.logotipo && template.logotipoPosicao === "rodape" ? `<img src="${template.logotipo}" style="display:block;max-height:14mm;max-width:35mm;margin:0 auto 3mm">` : "";
-    popup.document.write(`<!doctype html><html><head><title>${title}</title><style>@page{size:A4;margin:20mm}body{font:12pt Arial;line-height:1.5}header{text-align:center;border-bottom:1px solid #ccd3dc;padding-bottom:5mm;margin-bottom:10mm}footer{text-align:center;border-top:1px solid #ccd3dc;padding-top:4mm;margin-top:12mm;color:#667085;font-size:9pt}</style></head><body><header>${logoHeader}${template?.cabecalho ?? "CFM — Portos e Caminhos de Ferro de Moçambique"}</header>${editorRef.current?.innerHTML ?? ""}<footer>${logoFooter}${template?.rodape ?? "Correspondência institucional"}</footer></body></html>`);
+    popup.document.write(`<!doctype html><html><head><title>${title}</title><style>@page{size:A4;margin:20mm}*{box-sizing:border-box}body{font:12pt Arial;line-height:1.5;overflow-wrap:anywhere}header{text-align:center;border-bottom:1px solid #ccd3dc;padding-bottom:5mm;margin-bottom:10mm}footer{text-align:center;border-top:1px solid #ccd3dc;padding-top:4mm;margin-top:12mm;color:#667085;font-size:9pt}</style></head><body><header>${logoHeader}${template?.cabecalho ?? "CFM — Portos e Caminhos de Ferro de Moçambique"}</header>${editorRef.current?.innerHTML ?? ""}<footer>${logoFooter}${template?.rodape ?? "Correspondência institucional"}</footer></body></html>`);
     popup.document.close();
-    popup.focus();
-    popup.print();
+    // document.write numa popup ja aberta nem sempre dispara onload de forma
+    // fiavel entre browsers -- um pequeno atraso garante que o conteudo ja
+    // esta pronto antes de accionar a impressao.
+    const win: Window = popup;
+    let printed = false;
+    function triggerPrint() {
+      if (printed || win.closed) return;
+      printed = true;
+      win.focus();
+      win.print();
+    }
+    win.onload = triggerPrint;
+    window.setTimeout(triggerPrint, 300);
   }
 
   const tools = [
@@ -63,8 +83,8 @@ export function LetterEditor({ value, onChange, title = "Carta institucional", t
         <button type="button" title="Refazer" onMouseDown={(e) => e.preventDefault()} onClick={() => command("redo")} className="flex size-7 items-center justify-center text-graphite-600 hover:bg-graphite-50"><Redo2 className="size-3.5" /></button>
         <button type="button" title="Imprimir pré-visualização" onClick={print} className="ml-auto flex size-7 items-center justify-center text-graphite-600 hover:bg-graphite-50"><Printer className="size-3.5" /></button>
       </div>
-      <div className="h-[78vh] min-h-[720px] max-h-[920px] overflow-auto p-4 sm:p-7">
-        <div className="mx-auto min-h-[1123px] w-full max-w-[794px] bg-white px-[9%] py-[8%] shadow-card">
+      <div className={cn("overflow-auto p-4 sm:p-7", compact ? "h-[38vh] min-h-[340px] max-h-[460px]" : "h-[78vh] min-h-[720px] max-h-[920px]")}>
+        <div className={cn("mx-auto w-full max-w-[794px] bg-white px-[9%] py-[8%] shadow-card", compact ? "min-h-[480px]" : "min-h-[1123px]")}>
           <div className="mb-8 border-b border-graphite-200 pb-4 text-center">
             {template?.logotipo && template.logotipoPosicao === "cabecalho" && <img src={template.logotipo} alt="Logótipo" className="mx-auto mb-3 max-h-20 max-w-48 object-contain" />}
             <p className="whitespace-pre-line text-[11px] font-bold uppercase tracking-[0.12em] text-cfm-900">{template?.cabecalho ?? "CFM — Portos e Caminhos de Ferro de Moçambique"}</p>

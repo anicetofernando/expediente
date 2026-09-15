@@ -95,7 +95,6 @@ const NAVIGATION_ICONS: Record<string, LucideIcon> = {
 
 const GROUP_ICONS: Record<string, LucideIcon> = {
   Expedientes: FolderKanban,
-  Expediente: FolderKanban,
   Secretaria: Inbox,
   Aprovações: ClipboardCheck,
   Documentos: FileText,
@@ -103,13 +102,10 @@ const GROUP_ICONS: Record<string, LucideIcon> = {
   Administração: Settings2,
 };
 
-const GROUP_LABELS: Record<string, string> = {
-  Expediente: "Expedientes",
-};
+const GROUP_LABELS: Record<string, string> = {};
 
 const GROUP_LANDING_ROUTES: Record<string, string> = {
-  Expedientes: "/painel",
-  Expediente: "/expedientes/meus",
+  Expedientes: "/expedientes/caixa-saida",
   Secretaria: "/secretaria",
   Aprovações: "/aprovacoes",
   Documentos: "/documentos",
