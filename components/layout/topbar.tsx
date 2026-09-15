@@ -147,6 +147,31 @@ export function Topbar() {
 }
 
 function NotificationLink() {
+  const pathname = usePathname() ?? "";
+  const [hasUnread, setHasUnread] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    function loadUnread() {
+      fetch("/api/notifications")
+        .then((response) => (response.ok ? response.json() : null))
+        .then((result) => {
+          if (cancelled || !result) return;
+          const items: { lida?: boolean }[] = result.items ?? [];
+          setHasUnread(items.some((item) => !item.lida));
+        })
+        .catch(() => {});
+    }
+
+    loadUnread();
+    const interval = setInterval(loadUnread, 60000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [pathname]);
+
   return (
     <Link
       href="/notificacoes"
@@ -154,7 +179,7 @@ function NotificationLink() {
       aria-label="Abrir notificações"
     >
       <Bell className="size-3.5" aria-hidden />
-      <span className="absolute right-2 top-2 size-1.5 bg-crimson-400" aria-hidden />
+      {hasUnread && <span className="absolute right-2 top-2 size-1.5 bg-crimson-400" aria-hidden />}
     </Link>
   );
 }

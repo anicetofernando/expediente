@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { Plus, RefreshCw, Search } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { useRef } from "react";
 import { useSession } from "@/lib/session";
 
 export function CommandBar() {
@@ -10,6 +11,13 @@ export function CommandBar() {
   const { perfilNavegacao } = useSession();
   const isRemetente = perfilNavegacao === "remetente";
   const showSearch = perfilNavegacao !== "administracao";
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  function handleSearchSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const term = searchInputRef.current?.value.trim() ?? "";
+    router.push(term ? `/expedientes?q=${encodeURIComponent(term)}` : "/expedientes");
+  }
 
   return (
     <nav
@@ -38,13 +46,13 @@ export function CommandBar() {
 
       {showSearch && (
         <form
-          action="/expedientes"
-          method="get"
+          onSubmit={handleSearchSubmit}
           className="ml-2 flex h-7 min-w-0 flex-1 items-center border border-graphite-300 bg-white sm:max-w-sm"
           role="search"
         >
           <Search className="ml-2 size-[14px] shrink-0 text-graphite-400" aria-hidden />
           <input
+            ref={searchInputRef}
             type="search"
             name="q"
             placeholder="Pesquisar expediente..."
