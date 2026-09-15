@@ -1,7 +1,7 @@
 import { PageHeader } from "@/components/shared/page-header";
 import { StatCard } from "@/components/shared/stat-card";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
-import { coreStats } from "@/lib/dashboard-metrics";
+import { coreStats, filterByPeriod, filterByStatusGroup } from "@/lib/dashboard-metrics";
 import {
   StatusDistributionChart,
   TypeDistributionChart,
@@ -10,15 +10,22 @@ import {
   StageAvgTimeChart,
   DeadlineComplianceChart,
 } from "@/components/dashboard/charts";
-import { ExportReportButton, PeriodSelect } from "@/components/reports/report-controls";
+import { ExportReportButton, PeriodSelect, StatusFilterSelect } from "@/components/reports/report-controls";
 import { requirePermission } from "@/lib/auth";
 import { listReportExpedients } from "@/lib/expedients-db";
 
 export const metadata = { title: "Visão estatística" };
 
-export default async function RelatoriosPage() {
+export default async function RelatoriosPage({
+  searchParams,
+}: {
+  searchParams?: { estado?: string; periodo?: string };
+}) {
   const session = await requirePermission(["superior", "administracao"], ["relatorios.ver"]);
-  const expedients = await listReportExpedients(session);
+  const estado = searchParams?.estado ?? "todos";
+  const periodo = searchParams?.periodo ?? "6m";
+  const allExpedients = await listReportExpedients(session);
+  const expedients = filterByStatusGroup(filterByPeriod(allExpedients, periodo), estado);
   const stats = coreStats(expedients);
 
   return (
@@ -27,7 +34,7 @@ export default async function RelatoriosPage() {
         title="Visão estatística"
         description="Panorama consolidado da actividade de expediente da CFM: volume, distribuição, tempos de tramitação e cumprimento de prazos."
         breadcrumb={[{ label: "Relatórios" }]}
-        actions={<ExportReportButton />}
+        actions={<ExportReportButton estado={estado} periodo={periodo} />}
       />
 
       <div className="space-y-6 p-6">
@@ -52,7 +59,10 @@ export default async function RelatoriosPage() {
               <h2 className="text-[15px] font-semibold text-graphite-900">Distribuição e tendências</h2>
               <p className="text-[13px] text-graphite-500">Análise por estado, tipo, sector, tempo de tramitação e cumprimento de prazos.</p>
             </div>
-            <PeriodSelect />
+            <div className="flex flex-wrap items-center gap-2">
+              <StatusFilterSelect value={estado} />
+              <PeriodSelect value={periodo} />
+            </div>
           </div>
 
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">

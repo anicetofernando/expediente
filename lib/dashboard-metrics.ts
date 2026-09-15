@@ -30,7 +30,10 @@ export function coreStats(data: Expedient[]) {
   };
 }
 
-const STATUS_GROUP: Record<ExpedientStatus, string> = {
+export const STATUS_GROUPS = ["Em preparação", "Em curso", "Aguardando", "Devolvido", "Concluído", "Atrasado"] as const;
+export type StatusGroup = (typeof STATUS_GROUPS)[number];
+
+export const STATUS_GROUP: Record<ExpedientStatus, string> = {
   rascunho: "Em preparação",
   submetido: "Em curso",
   recebido: "Em curso",
@@ -188,4 +191,33 @@ export function productivityByUser(data: Expedient[]) {
       };
     })
     .sort((a, b) => b.concluidos - a.concluidos);
+}
+
+export const PERIOD_OPTIONS = [
+  { value: "6m", label: "Últimos 6 meses" },
+  { value: "trimestre", label: "Este trimestre" },
+  { value: "ano", label: "Este ano" },
+] as const;
+export type PeriodValue = (typeof PERIOD_OPTIONS)[number]["value"];
+
+export function filterByStatusGroup(data: Expedient[], group: string | undefined): Expedient[] {
+  if (!group || group === "todos") return data;
+  return data.filter((e) => STATUS_GROUP[e.estado] === group);
+}
+
+export function periodCutoff(period: string | undefined): Date | null {
+  const now = new Date();
+  if (period === "trimestre") {
+    const quarterStartMonth = Math.floor(now.getMonth() / 3) * 3;
+    return new Date(now.getFullYear(), quarterStartMonth, 1);
+  }
+  if (period === "ano") return new Date(now.getFullYear(), 0, 1);
+  if (period === "6m") return new Date(now.getFullYear(), now.getMonth() - 6, now.getDate());
+  return null;
+}
+
+export function filterByPeriod(data: Expedient[], period: string | undefined): Expedient[] {
+  const cutoff = periodCutoff(period);
+  if (!cutoff) return data;
+  return data.filter((e) => new Date(e.dataEntrada) >= cutoff);
 }

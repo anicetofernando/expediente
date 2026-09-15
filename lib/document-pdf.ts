@@ -171,7 +171,7 @@ async function renderHtmlPdfLocal(html: string) {
   }
 }
 
-async function renderHtmlPdf(html: string) {
+export async function renderHtmlPdf(html: string) {
   return process.env.VERCEL ? renderHtmlPdfServerless(html) : renderHtmlPdfLocal(html);
 }
 
