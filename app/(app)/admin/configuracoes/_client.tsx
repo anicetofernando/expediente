@@ -4,6 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import {
   Archive,
+  AlertTriangle,
   Building2,
   CheckCircle2,
   Clock3,
@@ -14,6 +15,7 @@ import {
   Save,
   Send,
   Settings2,
+  Trash2,
 } from "lucide-react";
 import { CatalogSettings } from "@/components/administration/catalog-settings";
 import { PageHeader } from "@/components/shared/page-header";
@@ -27,6 +29,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Dialog, DialogBody, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input, Label } from "@/components/ui/input";
 import {
   Select,
@@ -120,8 +123,36 @@ function ConfiguracoesContent() {
   const [settings, setSettings] = React.useState<SystemSettings>(DEFAULT_SETTINGS);
   const [changed, setChanged] = React.useState(false);
   const [lastSaved, setLastSaved] = React.useState("25/07/2026, 09:30");
+  const [resetOpen, setResetOpen] = React.useState(false);
+  const [resetConfirmText, setResetConfirmText] = React.useState("");
+  const [resetting, setResetting] = React.useState(false);
+  const RESET_PHRASE = "ELIMINAR TUDO";
 
   React.useEffect(() => { if (settingsReady) setSettings(storedSettings); }, [settingsReady, storedSettings]);
+
+  async function resetExpedients() {
+    setResetting(true);
+    try {
+      const response = await fetch("/api/admin/reset-expedients", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirmacao: resetConfirmText }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error ?? "Não foi possível zerar os expedientes.");
+      toast({
+        title: "Expedientes zerados",
+        description: `${result.expedientes} expediente(s) e ${result.documentos} documento(s) eliminados. A numeração de protocolos foi reiniciada.`,
+        variant: "success",
+      });
+      setResetOpen(false);
+      setResetConfirmText("");
+    } catch (error) {
+      toast({ title: "Não foi possível zerar os expedientes", description: error instanceof Error ? error.message : undefined, variant: "destructive" });
+    } finally {
+      setResetting(false);
+    }
+  }
 
   function update<K extends keyof SystemSettings>(
     key: K,
@@ -215,6 +246,7 @@ function ConfiguracoesContent() {
             <TabsTrigger value="expediente">Expediente e prazos</TabsTrigger>
             <TabsTrigger value="listas">Listas de selecção</TabsTrigger>
             <TabsTrigger value="integracoes">Integrações</TabsTrigger>
+            <TabsTrigger value="zona-risco">Zona de risco</TabsTrigger>
           </TabsList>
 
           <TabsContent value="geral" className="pt-5">
@@ -679,7 +711,55 @@ function ConfiguracoesContent() {
               </Card>
             </div>
           </TabsContent>
+
+          <TabsContent value="zona-risco" className="pt-5">
+            <Card className="border-crimson-200">
+              <CardHeader>
+                <div>
+                  <CardTitle className="flex items-center gap-2 text-crimson-700"><AlertTriangle className="size-4" /> Zerar todos os expedientes</CardTitle>
+                  <CardDescription>
+                    Elimina permanentemente todos os expedientes, documentos, comentários, histórico de tramitação e
+                    notificações ligadas a eles, e reinicia a numeração de protocolos do zero. Utilizadores, perfis,
+                    estrutura organizacional, carimbos, assinaturas e restantes configurações não são afectados. O
+                    registo de auditoria mantém-se — fica registado que esta limpeza aconteceu e quando.
+                  </CardDescription>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <Alert variant="destructive" title="Esta acção é irreversível">
+                  Não existe forma de recuperar os expedientes depois de eliminados. Use apenas para limpar dados de teste antes de começar a utilização real.
+                </Alert>
+                <Button variant="destructive" className="mt-4" onClick={() => setResetOpen(true)}>
+                  <Trash2 className="size-4" /> Zerar todos os expedientes
+                </Button>
+              </CardContent>
+            </Card>
+          </TabsContent>
         </Tabs>
+
+        <Dialog open={resetOpen} onOpenChange={(open) => { setResetOpen(open); if (!open) setResetConfirmText(""); }}>
+          <DialogContent size="sm">
+            <DialogHeader>
+              <DialogTitle>Zerar todos os expedientes</DialogTitle>
+              <DialogDescription>Esta acção não pode ser desfeita.</DialogDescription>
+            </DialogHeader>
+            <DialogBody className="space-y-3.5">
+              <p className="text-[13px] leading-relaxed text-graphite-700">
+                Para confirmar, escreva <strong>{RESET_PHRASE}</strong> no campo abaixo.
+              </p>
+              <div>
+                <Label htmlFor="reset-confirm">Confirmação</Label>
+                <Input id="reset-confirm" value={resetConfirmText} onChange={(event) => setResetConfirmText(event.target.value)} placeholder={RESET_PHRASE} autoComplete="off" />
+              </div>
+            </DialogBody>
+            <DialogFooter>
+              <Button variant="secondary" onClick={() => setResetOpen(false)}>Cancelar</Button>
+              <Button variant="destructive" disabled={resetConfirmText !== RESET_PHRASE || resetting} loading={resetting} onClick={resetExpedients}>
+                Eliminar tudo
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   );

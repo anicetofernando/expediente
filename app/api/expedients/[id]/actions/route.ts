@@ -276,6 +276,16 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         );
         if (lastHandler.rows[0]?.user_id) responsible = lastHandler.rows[0].user_id;
       }
+      if (action === "resposta" && (exp.status === "aguardando_parecer" || exp.status === "aguardando_esclarecimento")) {
+        // A resposta a um parecer/esclarecimento volta directamente para quem o
+        // pediu -- nao fica com quem respondeu.
+        const eventType = exp.status === "aguardando_parecer" ? "parecer" : "esclarecimento";
+        const requester = await client.query<{ user_id: string | null }>(
+          "SELECT user_id FROM timeline_events WHERE expedient_id=$1 AND event_type=$2 ORDER BY created_at DESC LIMIT 1",
+          [exp.id, eventType],
+        );
+        if (requester.rows[0]?.user_id) responsible = requester.rows[0].user_id;
+      }
 
       if (action === "aprovar") {
         const [docTypes, recipientUnit] = await Promise.all([
@@ -409,7 +419,9 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
                 : action === "disponibilizar" ? "entrega"
                   : action === "confirmar" ? "confirmacao"
                     : action === "arquivar" || action === "notificar" ? "arquivo"
-                      : "comentario";
+                      : action === "parecer" ? "parecer"
+                        : action === "esclarecimento" ? "esclarecimento"
+                          : "comentario";
         await client.query(
           "INSERT INTO timeline_events(expedient_id,event_type,title,description,user_id,unit_id) VALUES($1,$2,$3,$4,$5,$6)",
           [exp.id, eventType, LABELS[action] ?? action, input.note?.trim() || LABELS[action] || action, session.user.id, session.user.unidadeId],
