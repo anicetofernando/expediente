@@ -144,19 +144,19 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
           signed = true;
         }
         await client.query(
-          `INSERT INTO documents(id,expedient_id,name,document_kind,source,mime_type,size_bytes,page_count,content_html,confidentiality,created_by,stamp_id,stamped,signed,stamp_metadata,signature_metadata,stamps_metadata,signatures_metadata,template_metadata,document_number)
-           VALUES($1,$2,$3,'nota','sistema','text/html',$4,1,$5,'interno',$6,$7,$8,$9,$10::jsonb,$11::jsonb,$12::jsonb,$13::jsonb,$14::jsonb,$15)`,
-          [documentId, exp.id, `Nota - ${exp.protocol}.html`, Buffer.byteLength(clean, "utf8"), clean, session.user.id, stampId,
-            stamped, signed, stampEntry, signatureEntry, stampEntry ? `[${stampEntry}]` : "[]", signatureEntry ? `[${signatureEntry}]` : "[]", template ? JSON.stringify(template) : null, documentNumber],
+          `INSERT INTO documents(id,expedient_id,name,document_kind,source,mime_type,size_bytes,page_count,content_html,confidentiality,created_by,stamp_id,stamped,signed,stamp_metadata,signature_metadata,stamps_metadata,signatures_metadata,template_metadata,document_number,created_for_unit_id)
+           VALUES($1,$2,$3,'nota','sistema','text/html',$4,1,$5,'interno',$6,$7,$8,$9,$10::jsonb,$11::jsonb,$12::jsonb,$13::jsonb,$14::jsonb,$15,$16)`,
+          [documentId, exp.id, `${isCobertura ? "Nota de cobertura" : "Nota"} - ${exp.protocol}.html`, Buffer.byteLength(clean, "utf8"), clean, session.user.id, stampId,
+            stamped, signed, stampEntry, signatureEntry, stampEntry ? `[${stampEntry}]` : "[]", signatureEntry ? `[${signatureEntry}]` : "[]", template ? JSON.stringify(template) : null, documentNumber, exp.recipient_unit_id],
         );
       } else if (file) {
         const bytes = Buffer.from(await file.arrayBuffer());
         const storedName = `${randomUUID()}-${cleanName(file.name)}`;
         const relative = await saveFile("documents", `${exp.id}/${storedName}`, bytes, file.type || undefined);
         await client.query(
-          `INSERT INTO documents(id,expedient_id,name,document_kind,source,mime_type,size_bytes,page_count,storage_path,confidentiality,created_by,document_number)
-           VALUES($1,$2,$3,'nota','importado',$4,$5,1,$6,'interno',$7,$8)`,
-          [documentId, exp.id, file.name, file.type || "application/octet-stream", file.size, relative, session.user.id, documentNumber],
+          `INSERT INTO documents(id,expedient_id,name,document_kind,source,mime_type,size_bytes,page_count,storage_path,confidentiality,created_by,document_number,created_for_unit_id)
+           VALUES($1,$2,$3,'nota','importado',$4,$5,1,$6,'interno',$7,$8,$9)`,
+          [documentId, exp.id, file.name, file.type || "application/octet-stream", file.size, relative, session.user.id, documentNumber, exp.recipient_unit_id],
         );
       }
 

@@ -43,7 +43,7 @@ export function DespachoDialog({
   const [conteudo, setConteudo] = React.useState(() => (endpoint === "nota" ? `<p><strong>Referente ao Expediente: ${protocolo}</strong></p><p></p>` : ""));
   const [ficheiro, setFicheiro] = React.useState<File | null>(null);
   const [note, setNote] = React.useState("");
-  const [incluirCarimbo, setIncluirCarimbo] = React.useState(false);
+  const [incluirCarimbo, setIncluirCarimbo] = React.useState(true);
   const [authorization, setAuthorization] = React.useState<{ stamp: Stamp | null; signature: Signature | null; loading: boolean }>({ stamp: null, signature: null, loading: true });
   const [documentId, setDocumentId] = React.useState<string | null>(null);
   const [pdfUrl, setPdfUrl] = React.useState<string | null>(null);

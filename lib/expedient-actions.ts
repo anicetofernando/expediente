@@ -18,7 +18,7 @@ const A = {
   esclarecimento: { key: "esclarecimento", label: "Solicitar esclarecimento", icon: "HelpCircle", variant: "secondary", kind: "note" } as ActionDef,
   aprovar: { key: "aprovar", label: "Aprovar", icon: "CheckCircle2", variant: "primary", kind: "aprovar" } as ActionDef,
   aprovarNota: { key: "aprovar_nota", label: "Emitir nota de cobertura", icon: "FileEdit", variant: "secondary", kind: "confirm" } as ActionDef,
-  criarNota: { key: "criar_nota", label: "Criar nota de encaminhamento", icon: "FileEdit", variant: "primary", kind: "nota" } as ActionDef,
+  criarNota: { key: "criar_nota", label: "Criar nota", icon: "FileEdit", variant: "primary", kind: "nota" } as ActionDef,
   rejeitar: { key: "rejeitar", label: "Rejeitar", icon: "XCircle", variant: "destructive", kind: "note" } as ActionDef,
   devolver: { key: "devolver", label: "Devolver para correcção", icon: "Undo2", variant: "secondary", kind: "note" } as ActionDef,
   resposta: { key: "resposta", label: "Criar despacho / resposta", icon: "FileEdit", variant: "secondary", kind: "resposta" } as ActionDef,

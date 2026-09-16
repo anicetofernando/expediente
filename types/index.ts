@@ -189,6 +189,9 @@ export interface Expedient {
   destinatario: string;
   destinatarioId: string;
   destinatarioTipo: string;
+  /** Quando o estado e' "nota_pendente", diz que tipo de nota a Secretaria vai preparar
+   * a seguir -- "nota_cobertura" (em branco, o chefe assina depois) ou o normal. */
+  pendingNextStatus: string | null;
   unidadeOrigem: string;
   responsavelActual: string;
   responsavelActualId: string;

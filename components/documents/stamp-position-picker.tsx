@@ -31,10 +31,13 @@ interface PositionableItem {
 function PdfPagePreview({ pdfUrl, onReady }: { pdfUrl: string; onReady: (canvas: HTMLCanvasElement) => void }) {
   const canvasRef = React.useRef<HTMLCanvasElement>(null);
   const [status, setStatus] = React.useState<"loading" | "ready" | "error">("loading");
+  const [slow, setSlow] = React.useState(false);
 
   React.useEffect(() => {
     let cancelled = false;
     setStatus("loading");
+    setSlow(false);
+    const slowTimer = setTimeout(() => { if (!cancelled) setSlow(true); }, 4000);
     (async () => {
       try {
         const pdfjs = await import("pdfjs-dist");
@@ -64,15 +67,23 @@ function PdfPagePreview({ pdfUrl, onReady }: { pdfUrl: string; onReady: (canvas:
         if (!cancelled) { setStatus("ready"); onReady(canvas); }
       } catch {
         if (!cancelled) setStatus("error");
+      } finally {
+        clearTimeout(slowTimer);
       }
     })();
-    return () => { cancelled = true; };
+    return () => { cancelled = true; clearTimeout(slowTimer); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pdfUrl]);
 
   return (
     <>
-      {status === "loading" && <div className="flex h-64 w-[420px] items-center justify-center text-[13px] text-graphite-500">A carregar pré-visualização…</div>}
+      {status === "loading" && (
+        <div className="flex h-64 w-[420px] flex-col items-center justify-center gap-2 text-[13px] text-graphite-500">
+          <span className="size-5 animate-spin rounded-full border-2 border-graphite-300 border-t-navy-700" />
+          <span>A carregar pré-visualização…</span>
+          {slow && <span className="text-2xs text-graphite-400">A gerar o documento real pode demorar mais alguns segundos…</span>}
+        </div>
+      )}
       {status === "error" && <div className="flex h-64 w-[420px] items-center justify-center text-[13px] text-crimson-600">Não foi possível carregar a pré-visualização do documento.</div>}
       <canvas ref={canvasRef} className={status === "ready" ? "block" : "hidden"} />
     </>

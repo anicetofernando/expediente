@@ -173,6 +173,7 @@ export default async function ExpedientDetailPage({ params }: { params: { id: st
                   destinatarioId: expedient.destinatarioId,
                   destinatarioTipo: expedient.destinatarioTipo,
                   confidencialidade: expedient.confidencialidade,
+                  pendingNextStatus: expedient.pendingNextStatus,
                 }}
                 principalPdfUrl={principal?.pdfUrl}
               />

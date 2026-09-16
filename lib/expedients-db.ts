@@ -11,7 +11,7 @@ interface ExpedientRow {
   origin_unit_id: string; origin_unit_name: string; recipient_unit_id: string; recipient_unit_name: string; recipient_unit_type: string;
   responsible_user_id: string | null; responsible_name: string | null;
   creator_name: string; created_by: string; due_date: string; next_step: string; notes: string | null;
-  created_at: string; updated_at: string;
+  created_at: string; updated_at: string; pending_next_status: string | null;
 }
 
 function iso(value: string | Date) {
@@ -48,7 +48,10 @@ async function accessClause(session: AuthSession, startIndex = 1) {
     // processo para acompanhar a decisao, mesmo ja' nao sendo a unidade actual.
     // "Restrito" tira o acesso colectivo por unidade -- so' quem ja'
     // interveio directamente (responsavel actual ou no historico) mantem acesso.
-    return { sql: `((e.confidentiality <> 'restrito' AND (e.origin_unit_id=$${startIndex} OR e.recipient_unit_id=$${startIndex})) OR e.responsible_user_id=$${startIndex + 1} OR e.created_by=$${startIndex + 1} OR EXISTS (SELECT 1 FROM timeline_events te WHERE te.expedient_id=e.id AND te.user_id=$${startIndex + 1}))`, params: [session.user.unidadeId, session.user.id] };
+    // Um rascunho ainda nao entrou no circuito -- mesmo que a unidade dele seja
+    // o destino escolhido, ainda nao passou pela Secretaria, por isso nao conta
+    // para o acesso colectivo (so' se torna visivel ao chefe depois de protocolado).
+    return { sql: `((e.confidentiality <> 'restrito' AND e.status <> 'rascunho' AND (e.origin_unit_id=$${startIndex} OR e.recipient_unit_id=$${startIndex})) OR e.responsible_user_id=$${startIndex + 1} OR e.created_by=$${startIndex + 1} OR EXISTS (SELECT 1 FROM timeline_events te WHERE te.expedient_id=e.id AND te.user_id=$${startIndex + 1}))`, params: [session.user.unidadeId, session.user.id] };
   }
   return { sql: `(e.created_by=$${startIndex} OR e.responsible_user_id=$${startIndex})`, params: [session.user.id] };
 }
@@ -79,6 +82,7 @@ function mapBase(row: ExpedientRow): Expedient {
     destinatario: row.recipient_unit_name,
     destinatarioId: row.recipient_unit_id,
     destinatarioTipo: row.recipient_unit_type,
+    pendingNextStatus: row.pending_next_status,
     unidadeOrigem: row.origin_unit_name,
     responsavelActual: row.responsible_name ?? "Por atribuir",
     responsavelActualId: row.responsible_user_id ?? "",
@@ -117,7 +121,7 @@ const VIEW_FILTERS: Record<ExpedientView, string> = {
   "secretary-forwarding": "e.status='protocolado'",
   "secretary-deliveries": "e.status IN ('aprovado','rejeitado','disponivel_remetente')",
   "official-book": "e.status <> 'rascunho' AND e.status <> 'cancelado' AND e.protocol NOT LIKE 'SUBMISSAO-%' AND e.protocol NOT LIKE 'RASCUNHO-%'",
-  approval: "e.status IN ('encaminhado','em_analise','atrasado')",
+  approval: "e.status IN ('encaminhado','nota_cobertura','em_analise','atrasado')",
   opinions: "e.status='aguardando_parecer'",
   "approval-history": "e.status IN ('aprovado','rejeitado','devolvido','arquivado')",
 };
@@ -194,7 +198,7 @@ interface DocumentRow {
   stamp_id: string | null; signature_requested: boolean;
   stamp_metadata: Record<string, string> | null; signature_metadata: Record<string, string> | null;
   stamps_metadata: Record<string, string>[]; signatures_metadata: Record<string, string>[];
-  document_number: string | null;
+  document_number: string | null; created_for_unit_id: string | null;
 }
 interface TimelineRow { id: string; event_type: TimelineEvent["tipo"]; title: string; description: string; created_at: string; user_name: string | null; unit_name: string | null }
 interface CommentRow { id: string; body: string; internal: boolean; created_at: string; author_name: string; job_title: string }
@@ -217,7 +221,18 @@ export async function getExpedient(session: AuthSession, id: string) {
   expedient.exigeCarimbo = Boolean(documentType?.exigeCarimbo);
   expedient.exigeAssinatura = Boolean(documentType?.exigeAssinatura);
   expedient.tipoLabel = documentType?.nome ?? row.document_type;
-  expedient.documentos = documents.rows.map((doc) => ({
+  // O chefe/director so' ve' o expediente original, os seus anexos e as notas
+  // do seu proprio nivel/salto -- nunca o "protocolo" (que e' sempre para quem
+  // enviou aquele salto, nao para quem o recebeu) nem as notas de outra
+  // unidade (internas ao nivel anterior ou seguinte da cadeia).
+  const visibleDocuments = session.perfilNavegacao === "superior"
+    ? documents.rows.filter((doc) => {
+        if (doc.document_kind === "protocolo") return false;
+        if (doc.document_kind === "nota") return doc.created_for_unit_id === null || doc.created_for_unit_id === session.user.unidadeId;
+        return true;
+      })
+    : documents.rows;
+  expedient.documentos = visibleDocuments.map((doc) => ({
     id: doc.id, nome: doc.name, numero: doc.document_number ?? undefined, tipo: doc.document_kind, formato: doc.mime_type?.includes("pdf") ? "pdf" : doc.mime_type?.includes("image") ? "imagem" : "docx",
     paginas: doc.page_count, tamanho: formatSize(Number(doc.size_bytes)), criadoEm: iso(doc.created_at), criadoPor: doc.creator_name,
     confidencialidade: doc.confidentiality, carimbado: doc.stamped, assinado: doc.signed, versao: doc.version, origem: doc.source,

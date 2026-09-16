@@ -54,7 +54,7 @@ const ACTION_ICONS: Record<string, React.ComponentType<{ className?: string }>> 
   XCircle,
 };
 
-type ActionExpedient = Pick<Expedient, "id" | "estado" | "protocolo" | "assunto" | "precisaEscalarDirector" | "exigeCarimbo" | "exigeAssinatura" | "responsavelActualId" | "destinatario" | "destinatarioId" | "destinatarioTipo" | "confidencialidade">;
+type ActionExpedient = Pick<Expedient, "id" | "estado" | "protocolo" | "assunto" | "precisaEscalarDirector" | "exigeCarimbo" | "exigeAssinatura" | "responsavelActualId" | "destinatario" | "destinatarioId" | "destinatarioTipo" | "confidencialidade" | "pendingNextStatus">;
 
 const PROFILE_ACTIONS: Record<string, Set<string>> = {
   remetente: new Set(["confirmar", "resposta"]),
@@ -93,7 +93,9 @@ export function ActionPanel({ expedient, principalPdfUrl }: { expedient: ActionE
     .filter((action) => !(perfilNavegacao === "superior" && (action.key === "disponibilizar" || action.key === "notificar") && !allowSuperiorConfidentialHandoff))
     .map((action) => action.key === "resposta" && perfilNavegacao === "remetente"
       ? { ...action, label: "Responder" }
-      : action);
+      : action.key === "criar_nota"
+        ? { ...action, label: expedient.pendingNextStatus === "nota_cobertura" ? "Criar nota de cobertura" : "Criar nota" }
+        : action);
   const [activeAction, setActiveAction] = React.useState<ActionDef | null>(null);
 
   async function complete(action: ActionDef, message: string, target?: string, posicaoCarimbo?: FreePosition, posicaoAssinatura?: FreePosition, alvo?: string) {
@@ -206,14 +208,29 @@ function ActionDialog({
   const [note, setNote] = React.useState("");
   const [target, setTarget] = React.useState("");
   const [departmentId, setDepartmentId] = React.useState("");
+  const [aprovarDespacho, setAprovarDespacho] = React.useState(false);
 
   if (action.kind === "aprovar") {
+    if (aprovarDespacho) {
+      return (
+        <DespachoDialog
+          expedientId={expedient.id}
+          protocolo={expedient.protocolo}
+          onClose={onClose}
+          onDone={() => { onClose(); router.refresh(); }}
+          endpoint="resposta"
+          dialogTitle="Criar despacho de aprovação"
+          submitLabel="Registar e aprovar"
+        />
+      );
+    }
     return (
       <AprovarDialog
         expedient={expedient}
         onClose={onClose}
         onFinalizar={(alvo) => onComplete(`Expediente aprovado (${alvo === "nota" ? "assinado na nota" : "assinado no expediente"}).`, undefined, undefined, undefined, "aprovar", alvo)}
         onCobertura={() => onComplete("Nota de cobertura pedida.", undefined, undefined, undefined, "aprovar_nota")}
+        onDespacho={() => setAprovarDespacho(true)}
       />
     );
   }
@@ -340,9 +357,9 @@ function ActionDialog({
         onClose={onClose}
         onDone={() => { onClose(); router.refresh(); }}
         endpoint="nota"
-        dialogTitle="Criar nota de encaminhamento"
+        dialogTitle={expedient.pendingNextStatus === "nota_cobertura" ? "Criar nota de cobertura" : "Criar nota"}
         requireStamp={false}
-        submitLabel="Registar nota"
+        submitLabel={expedient.pendingNextStatus === "nota_cobertura" ? "Registar nota de cobertura" : "Registar nota"}
       />
     );
   }
@@ -510,14 +527,16 @@ function AprovarDialog({
   onClose,
   onFinalizar,
   onCobertura,
+  onDespacho,
 }: {
   expedient: ActionExpedient;
   onClose: () => void;
   onFinalizar: (alvo: "nota" | "expediente") => void;
   onCobertura: () => void;
+  onDespacho: () => void;
 }) {
   const [modo, setModo] = React.useState<"finalizar" | "cobertura" | null>(null);
-  const [alvo, setAlvo] = React.useState<"nota" | "expediente">("nota");
+  const [alvo, setAlvo] = React.useState<"nota" | "expediente" | "despacho">("nota");
 
   return (
     <Dialog open onOpenChange={(v) => !v && onClose()}>
@@ -563,12 +582,13 @@ function AprovarDialog({
           </div>
           {modo === "finalizar" && (
             <div>
-              <Label required>Onde assinar a aprovação</Label>
-              <Select value={alvo} onValueChange={(value) => setAlvo(value as "nota" | "expediente")}>
+              <Label required>Como registar a aprovação</Label>
+              <Select value={alvo} onValueChange={(value) => setAlvo(value as "nota" | "expediente" | "despacho")}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="nota">Na nota actual</SelectItem>
-                  <SelectItem value="expediente">No expediente original</SelectItem>
+                  <SelectItem value="nota">Carimbar/assinar na nota actual</SelectItem>
+                  <SelectItem value="expediente">Carimbar/assinar no expediente original</SelectItem>
+                  <SelectItem value="despacho">Criar um despacho novo (carimbo e assinatura)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -576,8 +596,15 @@ function AprovarDialog({
         </DialogBody>
         <DialogFooter>
           <Button variant="secondary" onClick={onClose}>Cancelar</Button>
-          <Button disabled={!modo} onClick={() => (modo === "finalizar" ? onFinalizar(alvo) : onCobertura())}>
-            {modo === "cobertura" ? "Emitir nota de cobertura" : "Aprovar"}
+          <Button
+            disabled={!modo}
+            onClick={() => {
+              if (modo === "cobertura") return onCobertura();
+              if (alvo === "despacho") return onDespacho();
+              return onFinalizar(alvo);
+            }}
+          >
+            {modo === "cobertura" ? "Emitir nota de cobertura" : alvo === "despacho" ? "Continuar" : "Aprovar"}
           </Button>
         </DialogFooter>
       </DialogContent>

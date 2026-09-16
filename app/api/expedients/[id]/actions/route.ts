@@ -445,8 +445,8 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
               id: string; stamps_metadata: Array<{ id?: string }> | null; signatures_metadata: Array<{ id?: string }> | null;
             }>("SELECT id,stamps_metadata,signatures_metadata FROM documents WHERE expedient_id=$1 AND document_kind='principal' LIMIT 1 FOR UPDATE", [exp.id]);
         if (alvoNota && !targetDoc.rows[0]) throw new Error("Nao existe nenhuma nota activa para assinar a aprovacao.");
-        if ((documentType.exigeCarimbo || documentType.exigeAssinatura) && !alvoNota && !targetDoc.rows[0]) {
-          throw new Error("Este tipo de documento exige formalizacao, mas o expediente nao tem documento principal.");
+        if (!alvoNota && !targetDoc.rows[0]) {
+          throw new Error("O expediente nao tem documento principal.");
         }
 
         if (targetDoc.rows[0]) {
@@ -456,7 +456,10 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
           let latestSignature: Record<string, unknown> | null = null;
           let stampId: string | null = null;
 
-          if (documentType.exigeCarimbo) {
+          // A marca de aprovacao (na nota ou no expediente) leva sempre carimbo E
+          // assinatura -- independentemente do que o tipo de documento exige --
+          // tal como o despacho formal e a submissao original do remetente.
+          {
             const stamps = await configuredStamps(client);
             const stamp = resolveUnitStamp(
               stamps.filter((candidate) => permitsDocument(candidate.tiposDocumento, documentType.nome)),
@@ -473,7 +476,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
             }
           }
 
-          if (documentType.exigeAssinatura) {
+          {
             const signatures = await configuredSignatures(client);
             const signature = resolveUserSignature(signatures, session.user);
             if (!signature) throw new Error("Nao tem uma assinatura individual activa. Configure-a em Administracao > Assinaturas.");

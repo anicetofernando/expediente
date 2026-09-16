@@ -16,7 +16,7 @@ export const runtime = "nodejs";
 
 const ALLOWED_EXTENSIONS = new Set([".pdf", ".docx", ".jpg", ".jpeg", ".png"]);
 const MAX_FILE_SIZE = 20 * 1024 * 1024;
-const ALLOWED_STATUS = new Set(["aguardando_parecer", "aguardando_esclarecimento", "devolvido", "aprovado"]);
+const ALLOWED_STATUS = new Set(["aguardando_parecer", "aguardando_esclarecimento", "devolvido", "aprovado", "encaminhado"]);
 
 /**
  * Quando o despacho responde a um pedido de parecer/esclarecimento, o processo
@@ -39,6 +39,23 @@ async function returnToRequesterIfPending(
   // no mesmo ciclo de notas -- pode aprovar, aprovar-para-nova-nota, rejeitar,
   // encaminhar ou pedir outro parecer, exactamente como antes de ter pedido este.
   await client.query("UPDATE expedients SET status='encaminhado', responsible_user_id=$2 WHERE id=$1", [exp.id, nextResponsible]);
+}
+
+/**
+ * Uma das formas de "Finalizar aprovação" e' criar aqui um despacho formal
+ * (com carimbo e assinatura obrigatorios) -- assim que fica pronto, isso ja'
+ * e' a propria aprovacao: fecha o ciclo exactamente como o "Aprovar" directo,
+ * entregando a` secretaria de origem para disponibilizar ao remetente.
+ */
+async function finalizeApprovalIfEncaminhado(
+  client: Parameters<Parameters<typeof transaction>[0]>[0],
+  exp: { id: string; status: string; responsible_user_id: string | null; origin_secretary_id: string | null },
+) {
+  if (exp.status !== "encaminhado") return;
+  await client.query(
+    "UPDATE expedients SET status='aprovado', responsible_user_id=$2, next_step='Disponibilizacao ao remetente pela Secretaria' WHERE id=$1",
+    [exp.id, exp.origin_secretary_id ?? exp.responsible_user_id],
+  );
 }
 
 function cleanName(name: string) {
@@ -94,8 +111,8 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     if (file) validateFile(file);
 
     const result = await transaction(async (client) => {
-      const found = await client.query<{ id: string; protocol: string; subject: string; status: string; created_by: string; origin_unit_id: string; recipient_unit_id: string; responsible_user_id: string | null; confidentiality: string }>(
-        "SELECT id,protocol,subject,status,created_by,origin_unit_id,recipient_unit_id,responsible_user_id,confidentiality FROM expedients WHERE id=$1 FOR UPDATE", [params.id],
+      const found = await client.query<{ id: string; protocol: string; subject: string; status: string; created_by: string; origin_unit_id: string; recipient_unit_id: string; responsible_user_id: string | null; confidentiality: string; origin_secretary_id: string | null }>(
+        "SELECT id,protocol,subject,status,created_by,origin_unit_id,recipient_unit_id,responsible_user_id,confidentiality,origin_secretary_id FROM expedients WHERE id=$1 FOR UPDATE", [params.id],
       );
       const exp = found.rows[0];
       if (!exp) throw new Error("Expediente nao encontrado.");
@@ -118,6 +135,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         );
         await rememberStampSignaturePositions(client, resolved.stamp, resolved.signature, input.posicaoCarimbo, input.posicaoAssinatura);
         await returnToRequesterIfPending(client, exp);
+        await finalizeApprovalIfEncaminhado(client, exp);
         return { documentId: input.documentId, finalized: true };
       }
 
@@ -159,6 +177,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       // posicionar carimbo/assinatura, a chamada seguinte (com documentId) e que fecha.
       if (input.modo === "importado" || !sistemaHasFreePositionImages) {
         await returnToRequesterIfPending(client, exp);
+        await finalizeApprovalIfEncaminhado(client, exp);
       }
       await client.query(
         `INSERT INTO timeline_events(expedient_id,event_type,title,description,user_id,unit_id) VALUES($1,'resposta','Despacho registado',$2,$3,$4)`,
