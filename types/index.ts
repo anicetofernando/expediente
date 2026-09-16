@@ -9,6 +9,8 @@ export type ExpedientStatus =
   | "em_analise"
   | "aguardando_parecer"
   | "aguardando_esclarecimento"
+  | "em_transito"
+  | "nota_pendente"
   | "devolvido"
   | "aprovado"
   | "rejeitado"
@@ -93,7 +95,7 @@ export interface ExpedientDocument {
   id: string;
   nome: string;
   numero?: string;
-  tipo: "principal" | "anexo" | "parecer" | "despacho" | "resposta" | "protocolo";
+  tipo: "principal" | "anexo" | "parecer" | "despacho" | "resposta" | "protocolo" | "nota";
   formato: "pdf" | "docx" | "imagem";
   paginas: number;
   tamanho: string;
@@ -146,6 +148,7 @@ export interface TimelineEvent {
     | "parecer"
     | "esclarecimento"
     | "resposta"
+    | "nota"
     | "aprovacao"
     | "rejeicao"
     | "devolucao"

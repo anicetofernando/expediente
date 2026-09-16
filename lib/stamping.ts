@@ -39,6 +39,24 @@ export async function resolveMandatoryStampSignatureByUnitId(
   return resolveMandatoryStampSignature(client, user, unit.rows[0].name, profile);
 }
 
+/**
+ * Para a Nota de encaminhamento da Secretaria: a assinatura pessoal e'
+ * obrigatoria, mas o carimbo e' opcional -- pode assinar sem carimbar.
+ * Diferente da regra do remetente/despacho, onde os dois sao sempre exigidos.
+ */
+export async function resolveOptionalStampSignature(
+  client: PoolClient,
+  user: Pick<User, "id" | "nome" | "email">,
+  unitName: string,
+  profile: string,
+): Promise<{ stamp: Stamp | null; signature: Signature }> {
+  const [stamps, signatures] = await Promise.all([configuredStamps(client), configuredSignatures(client)]);
+  const stamp = resolveUnitStamp(stamps, user, unitName, profile);
+  const signature = resolveUserSignature(signatures, user);
+  if (!signature) throw new Error("Nao tem uma assinatura configurada. Contacte a administracao.");
+  return { stamp: stamp ?? null, signature };
+}
+
 export function stampMetadataJson(stamp: Stamp, actorName: string, posicao?: FreePosition) {
   return {
     id: stamp.id,

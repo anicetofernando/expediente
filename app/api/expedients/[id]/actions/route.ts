@@ -20,9 +20,9 @@ import { hasActionPermission } from "@/lib/permissions";
 const PROFILE_ACTIONS: Record<string, Set<string>> = {
   remetente: new Set(["confirmar", "resposta"]),
   secretaria: new Set(["receber_encaminhar", "devolver", "disponibilizar", "notificar"]),
-  superior: new Set(["encaminhar", "parecer", "esclarecimento", "aprovar", "rejeitar", "devolver", "resposta", "retomar", "escalar", "disponibilizar", "notificar"]),
+  superior: new Set(["encaminhar", "parecer", "esclarecimento", "aprovar", "aprovar_nota", "rejeitar", "devolver", "resposta", "retomar", "escalar", "disponibilizar", "notificar"]),
   administracao: new Set([
-    "submeter", "receber_encaminhar", "encaminhar", "parecer", "esclarecimento", "aprovar", "rejeitar",
+    "submeter", "receber_encaminhar", "encaminhar", "parecer", "esclarecimento", "aprovar", "aprovar_nota", "rejeitar",
     "devolver", "resposta", "disponibilizar", "confirmar", "arquivar", "retomar", "escalar", "notificar",
   ]),
 };
@@ -33,6 +33,7 @@ const NEXT_STATUS: Record<string, string | undefined> = {
   parecer: "aguardando_parecer",
   esclarecimento: "aguardando_esclarecimento",
   aprovar: "aprovado",
+  aprovar_nota: "nota_pendente",
   rejeitar: "rejeitado",
   devolver: "devolvido",
   resposta: "em_analise",
@@ -46,11 +47,12 @@ const NEXT_STATUS: Record<string, string | undefined> = {
 
 const LABELS: Record<string, string> = {
   submeter: "Expediente submetido",
-  receber_encaminhar: "Expediente recebido, protocolado e encaminhado",
+  receber_encaminhar: "Expediente recebido e protocolado -- nota de encaminhamento por preparar",
   encaminhar: "Expediente encaminhado",
   parecer: "Parecer solicitado",
   esclarecimento: "Esclarecimento solicitado",
   aprovar: "Expediente aprovado",
+  aprovar_nota: "Nota aprovada -- Secretaria vai preparar a proxima nota",
   rejeitar: "Expediente rejeitado",
   devolver: "Devolvido para correcao",
   resposta: "Resposta registada",
@@ -68,10 +70,14 @@ const ALLOWED_BY_STATUS: Record<string, string[]> = {
   // Compatibilidade com expedientes que ficaram a meio no fluxo antigo.
   recebido: ["receber_encaminhar", "devolver"],
   protocolado: ["receber_encaminhar", "devolver"],
-  encaminhado: ["encaminhar", "parecer", "devolver", "aprovar"],
+  encaminhado: ["encaminhar", "parecer", "esclarecimento", "devolver", "aprovar", "aprovar_nota", "rejeitar"],
   em_analise: ["encaminhar", "aprovar", "rejeitar", "devolver", "parecer", "esclarecimento"],
   aguardando_parecer: ["resposta", "esclarecimento"],
   aguardando_esclarecimento: ["resposta"],
+  // A caminho da secretaria da unidade seguinte (subida a director, ou pedido
+  // de parecer a outra unidade) -- so ela pode receber, protocolar e preparar
+  // a nota antes de chegar a pessoa responsavel.
+  em_transito: ["receber_encaminhar"],
   devolvido: ["resposta"],
   aprovado: ["disponibilizar"],
   rejeitado: ["notificar"],
@@ -119,9 +125,9 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       const found = await client.query<{
         id: string; protocol: string; subject: string; status: string; created_by: string; origin_unit_id: string;
         recipient_unit_id: string; responsible_user_id: string | null; due_date: string | Date; document_type: string;
-        origin_secretary_id: string | null; confidentiality: string;
+        origin_secretary_id: string | null; confidentiality: string; pending_next_status: string | null;
       }>(
-        "SELECT id,protocol,subject,status,created_by,origin_unit_id,recipient_unit_id,responsible_user_id,due_date,document_type,origin_secretary_id,confidentiality FROM expedients WHERE id=$1 FOR UPDATE",
+        "SELECT id,protocol,subject,status,created_by,origin_unit_id,recipient_unit_id,responsible_user_id,due_date,document_type,origin_secretary_id,confidentiality,pending_next_status FROM expedients WHERE id=$1 FOR UPDATE",
         [params.id],
       );
       const exp = found.rows[0];
@@ -173,6 +179,12 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       let originSecretary = exp.origin_secretary_id;
       let next = NEXT_STATUS[action];
       let nextStep = "Continuar tramitacao";
+      // Enquanto o processo esta "nota_pendente"/"em_transito", guarda para
+      // onde deve ir assim que a Secretaria concluir o passo dela (a nota, ou
+      // o receber+protocolar) -- consumido em /api/expedients/[id]/nota ou no
+      // proprio receber_encaminhar seguinte. Limpo por omissao; cada bloco que
+      // precisa define o valor.
+      let pendingNextStatus: string | null = null;
 
       if (action === "submeter") {
         if (!isValidFutureOrTodayDate(dateValueInMaputo(exp.due_date))) {
@@ -187,28 +199,34 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       }
 
       if (action === "receber_encaminhar") {
-        if (!input.target) throw new Error("Seleccione a unidade de destino.");
-        // O remetente ja escolheu o destino ao criar o expediente. Se escolheu um
-        // servico especifico, a Secretaria nao tem escolha -- so pode confirmar
-        // esse mesmo servico. Se escolheu apenas o departamento/direccao, a
-        // Secretaria so pode escolher entre os servicos daquele departamento.
-        const originalTarget = await client.query<{ unit_type: string }>(
-          "SELECT unit_type FROM organizational_units WHERE id=$1", [exp.recipient_unit_id],
-        );
-        if (originalTarget.rows[0]?.unit_type === "direccao") {
-          const validChild = await client.query<{ id: string }>(
-            "SELECT id FROM organizational_units WHERE id=$1 AND parent_id=$2", [input.target, exp.recipient_unit_id],
+        const isFirstHop = exp.status !== "em_transito";
+
+        if (isFirstHop) {
+          if (!input.target) throw new Error("Seleccione a unidade de destino.");
+          // O remetente ja escolheu o destino ao criar o expediente. Se escolheu um
+          // servico especifico, a Secretaria nao tem escolha -- so pode confirmar
+          // esse mesmo servico. Se escolheu apenas o departamento/direccao, a
+          // Secretaria so pode escolher entre os servicos daquele departamento.
+          const originalTarget = await client.query<{ unit_type: string }>(
+            "SELECT unit_type FROM organizational_units WHERE id=$1", [exp.recipient_unit_id],
           );
-          if (input.target !== exp.recipient_unit_id && !validChild.rows[0]) {
-            throw new Error("So pode encaminhar para um servico do departamento indicado pelo remetente.");
+          if (originalTarget.rows[0]?.unit_type === "direccao") {
+            const validChild = await client.query<{ id: string }>(
+              "SELECT id FROM organizational_units WHERE id=$1 AND parent_id=$2", [input.target, exp.recipient_unit_id],
+            );
+            if (input.target !== exp.recipient_unit_id && !validChild.rows[0]) {
+              throw new Error("So pode encaminhar para um servico do departamento indicado pelo remetente.");
+            }
+          } else if (input.target !== exp.recipient_unit_id) {
+            throw new Error("O remetente ja definiu o destino -- nao e possivel encaminhar para outra unidade.");
           }
-        } else if (input.target !== exp.recipient_unit_id) {
-          throw new Error("O remetente ja definiu o destino -- nao e possivel encaminhar para outra unidade.");
+          recipient = input.target;
         }
-        responsible = await targetResponsible(client, input.target);
-        recipient = input.target;
+        // Nos saltos seguintes (em_transito), o destino ja foi fixado por quem
+        // encaminhou/pediu parecer -- a Secretaria so confirma, nunca escolhe.
+
         originSecretary = originSecretary ?? session.user.id;
-        if (protocol.startsWith("SUBMISSAO-") || protocol.startsWith("RASCUNHO-")) {
+        if (isFirstHop && (protocol.startsWith("SUBMISSAO-") || protocol.startsWith("RASCUNHO-"))) {
           const unit = await client.query<{ acronym: string }>(
             "SELECT acronym FROM organizational_units WHERE id=$1 AND active=true",
             [exp.origin_unit_id],
@@ -217,75 +235,185 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
           protocol = await generateProtocolNumber(client, exp.origin_unit_id, unit.rows[0].acronym, new Date().getFullYear());
         }
 
-        // A Secretaria NUNCA marca o documento original -- este segue, tal como o
-        // remetente o carimbou, ate ao superior. O que a Secretaria carimba e assina
-        // e uma copia de protocolo separada, que fica disponivel para o remetente
-        // como comprovativo. E o mesmo principio de levar duas vias ao balcao: uma
-        // fica com o protocolo, a outra (o original) segue o processo.
-        const principal = await client.query<{
-          id: string; name: string; source: string; mime_type: string | null; size_bytes: string | number; page_count: number;
-          storage_path: string | null; content_html: string | null; confidentiality: string;
-          stamps_metadata: Array<Record<string, unknown>> | null; signatures_metadata: Array<Record<string, unknown>> | null;
-          template_metadata: Record<string, unknown> | null;
-        }>(
-          `SELECT id,name,source,mime_type,size_bytes,page_count,storage_path,content_html,confidentiality,stamps_metadata,signatures_metadata,template_metadata
-             FROM documents WHERE expedient_id=$1 AND document_kind='principal' LIMIT 1 FOR UPDATE`,
-          [exp.id],
-        );
-        if (principal.rows[0]) {
-          const doc = principal.rows[0];
-          const [stamps, signatures] = await Promise.all([configuredStamps(client), configuredSignatures(client)]);
-          const stamp = resolveUnitStamp(stamps, session.user, session.unitName, session.perfilNavegacao);
-          if (!stamp) throw new Error("A Secretaria ainda nao tem um carimbo institucional activo. Configure-o em Administracao > Carimbos.");
-          const signature = resolveUserSignature(signatures, session.user);
-          if (!signature) throw new Error("Nao tem uma assinatura individual activa. Configure-a em Administracao > Assinaturas.");
-          const stampEntry = stampMetadataJson(stamp, session.user.nome, input.posicaoCarimbo ?? stamp.posicaoLivre);
-          const signatureEntry = signatureMetadataJson(signature, session.user, input.posicaoAssinatura ?? signature.posicaoLivre);
-          const protocolStamps = [...(doc.stamps_metadata ?? []), stampEntry];
-          const protocolSignatures = [...(doc.signatures_metadata ?? []), signatureEntry];
-          await client.query(
-            `INSERT INTO documents(expedient_id,name,document_kind,source,mime_type,size_bytes,page_count,storage_path,content_html,confidentiality,created_by,template_metadata,stamp_id,stamped,signed,stamp_metadata,signature_metadata,stamps_metadata,signatures_metadata)
-             VALUES($1,$2,'protocolo',$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb,$12,true,true,$13::jsonb,$14::jsonb,$15::jsonb,$16::jsonb)`,
-            [exp.id, `Protocolo - ${doc.name}`, doc.source, doc.mime_type, doc.size_bytes, doc.page_count, doc.storage_path, doc.content_html, doc.confidentiality,
-              session.user.id, doc.template_metadata ? JSON.stringify(doc.template_metadata) : null, stamp.id,
-              JSON.stringify(stampEntry), JSON.stringify(signatureEntry), JSON.stringify(protocolStamps), JSON.stringify(protocolSignatures)],
+        if (isFirstHop) {
+          // A Secretaria NUNCA marca o documento original -- este segue, tal como o
+          // remetente o carimbou, ate ao superior. O que a Secretaria carimba e assina
+          // e uma copia de protocolo separada, que fica disponivel para o remetente
+          // como comprovativo. E o mesmo principio de levar duas vias ao balcao: uma
+          // fica com o protocolo, a outra (o original) segue o processo.
+          const principal = await client.query<{
+            id: string; name: string; source: string; mime_type: string | null; size_bytes: string | number; page_count: number;
+            storage_path: string | null; content_html: string | null; confidentiality: string;
+            stamps_metadata: Array<Record<string, unknown>> | null; signatures_metadata: Array<Record<string, unknown>> | null;
+            template_metadata: Record<string, unknown> | null;
+          }>(
+            `SELECT id,name,source,mime_type,size_bytes,page_count,storage_path,content_html,confidentiality,stamps_metadata,signatures_metadata,template_metadata
+               FROM documents WHERE expedient_id=$1 AND document_kind='principal' LIMIT 1 FOR UPDATE`,
+            [exp.id],
           );
-          if (stamp.imagemUrl && input.posicaoCarimbo) await rememberStampPosition(client, stamp.id, input.posicaoCarimbo);
-          if (signature.imagemUrl && input.posicaoAssinatura) await rememberSignaturePosition(client, signature.id, input.posicaoAssinatura);
+          if (principal.rows[0]) {
+            const doc = principal.rows[0];
+            const [stamps, signatures] = await Promise.all([configuredStamps(client), configuredSignatures(client)]);
+            const stamp = resolveUnitStamp(stamps, session.user, session.unitName, session.perfilNavegacao);
+            if (!stamp) throw new Error("A Secretaria ainda nao tem um carimbo institucional activo. Configure-o em Administracao > Carimbos.");
+            const signature = resolveUserSignature(signatures, session.user);
+            if (!signature) throw new Error("Nao tem uma assinatura individual activa. Configure-a em Administracao > Assinaturas.");
+            const stampEntry = stampMetadataJson(stamp, session.user.nome, input.posicaoCarimbo ?? stamp.posicaoLivre);
+            const signatureEntry = signatureMetadataJson(signature, session.user, input.posicaoAssinatura ?? signature.posicaoLivre);
+            const protocolStamps = [...(doc.stamps_metadata ?? []), stampEntry];
+            const protocolSignatures = [...(doc.signatures_metadata ?? []), signatureEntry];
+            await client.query(
+              `INSERT INTO documents(expedient_id,name,document_kind,source,mime_type,size_bytes,page_count,storage_path,content_html,confidentiality,created_by,template_metadata,stamp_id,stamped,signed,stamp_metadata,signature_metadata,stamps_metadata,signatures_metadata)
+               VALUES($1,$2,'protocolo',$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb,$12,true,true,$13::jsonb,$14::jsonb,$15::jsonb,$16::jsonb)`,
+              [exp.id, `Protocolo - ${doc.name}`, doc.source, doc.mime_type, doc.size_bytes, doc.page_count, doc.storage_path, doc.content_html, doc.confidentiality,
+                session.user.id, doc.template_metadata ? JSON.stringify(doc.template_metadata) : null, stamp.id,
+                JSON.stringify(stampEntry), JSON.stringify(signatureEntry), JSON.stringify(protocolStamps), JSON.stringify(protocolSignatures)],
+            );
+            if (stamp.imagemUrl && input.posicaoCarimbo) await rememberStampPosition(client, stamp.id, input.posicaoCarimbo);
+            if (signature.imagemUrl && input.posicaoAssinatura) await rememberSignaturePosition(client, signature.id, input.posicaoAssinatura);
+          }
         }
-        next = "encaminhado";
-        nextStep = "Analise e decisao da unidade responsavel";
+        // Nos saltos seguintes, o "protocolo" desta etapa e' o proprio numero
+        // atribuido a nota que a Secretaria vai criar a seguir (mesmo mecanismo
+        // do despacho) -- nao duplica outra copia de protocolo aqui.
+
+        // A Secretaria recebeu e protocolou -- agora tem de preparar a nota
+        // antes de entregar a pessoa responsavel (accao seguinte, dedicada).
+        responsible = session.user.id;
+        next = "nota_pendente";
+        pendingNextStatus = isFirstHop ? "encaminhado" : (exp.pending_next_status ?? "encaminhado");
+        nextStep = "Secretaria a preparar a nota de encaminhamento";
       }
 
       if (action === "encaminhar" || action === "parecer") {
         if (!input.target) throw new Error("Seleccione a unidade destinataria.");
-        responsible = await targetResponsible(client, input.target);
-        recipient = input.target;
-        nextStep = action === "parecer" ? "Emissao de parecer" : "Analise pela unidade destinataria";
+        // Vindo de "encaminhado" (ja' com uma nota em maos), o salto passa
+        // sempre primeiro pela Secretaria da unidade destino -- ela protocola
+        // e prepara a proxima nota antes de chegar a pessoa responsavel. Vindo
+        // de "em_analise" (fluxo mais antigo, achatado) mantem-se o comportamento
+        // directo de sempre, sem tocar nisso.
+        const viaNota = exp.status === "encaminhado";
 
-        if (action === "encaminhar") {
-          // "Tomei conhecimento": ao encaminhar (repassa a responsabilidade, nao volta
-          // para decidir -- ao contrario de "parecer"), a assinatura pessoal de quem
-          // encaminha fica registada no documento original, somando-se as anteriores.
-          const principal = await client.query<{ id: string; signatures_metadata: Array<{ id?: string }> | null }>(
-            "SELECT id,signatures_metadata FROM documents WHERE expedient_id=$1 AND document_kind='principal' LIMIT 1 FOR UPDATE",
+        if (viaNota) {
+          const secretaryId = await resolveSecretaryId(client, input.target);
+          if (!secretaryId) throw new Error("Nao existe utilizador activo da Secretaria para a unidade seleccionada.");
+          responsible = secretaryId;
+          recipient = input.target;
+          next = "em_transito";
+          pendingNextStatus = action === "parecer" ? "aguardando_parecer" : "encaminhado";
+          nextStep = action === "parecer"
+            ? "Protocolo e nota pela Secretaria da unidade consultada"
+            : "Protocolo e nota pela Secretaria da unidade seguinte";
+
+          // O chefe/director carimba e assina a NOTA actual antes de ela seguir
+          // (nao ha' "tomei conhecimento" no principal aqui -- quem circula agora
+          // e' a nota, nao o documento original).
+          const latestNota = await client.query<{
+            id: string; stamps_metadata: Array<{ id?: string }> | null; signatures_metadata: Array<{ id?: string }> | null;
+          }>(
+            "SELECT id,stamps_metadata,signatures_metadata FROM documents WHERE expedient_id=$1 AND document_kind='nota' ORDER BY created_at DESC LIMIT 1 FOR UPDATE",
             [exp.id],
           );
-          if (principal.rows[0]) {
+          if (latestNota.rows[0]) {
             const signatures = await configuredSignatures(client);
             const signature = resolveUserSignature(signatures, session.user);
             if (!signature) throw new Error("Nao tem uma assinatura individual activa. Configure-a em Administracao > Assinaturas antes de encaminhar.");
-            const signatureEntries = principal.rows[0].signatures_metadata ?? [];
+            const signatureEntries = latestNota.rows[0].signatures_metadata ?? [];
             if (!signatureEntries.some((entry) => entry.id === signature.id)) {
               const entry = signatureMetadataJson(signature, session.user, signature.posicaoLivre);
               signatureEntries.push(entry);
               await client.query(
                 `UPDATE documents SET signed=true,signature_metadata=$2::jsonb,signatures_metadata=$3::jsonb WHERE id=$1`,
-                [principal.rows[0].id, JSON.stringify(entry), JSON.stringify(signatureEntries)],
+                [latestNota.rows[0].id, JSON.stringify(entry), JSON.stringify(signatureEntries)],
+              );
+            }
+            const stamps = await configuredStamps(client);
+            const stamp = resolveUnitStamp(stamps, session.user, session.unitName, session.perfilNavegacao);
+            const stampEntries = latestNota.rows[0].stamps_metadata ?? [];
+            if (stamp && !stampEntries.some((entry) => entry.id === stamp.id)) {
+              const entry = stampMetadataJson(stamp, session.user.nome, stamp.posicaoLivre);
+              stampEntries.push(entry);
+              await client.query(
+                `UPDATE documents SET stamped=true,stamp_metadata=$2::jsonb,stamps_metadata=$3::jsonb WHERE id=$1`,
+                [latestNota.rows[0].id, JSON.stringify(entry), JSON.stringify(stampEntries)],
               );
             }
           }
+        } else {
+          responsible = await targetResponsible(client, input.target);
+          recipient = input.target;
+          nextStep = action === "parecer" ? "Emissao de parecer" : "Analise pela unidade destinataria";
+
+          if (action === "encaminhar") {
+            // "Tomei conhecimento": ao encaminhar (repassa a responsabilidade, nao volta
+            // para decidir -- ao contrario de "parecer"), a assinatura pessoal de quem
+            // encaminha fica registada no documento original, somando-se as anteriores.
+            const principal = await client.query<{ id: string; signatures_metadata: Array<{ id?: string }> | null }>(
+              "SELECT id,signatures_metadata FROM documents WHERE expedient_id=$1 AND document_kind='principal' LIMIT 1 FOR UPDATE",
+              [exp.id],
+            );
+            if (principal.rows[0]) {
+              const signatures = await configuredSignatures(client);
+              const signature = resolveUserSignature(signatures, session.user);
+              if (!signature) throw new Error("Nao tem uma assinatura individual activa. Configure-a em Administracao > Assinaturas antes de encaminhar.");
+              const signatureEntries = principal.rows[0].signatures_metadata ?? [];
+              if (!signatureEntries.some((entry) => entry.id === signature.id)) {
+                const entry = signatureMetadataJson(signature, session.user, signature.posicaoLivre);
+                signatureEntries.push(entry);
+                await client.query(
+                  `UPDATE documents SET signed=true,signature_metadata=$2::jsonb,signatures_metadata=$3::jsonb WHERE id=$1`,
+                  [principal.rows[0].id, JSON.stringify(entry), JSON.stringify(signatureEntries)],
+                );
+              }
+            }
+          }
         }
+      }
+
+      if (action === "esclarecimento") {
+        // Ao contrario do parecer (que vai para outra unidade, via secretaria),
+        // o esclarecimento e' sempre um vai-e-vem directo entre quem pediu e o
+        // proprio remetente -- passa a responsabilidade directamente para ele.
+        responsible = exp.created_by;
+        nextStep = "Esclarecimento a prestar pelo remetente";
+      }
+
+      if (action === "aprovar_nota") {
+        const latestNota = await client.query<{
+          id: string; stamps_metadata: Array<{ id?: string }> | null; signatures_metadata: Array<{ id?: string }> | null;
+        }>(
+          "SELECT id,stamps_metadata,signatures_metadata FROM documents WHERE expedient_id=$1 AND document_kind='nota' ORDER BY created_at DESC LIMIT 1 FOR UPDATE",
+          [exp.id],
+        );
+        if (!latestNota.rows[0]) throw new Error("Nao existe nenhuma nota activa para aprovar.");
+        const signatures = await configuredSignatures(client);
+        const signature = resolveUserSignature(signatures, session.user);
+        if (!signature) throw new Error("Nao tem uma assinatura individual activa. Configure-a em Administracao > Assinaturas.");
+        const signatureEntries = latestNota.rows[0].signatures_metadata ?? [];
+        if (!signatureEntries.some((entry) => entry.id === signature.id)) {
+          const entry = signatureMetadataJson(signature, session.user, signature.posicaoLivre);
+          signatureEntries.push(entry);
+          await client.query(
+            `UPDATE documents SET signed=true,signature_metadata=$2::jsonb,signatures_metadata=$3::jsonb WHERE id=$1`,
+            [latestNota.rows[0].id, JSON.stringify(entry), JSON.stringify(signatureEntries)],
+          );
+        }
+        const stamps = await configuredStamps(client);
+        const stamp = resolveUnitStamp(stamps, session.user, session.unitName, session.perfilNavegacao);
+        const stampEntries = latestNota.rows[0].stamps_metadata ?? [];
+        if (stamp && !stampEntries.some((entry) => entry.id === stamp.id)) {
+          const entry = stampMetadataJson(stamp, session.user.nome, stamp.posicaoLivre);
+          stampEntries.push(entry);
+          await client.query(
+            `UPDATE documents SET stamped=true,stamp_metadata=$2::jsonb,stamps_metadata=$3::jsonb WHERE id=$1`,
+            [latestNota.rows[0].id, JSON.stringify(entry), JSON.stringify(stampEntries)],
+          );
+        }
+        const secretaryId = await resolveSecretaryId(client, exp.recipient_unit_id);
+        if (!secretaryId) throw new Error("Nao existe utilizador activo da Secretaria para preparar a proxima nota.");
+        responsible = secretaryId;
+        pendingNextStatus = "encaminhado";
+        nextStep = "Secretaria a preparar nova nota de encaminhamento";
       }
 
       if (action === "resposta" && exp.status === "devolvido") {
@@ -306,6 +434,10 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
           [exp.id, eventType],
         );
         if (requester.rows[0]?.user_id) responsible = requester.rows[0].user_id;
+        // Volta para "encaminhado" (nao "em_analise") para que quem solicitou
+        // continue no mesmo ciclo de notas -- exactamente como o despacho de
+        // parecer (rota dedicada /resposta) ja faz.
+        next = "encaminhado";
       }
 
       if (action === "aprovar") {
@@ -422,17 +554,22 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
                 priority=CASE WHEN $7='escalar' THEN 'urgente' ELSE priority END,
                 completed_at=CASE WHEN $3='arquivado' THEN now() ELSE completed_at END,
                 submitted_at=CASE WHEN $7='submeter' THEN now() ELSE submitted_at END,
-                origin_secretary_id=COALESCE(origin_secretary_id,$8)
+                origin_secretary_id=COALESCE(origin_secretary_id,$8),
+                pending_next_status=$9
           WHERE id=$1`,
-        [exp.id, protocol, next ?? null, responsible, recipient, nextStep, action, originSecretary],
+        [exp.id, protocol, next ?? null, responsible, recipient, nextStep, action, originSecretary, pendingNextStatus],
       );
 
       if (action === "receber_encaminhar") {
-        const events = [
-          ["recepcao", "Recepcao registada", "A Secretaria conferiu e recebeu formalmente o expediente."],
-          ["protocolo", "Protocolo oficial atribuido", `${protocol} atribuido e carimbo institucional aplicado sem duplicacao.`],
-          ["encaminhamento", "Expediente encaminhado", input.note?.trim() || "Encaminhado para analise da unidade responsavel."],
-        ];
+        const isFirstHop = exp.status !== "em_transito";
+        const events = isFirstHop
+          ? [
+              ["recepcao", "Recepcao registada", "A Secretaria conferiu e recebeu formalmente o expediente."],
+              ["protocolo", "Protocolo oficial atribuido", `${protocol} atribuido e carimbo institucional aplicado sem duplicacao.`],
+            ]
+          : [
+              ["recepcao", "Recepcao registada nesta unidade", "A Secretaria desta unidade conferiu e recebeu formalmente o processo."],
+            ];
         for (const [eventType, title, description] of events) {
           await client.query(
             "INSERT INTO timeline_events(expedient_id,event_type,title,description,user_id,unit_id) VALUES($1,$2,$3,$4,$5,$6)",

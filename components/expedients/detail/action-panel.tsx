@@ -57,11 +57,11 @@ type ActionExpedient = Pick<Expedient, "id" | "estado" | "protocolo" | "assunto"
 
 const PROFILE_ACTIONS: Record<string, Set<string>> = {
   remetente: new Set(["confirmar", "resposta"]),
-  secretaria: new Set(["receber_encaminhar", "devolver", "disponibilizar", "notificar"]),
+  secretaria: new Set(["receber_encaminhar", "criar_nota", "devolver", "disponibilizar", "notificar"]),
   // "disponibilizar"/"notificar" so' se aplicam ao superior quando o processo e'
   // confidencial (a Secretaria nunca chega a ve-lo nesse caso) -- ver o filtro
   // allowSuperiorConfidentialHandoff mais abaixo.
-  superior: new Set(["encaminhar", "parecer", "esclarecimento", "aprovar", "rejeitar", "devolver", "resposta", "retomar", "escalar", "disponibilizar", "notificar"]),
+  superior: new Set(["encaminhar", "parecer", "esclarecimento", "aprovar", "aprovar_nota", "rejeitar", "devolver", "resposta", "retomar", "escalar", "disponibilizar", "notificar"]),
   administracao: new Set(Object.values(ACTIONS_BY_STATUS).flat().map((action) => action.key)),
 };
 
@@ -297,6 +297,21 @@ function ActionDialog({
     );
   }
 
+  if (action.kind === "nota") {
+    return (
+      <DespachoDialog
+        expedientId={expedient.id}
+        protocolo={expedient.protocolo}
+        onClose={onClose}
+        onDone={() => { onClose(); router.refresh(); }}
+        endpoint="nota"
+        dialogTitle="Criar nota de encaminhamento"
+        requireStamp={false}
+        submitLabel="Registar nota"
+      />
+    );
+  }
+
   if (action.kind === "resposta") {
     if (perfilNavegacao === "superior" || perfilNavegacao === "administracao") {
       return (
@@ -347,12 +362,18 @@ function ReceiveForwardDialog({
   const [positioning, setPositioning] = React.useState(false);
   const [note, setNote] = React.useState("");
 
+  // "em_transito" e' sempre um salto seguinte (subida a director, ou pedido de
+  // parecer a outra unidade) -- o destino ja vem fixo, nao ha protocolo-copia
+  // a carimbar aqui (isso so acontece no primeiro salto); so falta confirmar a
+  // recepcao antes de a Secretaria desta unidade preparar a proxima nota.
+  const isFirstHop = expedient.estado !== "em_transito";
+
   // O remetente ja escolheu o destino ao criar o expediente: um servico
   // especifico (a Secretaria nao tem escolha, encaminha so para ele) ou apenas
   // o departamento/direccao (a Secretaria escolhe entre os servicos daquele
   // departamento). Se a direccao nao tiver servicos, encaminha directo a ela.
-  const childServices = organizationalUnits.filter((unit) => unit.parentId === expedient.destinatarioId);
-  const isLocked = expedient.destinatarioTipo !== "direccao" || childServices.length === 0;
+  const childServices = isFirstHop ? organizationalUnits.filter((unit) => unit.parentId === expedient.destinatarioId) : [];
+  const isLocked = !isFirstHop || expedient.destinatarioTipo !== "direccao" || childServices.length === 0;
   const [target, setTarget] = React.useState(isLocked ? expedient.destinatarioId : "");
 
   React.useEffect(() => {
@@ -364,10 +385,10 @@ function ReceiveForwardDialog({
     return () => { cancelled = true; };
   }, []);
 
-  const needsStamp = Boolean(principalPdfUrl);
+  const needsStamp = isFirstHop && Boolean(principalPdfUrl);
   const readyToStamp = Boolean(authorization.stamp && authorization.signature);
   const ready = Boolean(target && (!needsStamp || readyToStamp));
-  const hasPositionableItems = Boolean(principalPdfUrl && (authorization.stamp?.imagemUrl || authorization.signature?.imagemUrl));
+  const hasPositionableItems = isFirstHop && Boolean(principalPdfUrl && (authorization.stamp?.imagemUrl || authorization.signature?.imagemUrl));
   const targetName = organizationalUnits.find((unit) => unit.id === target)?.nome ?? "a unidade seleccionada";
 
   if (positioning && principalPdfUrl) {
@@ -378,7 +399,7 @@ function ReceiveForwardDialog({
         pdfUrl={principalPdfUrl}
         stamp={authorization.stamp?.imagemUrl ? { imageUrl: authorization.stamp.imagemUrl, label: authorization.stamp.nome, initialPosition: authorization.stamp.posicaoLivre } : undefined}
         signature={authorization.signature?.imagemUrl ? { imageUrl: authorization.signature.imagemUrl, label: authorization.signature.proprietario, initialPosition: authorization.signature.posicaoLivre } : undefined}
-        onConfirm={(result) => onComplete(`Recebido e encaminhado para ${targetName}. ${note}`.trim(), target, result.posicaoCarimbo, result.posicaoAssinatura)}
+        onConfirm={(result) => onComplete(`Recebido em ${targetName}. ${note}`.trim(), target, result.posicaoCarimbo, result.posicaoAssinatura)}
       />
     );
   }
@@ -387,12 +408,14 @@ function ReceiveForwardDialog({
     <Dialog open onOpenChange={(v) => !v && onClose()}>
       <DialogContent size="sm">
         <DialogHeader>
-          <DialogTitle>Receber, protocolar e encaminhar</DialogTitle>
+          <DialogTitle>{isFirstHop ? "Receber e protocolar" : "Receber nesta unidade"}</DialogTitle>
           <DialogDescription>{expedient.protocolo} · {expedient.assunto}</DialogDescription>
         </DialogHeader>
         <DialogBody className="space-y-3.5">
           <p className="border border-info-200 bg-info-50 px-3 py-2 text-xs leading-relaxed text-info-800">
-            Uma única confirmação regista a recepção, atribui o número oficial e entrega o processo ao responsável escolhido. É gerada uma cópia de protocolo (carimbada e assinada pela Secretaria) para o remetente — o documento original que segue para análise não é alterado.
+            {isFirstHop
+              ? "Uma única confirmação regista a recepção e atribui o número oficial. É gerada uma cópia de protocolo (carimbada e assinada pela Secretaria) para o remetente — o documento original não é alterado. De seguida terá de criar a nota de encaminhamento antes do processo seguir para o responsável."
+              : "Confirma a recepção deste processo nesta unidade. De seguida terá de criar a nota de encaminhamento antes de chegar à pessoa responsável."}
           </p>
           <div>
             <Label required>Unidade responsável pela análise</Label>
@@ -416,10 +439,14 @@ function ReceiveForwardDialog({
             <Label>Instruções (opcional)</Label>
             <Textarea rows={3} placeholder="Acrescente instruções para a unidade responsável…" value={note} onChange={(event) => setNote(event.target.value)} />
           </div>
-          {authorization.loading ? (
+          {isFirstHop && authorization.loading ? (
             <p className="text-[13px] text-graphite-500">A verificar o carimbo e a assinatura da Secretaria…</p>
           ) : !needsStamp ? (
-            <p className="text-xs text-graphite-500">Este expediente não tem documento principal; o protocolo será registado no processo, sem cópia de protocolo.</p>
+            <p className="text-xs text-graphite-500">
+              {isFirstHop
+                ? "Este expediente não tem documento principal; o protocolo será registado no processo, sem cópia de protocolo."
+                : "Depois de confirmar, terá de criar a nota de encaminhamento (com a sua assinatura e, se aplicável, o carimbo da unidade)."}
+            </p>
           ) : readyToStamp ? (
             <p className="text-[13px] text-graphite-600">
               A cópia de protocolo será carimbada com <strong>{authorization.stamp?.nome}</strong> e assinada por {authorization.signature?.proprietario}.
@@ -435,12 +462,12 @@ function ReceiveForwardDialog({
         <DialogFooter>
           <Button variant="secondary" onClick={onClose}>Cancelar</Button>
           <Button
-            disabled={!ready || authorization.loading}
+            disabled={!ready || (needsStamp && authorization.loading)}
             onClick={() => (hasPositionableItems
               ? setPositioning(true)
-              : onComplete(`Recebido e encaminhado para ${targetName}. ${note}`.trim(), target))}
+              : onComplete(`Recebido em ${targetName}. ${note}`.trim(), target))}
           >
-            {hasPositionableItems ? "Posicionar e concluir" : "Receber e encaminhar"}
+            {hasPositionableItems ? "Posicionar e concluir" : isFirstHop ? "Receber e protocolar" : "Confirmar recepção"}
           </Button>
         </DialogFooter>
       </DialogContent>

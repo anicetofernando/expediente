@@ -18,11 +18,21 @@ export function DespachoDialog({
   protocolo,
   onClose,
   onDone,
+  endpoint = "resposta",
+  dialogTitle = "Criar despacho / resposta",
+  requireStamp = true,
+  submitLabel = "Registar despacho",
 }: {
   expedientId: string;
   protocolo: string;
   onClose: () => void;
   onDone: () => void;
+  /** Endpoint irmao "/resposta" (despacho normal) ou "/nota" (nota de encaminhamento da Secretaria). */
+  endpoint?: "resposta" | "nota";
+  dialogTitle?: string;
+  /** Na nota, o carimbo e opcional -- so a assinatura e sempre exigida. */
+  requireStamp?: boolean;
+  submitLabel?: string;
 }) {
   const { toast } = useToast();
   const { documentTemplates } = useCatalogs();
@@ -48,31 +58,33 @@ export function DespachoDialog({
 
   const template = documentTemplates.find((item) => item.id === modeloId);
   const activeTemplates = documentTemplates.filter((item) => item.estado === "activo");
-  const readyToSign = Boolean(authorization.stamp && authorization.signature);
+  const readyToSign = Boolean((!requireStamp || authorization.stamp) && authorization.signature);
   const hasFreePositionImages = Boolean(authorization.stamp?.imagemUrl || authorization.signature?.imagemUrl);
+  const successLabel = requireStamp ? "Despacho registado" : "Nota registada";
+  const failureLabel = requireStamp ? "Despacho não registado" : "Nota não registada";
 
   async function submitSistema() {
     if (!conteudo.replace(/<[^>]*>/g, "").trim()) {
-      toast({ title: "Escreva o conteúdo do despacho.", variant: "destructive" });
+      toast({ title: requireStamp ? "Escreva o conteúdo do despacho." : "Escreva o conteúdo da nota.", variant: "destructive" });
       return;
     }
     setSubmitting(true);
     try {
       const form = new FormData();
       form.set("data", JSON.stringify({ modo: "sistema", modeloId, conteudo, note }));
-      const response = await fetch(`/api/expedients/${expedientId}/resposta`, { method: "POST", body: form });
+      const response = await fetch(`/api/expedients/${expedientId}/${endpoint}`, { method: "POST", body: form });
       const result = await response.json();
-      if (!response.ok) throw new Error(result.error ?? "Não foi possível registar o despacho.");
+      if (!response.ok) throw new Error(result.error ?? `Não foi possível registar ${requireStamp ? "o despacho" : "a nota"}.`);
       if (hasFreePositionImages) {
         setDocumentId(result.documentId);
         setPdfUrl(result.pdfUrl);
         setPositioning(true);
       } else {
-        toast({ title: "Despacho registado", variant: "success" });
+        toast({ title: successLabel, variant: "success" });
         onDone();
       }
     } catch (error) {
-      toast({ title: "Despacho não registado", description: error instanceof Error ? error.message : "Erro inesperado.", variant: "destructive" });
+      toast({ title: failureLabel, description: error instanceof Error ? error.message : "Erro inesperado.", variant: "destructive" });
     } finally {
       setSubmitting(false);
     }
@@ -80,7 +92,7 @@ export function DespachoDialog({
 
   async function submitImportado() {
     if (!ficheiro) {
-      toast({ title: "Seleccione o ficheiro da resposta.", variant: "destructive" });
+      toast({ title: requireStamp ? "Seleccione o ficheiro da resposta." : "Seleccione o ficheiro da nota.", variant: "destructive" });
       return;
     }
     setSubmitting(true);
@@ -88,13 +100,13 @@ export function DespachoDialog({
       const form = new FormData();
       form.set("data", JSON.stringify({ modo: "importado", note }));
       form.set("file", ficheiro);
-      const response = await fetch(`/api/expedients/${expedientId}/resposta`, { method: "POST", body: form });
+      const response = await fetch(`/api/expedients/${expedientId}/${endpoint}`, { method: "POST", body: form });
       const result = await response.json();
-      if (!response.ok) throw new Error(result.error ?? "Não foi possível registar o despacho.");
-      toast({ title: "Despacho registado", variant: "success" });
+      if (!response.ok) throw new Error(result.error ?? `Não foi possível registar ${requireStamp ? "o despacho" : "a nota"}.`);
+      toast({ title: successLabel, variant: "success" });
       onDone();
     } catch (error) {
-      toast({ title: "Despacho não registado", description: error instanceof Error ? error.message : "Erro inesperado.", variant: "destructive" });
+      toast({ title: failureLabel, description: error instanceof Error ? error.message : "Erro inesperado.", variant: "destructive" });
     } finally {
       setSubmitting(false);
     }
@@ -106,13 +118,13 @@ export function DespachoDialog({
     try {
       const form = new FormData();
       form.set("data", JSON.stringify({ modo: "sistema", documentId, ...result }));
-      const response = await fetch(`/api/expedients/${expedientId}/resposta`, { method: "POST", body: form });
+      const response = await fetch(`/api/expedients/${expedientId}/${endpoint}`, { method: "POST", body: form });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error ?? "Não foi possível posicionar o carimbo/assinatura.");
-      toast({ title: "Despacho registado", variant: "success" });
+      toast({ title: successLabel, variant: "success" });
       onDone();
     } catch (error) {
-      toast({ title: "Despacho não registado", description: error instanceof Error ? error.message : "Erro inesperado.", variant: "destructive" });
+      toast({ title: failureLabel, description: error instanceof Error ? error.message : "Erro inesperado.", variant: "destructive" });
     } finally {
       setSubmitting(false);
     }
@@ -135,7 +147,7 @@ export function DespachoDialog({
     <Dialog open onOpenChange={(v) => !v && onClose()}>
       <DialogContent size="xl" className="max-h-[94vh]">
         <DialogHeader>
-          <DialogTitle>Criar despacho / resposta</DialogTitle>
+          <DialogTitle>{dialogTitle}</DialogTitle>
           <DialogDescription>{protocolo}</DialogDescription>
         </DialogHeader>
         <DialogBody className="space-y-4">
@@ -178,9 +190,9 @@ export function DespachoDialog({
             <div className="space-y-3.5">
               {!authorization.loading && !readyToSign && (
                 <p className="border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-relaxed text-amber-800">
-                  {!authorization.stamp && "A sua unidade ainda não tem um carimbo configurado. "}
+                  {requireStamp && !authorization.stamp && "A sua unidade ainda não tem um carimbo configurado. "}
                   {!authorization.signature && "Não tem uma assinatura configurada. "}
-                  Contacte a administração — não é possível escrever despachos no sistema sem os dois.
+                  Contacte a administração — não é possível escrever {requireStamp ? "despachos" : "notas"} no sistema sem {requireStamp ? "os dois" : "assinatura"}.
                 </p>
               )}
               {!authorization.loading && readyToSign && !authorization.signature?.imagemUrl && (
@@ -200,15 +212,15 @@ export function DespachoDialog({
                 </Select>
               </div>
               <div>
-                <Label required>Texto do despacho</Label>
-                <LetterEditor value={conteudo} onChange={setConteudo} title="Despacho" template={template} compact />
+                <Label required>{requireStamp ? "Texto do despacho" : "Texto da nota"}</Label>
+                <LetterEditor value={conteudo} onChange={setConteudo} title={requireStamp ? "Despacho" : "Nota"} template={template} compact />
               </div>
             </div>
           )}
 
           {modo === "importado" && (
             <div>
-              <Label required>Ficheiro da resposta</Label>
+              <Label required>{requireStamp ? "Ficheiro da resposta" : "Ficheiro da nota"}</Label>
               <input
                 type="file"
                 accept=".pdf,.docx,.jpg,.jpeg,.png"
@@ -234,7 +246,7 @@ export function DespachoDialog({
               loading={submitting}
               onClick={() => (modo === "sistema" ? submitSistema() : submitImportado())}
             >
-              {modo === "sistema" && hasFreePositionImages ? "Continuar e posicionar" : "Registar despacho"}
+              {modo === "sistema" && hasFreePositionImages ? "Continuar e posicionar" : submitLabel}
             </Button>
           </div>
         </DialogFooter>

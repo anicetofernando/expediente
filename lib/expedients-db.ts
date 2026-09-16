@@ -105,14 +105,14 @@ const VIEW_FILTERS: Record<ExpedientView, string> = {
   // A caixa de saida do remetente mostra so o que ainda esta "em curso" (nao
   // decidido nem entregue) -- uma vez devolvido, disponibilizado ou concluido,
   // o processo passa a viver so na caixa correspondente, nunca em ambas.
-  outbox: "e.origin_unit_id=__UNIT__ AND e.status IN ('submetido','recebido','protocolado','encaminhado','em_analise','aguardando_parecer','aguardando_esclarecimento','aprovado','atrasado')",
-  pending: "e.status IN ('submetido','recebido','protocolado','encaminhado','em_analise','aguardando_parecer','aguardando_esclarecimento','atrasado')",
+  outbox: "e.origin_unit_id=__UNIT__ AND e.status IN ('submetido','recebido','protocolado','encaminhado','em_analise','aguardando_parecer','aguardando_esclarecimento','em_transito','nota_pendente','aprovado','atrasado')",
+  pending: "e.status IN ('submetido','recebido','protocolado','encaminhado','em_analise','aguardando_parecer','aguardando_esclarecimento','em_transito','nota_pendente','atrasado')",
   analysis: "e.status='em_analise'",
   returned: "e.status IN ('devolvido','rejeitado')",
   // "aprovado" so passa a Concluidos depois de a Secretaria disponibilizar e o
   // remetente confirmar -- ate la mantem-se em Caixa de saida.
   completed: "e.status IN ('arquivado','recebimento_confirmado')",
-  "secretary-reception": "e.status IN ('submetido','recebido','protocolado')",
+  "secretary-reception": "e.status IN ('submetido','recebido','protocolado','em_transito','nota_pendente')",
   "secretary-protocols": "e.status IN ('recebido','protocolado')",
   "secretary-forwarding": "e.status='protocolado'",
   "secretary-deliveries": "e.status IN ('aprovado','rejeitado','disponivel_remetente')",

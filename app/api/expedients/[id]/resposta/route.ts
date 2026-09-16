@@ -35,7 +35,10 @@ async function returnToRequesterIfPending(
     [exp.id, eventType],
   );
   const nextResponsible = requester.rows[0]?.user_id ?? exp.responsible_user_id;
-  await client.query("UPDATE expedients SET status='em_analise', responsible_user_id=$2 WHERE id=$1", [exp.id, nextResponsible]);
+  // Volta para "encaminhado" (nao "em_analise") para que quem solicitou continue
+  // no mesmo ciclo de notas -- pode aprovar, aprovar-para-nova-nota, rejeitar,
+  // encaminhar ou pedir outro parecer, exactamente como antes de ter pedido este.
+  await client.query("UPDATE expedients SET status='encaminhado', responsible_user_id=$2 WHERE id=$1", [exp.id, nextResponsible]);
 }
 
 function cleanName(name: string) {
