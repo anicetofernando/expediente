@@ -83,8 +83,8 @@ export function LetterEditor({ value, onChange, title = "Carta institucional", t
         <button type="button" title="Refazer" onMouseDown={(e) => e.preventDefault()} onClick={() => command("redo")} className="flex size-7 items-center justify-center text-graphite-600 hover:bg-graphite-50"><Redo2 className="size-3.5" /></button>
         <button type="button" title="Imprimir pré-visualização" onClick={print} className="ml-auto flex size-7 items-center justify-center text-graphite-600 hover:bg-graphite-50"><Printer className="size-3.5" /></button>
       </div>
-      <div className={cn("overflow-auto p-4 sm:p-7", compact ? "h-[38vh] min-h-[340px] max-h-[460px]" : "h-[78vh] min-h-[720px] max-h-[920px]")}>
-        <div className={cn("mx-auto w-full max-w-[794px] bg-white px-[9%] py-[8%] shadow-card", compact ? "min-h-[480px]" : "min-h-[1123px]")}>
+      <div className={cn("overflow-auto p-4 sm:p-7", compact ? "h-[62vh] min-h-[520px] max-h-[720px]" : "h-[78vh] min-h-[720px] max-h-[920px]")}>
+        <div className={cn("mx-auto w-full max-w-[794px] bg-white px-[9%] py-[8%] shadow-card", compact ? "min-h-[720px]" : "min-h-[1123px]")}>
           <div className="mb-8 border-b border-graphite-200 pb-4 text-center">
             {template?.logotipo && template.logotipoPosicao === "cabecalho" && <img src={template.logotipo} alt="Logótipo" className="mx-auto mb-3 max-h-20 max-w-48 object-contain" />}
             <p className="whitespace-pre-line text-[11px] font-bold uppercase tracking-[0.12em] text-cfm-900">{template?.cabecalho ?? "CFM — Portos e Caminhos de Ferro de Moçambique"}</p>

@@ -132,6 +132,12 @@ export function StepBasicInfo({ state, update }: StepProps) {
             ))}
           </SelectContent>
         </Select>
+        {state.confidencialidade === "restrito" && (
+          <p className="mt-1 text-2xs text-graphite-500">Só o remetente, a Secretaria e o destinatário conseguem ver este processo.</p>
+        )}
+        {state.confidencialidade === "confidencial" && (
+          <p className="mt-1 text-2xs text-graphite-500">Vai directamente ao responsável, sem passar pela Secretaria em nenhum momento.</p>
+        )}
       </div>
     </div>
   );

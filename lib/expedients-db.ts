@@ -33,20 +33,22 @@ async function accessClause(session: AuthSession, startIndex = 1) {
     // (a sua unidade ou, na ausencia de secretaria propria, o recurso ao
     // departamento central ou a' secretaria global) -- nunca todo o sistema.
     // Um rascunho ainda nao entrou no circuito institucional: permanece
-    // privado para o autor ate ser submetido.
+    // privado para o autor ate ser submetido. "Confidencial" nunca passa pela
+    // secretaria em momento algum -- nao ve mesmo que tenha sido ela a tocar
+    // no processo por engano. "Restrito" tambem nao conta para o acesso
+    // colectivo por unidade -- so' quem ja' interveio directamente.
     const unitIds = await secretaryOwnedUnitIds(db, session.user.id);
-    // Quem ja' interveio no percurso (recebeu, protocolou, encaminhou) mantem
-    // sempre acesso para acompanhar o desfecho, mesmo depois de o processo
-    // seguir para outra unidade.
     return {
-      sql: `(e.status <> 'rascunho' AND (e.recipient_unit_id=ANY($${startIndex}::text[]) OR e.origin_unit_id=ANY($${startIndex}::text[])) OR e.created_by=$${startIndex + 1} OR e.responsible_user_id=$${startIndex + 1} OR EXISTS (SELECT 1 FROM timeline_events te WHERE te.expedient_id=e.id AND te.user_id=$${startIndex + 1}))`,
+      sql: `(e.confidentiality <> 'confidencial' AND ((e.status <> 'rascunho' AND e.confidentiality <> 'restrito' AND (e.recipient_unit_id=ANY($${startIndex}::text[]) OR e.origin_unit_id=ANY($${startIndex}::text[]))) OR e.created_by=$${startIndex + 1} OR e.responsible_user_id=$${startIndex + 1} OR EXISTS (SELECT 1 FROM timeline_events te WHERE te.expedient_id=e.id AND te.user_id=$${startIndex + 1})))`,
       params: [unitIds, session.user.id] as unknown[],
     };
   }
   if (session.perfilNavegacao === "superior") {
     // Idem: um chefe que encaminhou para outro nivel mantem acesso ao
     // processo para acompanhar a decisao, mesmo ja' nao sendo a unidade actual.
-    return { sql: `(e.origin_unit_id=$${startIndex} OR e.recipient_unit_id=$${startIndex} OR e.responsible_user_id=$${startIndex + 1} OR EXISTS (SELECT 1 FROM timeline_events te WHERE te.expedient_id=e.id AND te.user_id=$${startIndex + 1}))`, params: [session.user.unidadeId, session.user.id] };
+    // "Restrito" tira o acesso colectivo por unidade -- so' quem ja'
+    // interveio directamente (responsavel actual ou no historico) mantem acesso.
+    return { sql: `((e.confidentiality <> 'restrito' AND (e.origin_unit_id=$${startIndex} OR e.recipient_unit_id=$${startIndex})) OR e.responsible_user_id=$${startIndex + 1} OR e.created_by=$${startIndex + 1} OR EXISTS (SELECT 1 FROM timeline_events te WHERE te.expedient_id=e.id AND te.user_id=$${startIndex + 1}))`, params: [session.user.unidadeId, session.user.id] };
   }
   return { sql: `(e.created_by=$${startIndex} OR e.responsible_user_id=$${startIndex})`, params: [session.user.id] };
 }
@@ -75,6 +77,8 @@ function mapBase(row: ExpedientRow): Expedient {
     confidencialidade: row.confidentiality,
     remetente: { nome: row.sender_name, tipo: row.sender_type, unidade: row.origin_unit_name, contacto: row.sender_contact ?? undefined },
     destinatario: row.recipient_unit_name,
+    destinatarioId: row.recipient_unit_id,
+    destinatarioTipo: row.recipient_unit_type,
     unidadeOrigem: row.origin_unit_name,
     responsavelActual: row.responsible_name ?? "Por atribuir",
     responsavelActualId: row.responsible_user_id ?? "",
@@ -98,11 +102,16 @@ const VIEW_FILTERS: Record<ExpedientView, string> = {
   all: "TRUE",
   mine: "(e.created_by=__USER__ OR e.responsible_user_id=__USER__)",
   inbox: "e.responsible_user_id=__USER__ AND e.status NOT IN ('rascunho','arquivado','cancelado','recebimento_confirmado')",
-  outbox: "e.origin_unit_id=__UNIT__",
+  // A caixa de saida do remetente mostra so o que ainda esta "em curso" (nao
+  // decidido nem entregue) -- uma vez devolvido, disponibilizado ou concluido,
+  // o processo passa a viver so na caixa correspondente, nunca em ambas.
+  outbox: "e.origin_unit_id=__UNIT__ AND e.status IN ('submetido','recebido','protocolado','encaminhado','em_analise','aguardando_parecer','aguardando_esclarecimento','aprovado','atrasado')",
   pending: "e.status IN ('submetido','recebido','protocolado','encaminhado','em_analise','aguardando_parecer','aguardando_esclarecimento','atrasado')",
   analysis: "e.status='em_analise'",
   returned: "e.status IN ('devolvido','rejeitado')",
-  completed: "e.status IN ('arquivado','aprovado','recebimento_confirmado')",
+  // "aprovado" so passa a Concluidos depois de a Secretaria disponibilizar e o
+  // remetente confirmar -- ate la mantem-se em Caixa de saida.
+  completed: "e.status IN ('arquivado','recebimento_confirmado')",
   "secretary-reception": "e.status IN ('submetido','recebido','protocolado')",
   "secretary-protocols": "e.status IN ('recebido','protocolado')",
   "secretary-forwarding": "e.status='protocolado'",

@@ -96,3 +96,34 @@ export async function secretaryOwnedUnitIds(client: QueryLike, secretaryUserId: 
     .map((unit) => unit.id)
     .filter((unitId) => ownersForUnit(unitId, byUnit, globalFallbackGroup).includes(secretaryUserId));
 }
+
+// A quem um expediente encaminhado/protocolado para esta unidade fica
+// atribuido: o "superior" dessa unidade (chefe/aprovador); na ausencia de um,
+// qualquer utilizador activo da unidade que nao seja da secretaria.
+export async function targetResponsible(client: QueryLike, unitId: string) {
+  const superior = await client.query(
+    `SELECT u.id
+       FROM users u
+       JOIN user_profiles up ON up.user_id=u.id
+       JOIN profiles p ON p.id=up.profile_id
+      WHERE u.unit_id=$1 AND u.status='activo' AND p.slug='superior'
+      ORDER BY u.full_name LIMIT 1`,
+    [unitId],
+  );
+  const superiorRow = (superior.rows as { id: string }[])[0];
+  if (superiorRow) return superiorRow.id;
+  const responsible = await client.query(
+    `SELECT u.id
+       FROM users u
+      WHERE u.unit_id=$1 AND u.status='activo'
+        AND NOT EXISTS (
+          SELECT 1 FROM user_profiles up JOIN profiles p ON p.id=up.profile_id
+           WHERE up.user_id=u.id AND p.slug='secretaria'
+        )
+      ORDER BY u.full_name LIMIT 1`,
+    [unitId],
+  );
+  const responsibleRow = (responsible.rows as { id: string }[])[0];
+  if (!responsibleRow) throw new Error("A unidade seleccionada nao tem um responsavel activo.");
+  return responsibleRow.id;
+}

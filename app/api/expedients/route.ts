@@ -7,7 +7,8 @@ import { sanitizeDocumentHtml } from "@/lib/sanitize-html";
 import type { Confidentiality, Priority } from "@/types";
 import { isValidFutureOrTodayDate } from "@/lib/date-only";
 import { templateSnapshot } from "@/lib/document-configuration";
-import { resolveSecretaryId } from "@/lib/routing";
+import { resolveSecretaryId, targetResponsible } from "@/lib/routing";
+import { generateProtocolNumber } from "@/lib/numbering";
 import { saveFile } from "@/lib/file-storage";
 import { hasPermission } from "@/lib/permissions";
 import { resolveMandatoryStampSignatureByUnitId, signatureMetadataJson, stampMetadataJson } from "@/lib/stamping";
@@ -86,18 +87,31 @@ export async function POST(request: NextRequest) {
       const template = input.origemDocumento === "sistema" ? await templateSnapshot(client, input.modeloId) : null;
       if (input.origemDocumento === "sistema" && !template) throw new Error("Seleccione um modelo de documento activo.");
       const expedientId = randomUUID();
+      // "Confidencial" nunca passa pela Secretaria -- nem protocolo, nem carimbo
+      // dela, nem visibilidade em lado nenhum. Vai directo ao responsavel da
+      // unidade de destino, ja com numero de protocolo real atribuido agora
+      // (papel normalmente feito pela Secretaria ao receber).
+      const isConfidencial = !input.rascunho && input.confidencialidade === "confidencial";
       let protocol = `RASCUNHO-${expedientId.slice(0,8).toUpperCase()}`;
-      if (!input.rascunho) {
+      if (isConfidencial) {
+        protocol = await generateProtocolNumber(client, input.unidadeOrigem, unit.rows[0].acronym, new Date().getFullYear());
+      } else if (!input.rascunho) {
         protocol = `SUBMISSAO-${expedientId.slice(0,8).toUpperCase()}`;
       }
-      const status = input.rascunho ? "rascunho" : "submetido";
-      const responsible = input.rascunho ? session.user.id : await resolveSecretaryId(client, input.destinatario);
-      if (!input.rascunho && !responsible) throw new Error("Nao existe utilizador activo da Secretaria.");
+      const status = input.rascunho ? "rascunho" : isConfidencial ? "encaminhado" : "submetido";
+      const responsible = input.rascunho
+        ? session.user.id
+        : isConfidencial
+          ? await targetResponsible(client, input.destinatario)
+          : await resolveSecretaryId(client, input.destinatario);
+      if (!input.rascunho && !isConfidencial && !responsible) throw new Error("Nao existe utilizador activo da Secretaria.");
+      const originSecretary = input.rascunho || isConfidencial ? null : responsible;
+      const nextStep = input.rascunho ? "Continuar a edicao" : isConfidencial ? "Analise directa pelo responsavel (confidencial)" : "Recepcao pela Secretaria";
       const result = await client.query<{ id: string; protocol: string }>(`
         INSERT INTO expedients(id,protocol,subject,document_type,status,priority,confidentiality,sender_name,origin_unit_id,recipient_unit_id,responsible_user_id,origin_secretary_id,created_by,due_date,next_step,submitted_at)
         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16::timestamptz)
         RETURNING id,protocol
-      `,[expedientId,protocol,input.assunto.trim(),input.tipo,status,input.prioridade,input.confidencialidade,input.remetente.trim(),input.unidadeOrigem,input.destinatario,responsible,input.rascunho ? null : responsible,session.user.id,input.prazo,input.rascunho ? "Continuar a edicao" : "Recepcao pela Secretaria",input.rascunho ? null : new Date().toISOString()]);
+      `,[expedientId,protocol,input.assunto.trim(),input.tipo,status,input.prioridade,input.confidencialidade,input.remetente.trim(),input.unidadeOrigem,input.destinatario,responsible,originSecretary,session.user.id,input.prazo,nextStep,input.rascunho ? null : new Date().toISOString()]);
       const expedient = result.rows[0];
 
       let documentId: string | null = null;
@@ -130,8 +144,13 @@ export async function POST(request: NextRequest) {
           [expedient.id,file.name,stored.mime,file.size,stored.relative,meta?.confidencialidade || input.confidencialidade,session.user.id]);
       }
       await client.query(`INSERT INTO timeline_events(expedient_id,event_type,title,description,user_id,unit_id) VALUES($1,$2,$3,$4,$5,$6)`,
-        [expedient.id,input.rascunho ? "criacao" : "submissao",input.rascunho ? "Rascunho criado" : "Expediente submetido",input.rascunho ? "Guardado para continuar mais tarde." : "Enviado para recepcao e protocolo.",session.user.id,session.user.unidadeId]);
-      if (!input.rascunho) {
+        [expedient.id,input.rascunho ? "criacao" : "submissao",input.rascunho ? "Rascunho criado" : "Expediente submetido",
+          input.rascunho ? "Guardado para continuar mais tarde." : isConfidencial ? "Confidencial -- enviado directamente ao responsavel, sem passar pela Secretaria." : "Enviado para recepcao e protocolo.",
+          session.user.id,session.user.unidadeId]);
+      if (!input.rascunho && isConfidencial && responsible) {
+        await client.query(`INSERT INTO notifications(user_id,notification_type,title,description,expedient_id,urgent) VALUES($1,'tarefa','Novo expediente confidencial',$2,$3,$4)`,
+          [responsible,`${protocol} aguarda a sua analise directa.`,expedient.id,input.prioridade === "urgente"]);
+      } else if (!input.rascunho) {
         await client.query(`INSERT INTO notifications(user_id,notification_type,title,description,expedient_id,urgent) SELECT u.id,'tarefa','Novo expediente submetido',$2,$1,$3 FROM users u JOIN user_profiles up ON up.user_id=u.id JOIN profiles p ON p.id=up.profile_id WHERE p.slug='secretaria' AND u.status='activo'`,
           [expedient.id,`${protocol} aguarda recepcao.`,input.prioridade === "urgente"]);
       }

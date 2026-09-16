@@ -47,6 +47,22 @@ export const STATUS_META: Record<ExpedientStatus, StatusDef> = {
   atrasado: { label: "Atrasado", badge: "bg-crimson-50 text-crimson-700 border-crimson-200", dot: "bg-crimson-500", description: "Ultrapassou o prazo previsto para esta etapa.", icon: "AlertTriangle" },
 };
 
+const REMETENTE_FROZEN_AT_RECEBIDO = new Set<ExpedientStatus>([
+  "recebido", "protocolado", "encaminhado", "em_analise",
+  "aguardando_parecer", "aguardando_esclarecimento", "aprovado", "atrasado",
+]);
+
+/**
+ * O remetente nao acompanha os passos internos do lado do superior (a quem
+ * foi encaminhado, se pediu parecer, se ja foi aprovado mas ainda nao
+ * disponibilizado, etc.) -- para ele, uma vez recebido pela Secretaria, o
+ * estatuto mostrado fica "Recebido" ate haver algo que lhe diga respeito
+ * directamente: devolucao, disponibilizacao ou conclusao.
+ */
+export function remetenteDisplayStatus(status: ExpedientStatus): ExpedientStatus {
+  return REMETENTE_FROZEN_AT_RECEBIDO.has(status) ? "recebido" : status;
+}
+
 export const PRIORITY_META: Record<Priority, { label: string; badge: string; dot: string }> = {
   baixa: { label: "Baixa", badge: "bg-graphite-100 text-graphite-600 border-graphite-200", dot: "bg-graphite-400" },
   normal: { label: "Normal", badge: "bg-info-50 text-info-700 border-info-200", dot: "bg-info-500" },

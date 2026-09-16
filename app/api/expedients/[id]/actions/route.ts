@@ -9,6 +9,7 @@ import {
   requiresDirectorEscalation,
   resolveSecretaryId,
   secretaryOwnedUnitIds,
+  targetResponsible,
 } from "@/lib/routing";
 import { configuredSignatures, configuredStamps, rememberSignaturePosition, rememberStampPosition } from "@/lib/document-configuration";
 import { resolveUnitStamp, resolveUserSignature } from "@/lib/document-authorization";
@@ -19,7 +20,7 @@ import { hasActionPermission } from "@/lib/permissions";
 const PROFILE_ACTIONS: Record<string, Set<string>> = {
   remetente: new Set(["confirmar", "resposta"]),
   secretaria: new Set(["receber_encaminhar", "devolver", "disponibilizar", "notificar"]),
-  superior: new Set(["encaminhar", "parecer", "esclarecimento", "aprovar", "rejeitar", "devolver", "resposta", "retomar", "escalar"]),
+  superior: new Set(["encaminhar", "parecer", "esclarecimento", "aprovar", "rejeitar", "devolver", "resposta", "retomar", "escalar", "disponibilizar", "notificar"]),
   administracao: new Set([
     "submeter", "receber_encaminhar", "encaminhar", "parecer", "esclarecimento", "aprovar", "rejeitar",
     "devolver", "resposta", "disponibilizar", "confirmar", "arquivar", "retomar", "escalar", "notificar",
@@ -85,39 +86,13 @@ function normalized(value: string) {
   return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase();
 }
 
-function permitsDocument(configured: string[], documentType: string) {
-  if (configured.length === 0) return true;
+function permitsDocument(configured: string[] | undefined | null, documentType: string) {
+  if (!configured || configured.length === 0) return true;
   const target = normalized(documentType);
   return configured.some((value) => {
     const allowed = normalized(value);
     return allowed === "todos" || allowed === target || allowed.startsWith(target) || target.startsWith(allowed);
   });
-}
-
-async function targetResponsible(client: Parameters<Parameters<typeof transaction>[0]>[0], unitId: string) {
-  const superior = await client.query<{ id: string }>(
-    `SELECT u.id
-       FROM users u
-       JOIN user_profiles up ON up.user_id=u.id
-       JOIN profiles p ON p.id=up.profile_id
-      WHERE u.unit_id=$1 AND u.status='activo' AND p.slug='superior'
-      ORDER BY u.full_name LIMIT 1`,
-    [unitId],
-  );
-  if (superior.rows[0]) return superior.rows[0].id;
-  const responsible = await client.query<{ id: string }>(
-    `SELECT u.id
-       FROM users u
-      WHERE u.unit_id=$1 AND u.status='activo'
-        AND NOT EXISTS (
-          SELECT 1 FROM user_profiles up JOIN profiles p ON p.id=up.profile_id
-           WHERE up.user_id=u.id AND p.slug='secretaria'
-        )
-      ORDER BY u.full_name LIMIT 1`,
-    [unitId],
-  );
-  if (!responsible.rows[0]) throw new Error("A unidade seleccionada nao tem um responsavel activo.");
-  return responsible.rows[0].id;
 }
 
 export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
@@ -144,15 +119,21 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       const found = await client.query<{
         id: string; protocol: string; subject: string; status: string; created_by: string; origin_unit_id: string;
         recipient_unit_id: string; responsible_user_id: string | null; due_date: string | Date; document_type: string;
-        origin_secretary_id: string | null;
+        origin_secretary_id: string | null; confidentiality: string;
       }>(
-        "SELECT id,protocol,subject,status,created_by,origin_unit_id,recipient_unit_id,responsible_user_id,due_date,document_type,origin_secretary_id FROM expedients WHERE id=$1 FOR UPDATE",
+        "SELECT id,protocol,subject,status,created_by,origin_unit_id,recipient_unit_id,responsible_user_id,due_date,document_type,origin_secretary_id,confidentiality FROM expedients WHERE id=$1 FOR UPDATE",
         [params.id],
       );
       const exp = found.rows[0];
       if (!exp) throw new Error("Expediente nao encontrado.");
       if (!ALLOWED_BY_STATUS[exp.status]?.includes(action)) {
         throw new Error("Esta accao nao e valida no estado actual do expediente.");
+      }
+      // "Disponibilizar" e "notificar" sao normalmente so' da Secretaria --
+      // excepto quando o processo e' confidencial, caso em que ela nunca chega
+      // a ve-lo, por isso e' o proprio responsavel (superior) que o faz directamente.
+      if ((action === "disponibilizar" || action === "notificar") && session.perfilNavegacao === "superior" && exp.confidentiality !== "confidencial") {
+        throw new Error("So a Secretaria pode concluir esta etapa.");
       }
       // A partir do momento em que a Secretaria encaminha para o superior, deixa de
       // poder devolver por iniciativa propria -- so o superior, ja com o processo em
@@ -173,11 +154,17 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       }
 
       const secretaryUnits = session.perfilNavegacao === "secretaria" ? await secretaryOwnedUnitIds(client, session.user.id) : [];
+      // Confidencial nunca fica acessivel a Secretaria por acesso colectivo de
+      // unidade -- so' quem e' directamente o criador ou o responsavel actual
+      // (o que, por definicao, nunca e' a Secretaria num confidencial). Restrito
+      // tambem tira o acesso colectivo de unidade (secretaria e superior),
+      // deixando so' quem ja' interveio directamente.
+      const collectiveUnitAccessAllowed = exp.confidentiality !== "confidencial" && exp.confidentiality !== "restrito";
       const hasAccess = session.perfilNavegacao === "administracao"
-        || (session.perfilNavegacao === "secretaria" && exp.status !== "rascunho" && (secretaryUnits.includes(exp.recipient_unit_id) || secretaryUnits.includes(exp.origin_unit_id)))
+        || (session.perfilNavegacao === "secretaria" && collectiveUnitAccessAllowed && exp.status !== "rascunho" && (secretaryUnits.includes(exp.recipient_unit_id) || secretaryUnits.includes(exp.origin_unit_id)))
         || exp.created_by === session.user.id
         || exp.responsible_user_id === session.user.id
-        || (session.perfilNavegacao === "superior" && (exp.origin_unit_id === session.user.unidadeId || exp.recipient_unit_id === session.user.unidadeId));
+        || (session.perfilNavegacao === "superior" && collectiveUnitAccessAllowed && (exp.origin_unit_id === session.user.unidadeId || exp.recipient_unit_id === session.user.unidadeId));
       if (!hasAccess) throw new Error("Sem acesso a este expediente.");
 
       let responsible = exp.responsible_user_id;
@@ -201,6 +188,23 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 
       if (action === "receber_encaminhar") {
         if (!input.target) throw new Error("Seleccione a unidade de destino.");
+        // O remetente ja escolheu o destino ao criar o expediente. Se escolheu um
+        // servico especifico, a Secretaria nao tem escolha -- so pode confirmar
+        // esse mesmo servico. Se escolheu apenas o departamento/direccao, a
+        // Secretaria so pode escolher entre os servicos daquele departamento.
+        const originalTarget = await client.query<{ unit_type: string }>(
+          "SELECT unit_type FROM organizational_units WHERE id=$1", [exp.recipient_unit_id],
+        );
+        if (originalTarget.rows[0]?.unit_type === "direccao") {
+          const validChild = await client.query<{ id: string }>(
+            "SELECT id FROM organizational_units WHERE id=$1 AND parent_id=$2", [input.target, exp.recipient_unit_id],
+          );
+          if (input.target !== exp.recipient_unit_id && !validChild.rows[0]) {
+            throw new Error("So pode encaminhar para um servico do departamento indicado pelo remetente.");
+          }
+        } else if (input.target !== exp.recipient_unit_id) {
+          throw new Error("O remetente ja definiu o destino -- nao e possivel encaminhar para outra unidade.");
+        }
         responsible = await targetResponsible(client, input.target);
         recipient = input.target;
         originSecretary = originSecretary ?? session.user.id;
@@ -391,10 +395,17 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       }
       if (action === "devolver") {
         if (!input.note?.trim()) throw new Error("Indique o motivo da devolucao.");
-        // Tal como aprovar/rejeitar, a devolucao entrega sempre a secretaria de
-        // origem primeiro -- nunca directo ao remetente.
-        responsible = exp.origin_secretary_id ?? responsible;
-        nextStep = "Entrega ao remetente pela Secretaria para correccao";
+        if (exp.confidentiality === "confidencial") {
+          // Confidencial nunca passa pela Secretaria, em nenhum momento do fluxo
+          // -- a devolucao vai directa ao remetente.
+          responsible = exp.created_by;
+          nextStep = "Correccao pelo remetente (confidencial)";
+        } else {
+          // Tal como aprovar/rejeitar, a devolucao entrega sempre a secretaria de
+          // origem primeiro -- nunca directo ao remetente.
+          responsible = exp.origin_secretary_id ?? responsible;
+          nextStep = "Entrega ao remetente pela Secretaria para correccao";
+        }
       }
       if (action === "disponibilizar") {
         responsible = exp.created_by;

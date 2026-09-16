@@ -18,6 +18,7 @@ import { DocumentList } from "@/components/documents/document-list";
 import { requireSession } from "@/lib/auth";
 import { getExpedient } from "@/lib/expedients-db";
 import { CatalogsProvider } from "@/lib/catalogs";
+import { remetenteDisplayStatus } from "@/lib/status";
 
 export const dynamic = "force-dynamic";
 
@@ -28,6 +29,10 @@ export default async function ExpedientDetailPage({ params }: { params: { id: st
   const { expedient, audit } = result;
 
   const principal = expedient.documentos.find((d) => d.tipo === "principal") ?? expedient.documentos[0];
+  // O remetente nao ve o detalhe interno da tramitacao do lado do superior --
+  // ver lib/status.ts#remetenteDisplayStatus. Isto e so' para a etiqueta
+  // apresentada; a logica de accoes usa sempre expedient.estado real.
+  const displayEstado = session.perfilNavegacao === "remetente" ? remetenteDisplayStatus(expedient.estado) : expedient.estado;
 
   return (
     <CatalogsProvider>
@@ -38,7 +43,7 @@ export default async function ExpedientDetailPage({ params }: { params: { id: st
         <div className="mt-2.5 flex flex-wrap items-center gap-x-4 gap-y-1.5">
           <h1 className="max-w-5xl text-[15px] font-semibold leading-snug text-graphite-900">{expedient.assunto}</h1>
           <div className="flex flex-wrap items-center gap-1.5">
-            <StatusBadge status={expedient.estado} />
+            <StatusBadge status={displayEstado} />
             <PriorityBadge priority={expedient.prioridade} />
             <ConfidentialityBadge level={expedient.confidencialidade} />
           </div>
@@ -164,6 +169,10 @@ export default async function ExpedientDetailPage({ params }: { params: { id: st
                   exigeCarimbo: expedient.exigeCarimbo,
                   exigeAssinatura: expedient.exigeAssinatura,
                   responsavelActualId: expedient.responsavelActualId,
+                  destinatario: expedient.destinatario,
+                  destinatarioId: expedient.destinatarioId,
+                  destinatarioTipo: expedient.destinatarioTipo,
+                  confidencialidade: expedient.confidencialidade,
                 }}
                 principalPdfUrl={principal?.pdfUrl}
               />

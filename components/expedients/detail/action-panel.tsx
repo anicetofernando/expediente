@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   Archive,
+  Building2,
   CheckCircle2,
   ClipboardCheck,
   FileEdit,
@@ -52,12 +53,15 @@ const ACTION_ICONS: Record<string, React.ComponentType<{ className?: string }>> 
   XCircle,
 };
 
-type ActionExpedient = Pick<Expedient, "id" | "estado" | "protocolo" | "assunto" | "precisaEscalarDirector" | "exigeCarimbo" | "exigeAssinatura" | "responsavelActualId">;
+type ActionExpedient = Pick<Expedient, "id" | "estado" | "protocolo" | "assunto" | "precisaEscalarDirector" | "exigeCarimbo" | "exigeAssinatura" | "responsavelActualId" | "destinatario" | "destinatarioId" | "destinatarioTipo" | "confidencialidade">;
 
 const PROFILE_ACTIONS: Record<string, Set<string>> = {
   remetente: new Set(["confirmar", "resposta"]),
   secretaria: new Set(["receber_encaminhar", "devolver", "disponibilizar", "notificar"]),
-  superior: new Set(["encaminhar", "parecer", "esclarecimento", "aprovar", "rejeitar", "devolver", "resposta", "retomar", "escalar"]),
+  // "disponibilizar"/"notificar" so' se aplicam ao superior quando o processo e'
+  // confidencial (a Secretaria nunca chega a ve-lo nesse caso) -- ver o filtro
+  // allowSuperiorConfidentialHandoff mais abaixo.
+  superior: new Set(["encaminhar", "parecer", "esclarecimento", "aprovar", "rejeitar", "devolver", "resposta", "retomar", "escalar", "disponibilizar", "notificar"]),
   administracao: new Set(Object.values(ACTIONS_BY_STATUS).flat().map((action) => action.key)),
 };
 
@@ -76,12 +80,16 @@ export function ActionPanel({ expedient, principalPdfUrl }: { expedient: ActionE
   const isPendingHandoff = ["aguardando_parecer", "aguardando_esclarecimento"].includes(expedient.estado);
   const isHandoffResponsible = expedient.responsavelActualId === user.id;
   const blockNonResponsibleHandoff = isPendingHandoff && !isHandoffResponsible;
+  // Confidencial nunca passa pela Secretaria -- por isso, so' nesse caso, e' o
+  // proprio superior responsavel que disponibiliza/notifica directamente.
+  const allowSuperiorConfidentialHandoff = perfilNavegacao === "superior" && expedient.confidencialidade === "confidencial";
   const actions = (ACTIONS_BY_STATUS[expedient.estado] ?? [])
     .filter((action) => PROFILE_ACTIONS[perfilNavegacao]?.has(action.key))
     .filter((action) => hasActionPermission(profile.permissoes, action.key))
     .filter((action) => !(blockDirectApproval && action.key === "aprovar"))
     .filter((action) => !(blockSecretaryReturn && action.key === "devolver"))
     .filter((action) => !(blockNonResponsibleHandoff && (action.key === "resposta" || action.key === "esclarecimento")))
+    .filter((action) => !(perfilNavegacao === "superior" && (action.key === "disponibilizar" || action.key === "notificar") && !allowSuperiorConfidentialHandoff))
     .map((action) => action.key === "aprovar"
       ? {
           ...action,
@@ -337,8 +345,15 @@ function ReceiveForwardDialog({
   const { organizationalUnits } = useCatalogs();
   const [authorization, setAuthorization] = React.useState<{ stamp: StampDefinition | null; signature: Signature | null; loading: boolean }>({ stamp: null, signature: null, loading: true });
   const [positioning, setPositioning] = React.useState(false);
-  const [target, setTarget] = React.useState("");
   const [note, setNote] = React.useState("");
+
+  // O remetente ja escolheu o destino ao criar o expediente: um servico
+  // especifico (a Secretaria nao tem escolha, encaminha so para ele) ou apenas
+  // o departamento/direccao (a Secretaria escolhe entre os servicos daquele
+  // departamento). Se a direccao nao tiver servicos, encaminha directo a ela.
+  const childServices = organizationalUnits.filter((unit) => unit.parentId === expedient.destinatarioId);
+  const isLocked = expedient.destinatarioTipo !== "direccao" || childServices.length === 0;
+  const [target, setTarget] = React.useState(isLocked ? expedient.destinatarioId : "");
 
   React.useEffect(() => {
     let cancelled = false;
@@ -381,14 +396,21 @@ function ReceiveForwardDialog({
           </p>
           <div>
             <Label required>Unidade responsável pela análise</Label>
-            <Select value={target} onValueChange={setTarget}>
-              <SelectTrigger><SelectValue placeholder="Seleccione o destino" /></SelectTrigger>
-              <SelectContent>
-                {organizationalUnits.map((unit) => (
-                  <SelectItem key={unit.id} value={unit.id}>{unit.nome}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {isLocked ? (
+              <p className="flex items-center gap-1.5 border border-graphite-200 bg-graphite-50 px-3 py-2 text-[13px] text-graphite-700">
+                <Building2 className="size-3.5 shrink-0 text-graphite-400" />
+                {expedient.destinatario} <span className="text-graphite-400">— definido pelo remetente, não é possível alterar aqui.</span>
+              </p>
+            ) : (
+              <Select value={target} onValueChange={setTarget}>
+                <SelectTrigger><SelectValue placeholder="Seleccione o serviço" /></SelectTrigger>
+                <SelectContent>
+                  {childServices.map((unit) => (
+                    <SelectItem key={unit.id} value={unit.id}>{unit.nome}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
           </div>
           <div>
             <Label>Instruções (opcional)</Label>

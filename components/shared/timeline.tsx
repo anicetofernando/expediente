@@ -1,7 +1,7 @@
 import * as React from "react";
 import {
   FilePlus2, Send, Inbox, Stamp, Forward, MessageSquareText, CheckCircle2, XCircle, Undo2,
-  PenTool, PackageCheck, ClipboardCheck, Archive, MessageCircle,
+  PenTool, PackageCheck, ClipboardCheck, Archive, MessageCircle, HelpCircle, FileEdit,
 } from "lucide-react";
 import type { TimelineEvent } from "@/types";
 import { cn, formatDate } from "@/lib/utils";
@@ -13,6 +13,8 @@ const ICON_MAP: Record<TimelineEvent["tipo"], React.ComponentType<{ className?: 
   protocolo: Stamp,
   encaminhamento: Forward,
   parecer: MessageSquareText,
+  esclarecimento: HelpCircle,
+  resposta: FileEdit,
   aprovacao: CheckCircle2,
   rejeicao: XCircle,
   devolucao: Undo2,
@@ -31,6 +33,8 @@ const TONE_MAP: Record<TimelineEvent["tipo"], string> = {
   protocolo: "bg-navy-50 text-navy-700",
   encaminhamento: "bg-info-50 text-info-600",
   parecer: "bg-amber-50 text-amber-600",
+  esclarecimento: "bg-amber-50 text-amber-600",
+  resposta: "bg-navy-50 text-navy-700",
   aprovacao: "bg-success-50 text-success-600",
   rejeicao: "bg-crimson-50 text-crimson-600",
   devolucao: "bg-crimson-50 text-crimson-600",

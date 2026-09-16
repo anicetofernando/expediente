@@ -144,6 +144,8 @@ export interface TimelineEvent {
     | "protocolo"
     | "encaminhamento"
     | "parecer"
+    | "esclarecimento"
+    | "resposta"
     | "aprovacao"
     | "rejeicao"
     | "devolucao"
@@ -181,6 +183,8 @@ export interface Expedient {
   confidencialidade: Confidentiality;
   remetente: Sender;
   destinatario: string;
+  destinatarioId: string;
+  destinatarioTipo: string;
   unidadeOrigem: string;
   responsavelActual: string;
   responsavelActualId: string;

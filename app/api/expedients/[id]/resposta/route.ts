@@ -91,13 +91,16 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     if (file) validateFile(file);
 
     const result = await transaction(async (client) => {
-      const found = await client.query<{ id: string; protocol: string; subject: string; status: string; created_by: string; origin_unit_id: string; recipient_unit_id: string; responsible_user_id: string | null }>(
-        "SELECT id,protocol,subject,status,created_by,origin_unit_id,recipient_unit_id,responsible_user_id FROM expedients WHERE id=$1 FOR UPDATE", [params.id],
+      const found = await client.query<{ id: string; protocol: string; subject: string; status: string; created_by: string; origin_unit_id: string; recipient_unit_id: string; responsible_user_id: string | null; confidentiality: string }>(
+        "SELECT id,protocol,subject,status,created_by,origin_unit_id,recipient_unit_id,responsible_user_id,confidentiality FROM expedients WHERE id=$1 FOR UPDATE", [params.id],
       );
       const exp = found.rows[0];
       if (!exp) throw new Error("Expediente nao encontrado.");
       if (!ALLOWED_STATUS.has(exp.status)) throw new Error("Esta accao nao e valida no estado actual do expediente.");
-      const hasAccess = session.perfilNavegacao === "administracao" || exp.responsible_user_id === session.user.id || exp.origin_unit_id === session.user.unidadeId || exp.recipient_unit_id === session.user.unidadeId;
+      // Restrito/confidencial tiram o acesso colectivo por unidade -- so' quem
+      // ja' e' directamente o responsavel actual mantem acesso.
+      const collectiveUnitAccessAllowed = exp.confidentiality !== "confidencial" && exp.confidentiality !== "restrito";
+      const hasAccess = session.perfilNavegacao === "administracao" || exp.responsible_user_id === session.user.id || (collectiveUnitAccessAllowed && (exp.origin_unit_id === session.user.unidadeId || exp.recipient_unit_id === session.user.unidadeId));
       if (!hasAccess) throw new Error("Sem acesso a este expediente.");
 
       if (input.documentId) {

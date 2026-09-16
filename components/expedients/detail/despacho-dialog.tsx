@@ -133,7 +133,7 @@ export function DespachoDialog({
 
   return (
     <Dialog open onOpenChange={(v) => !v && onClose()}>
-      <DialogContent size="xl">
+      <DialogContent size="xl" className="max-h-[94vh]">
         <DialogHeader>
           <DialogTitle>Criar despacho / resposta</DialogTitle>
           <DialogDescription>{protocolo}</DialogDescription>
