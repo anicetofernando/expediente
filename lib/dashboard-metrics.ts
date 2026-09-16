@@ -2,7 +2,7 @@ import { unitById, userById, users } from "@/data/organization";
 import type { Expedient, ExpedientStatus } from "@/types";
 
 const CONCLUDED: ExpedientStatus[] = ["arquivado", "aprovado", "recebimento_confirmado"];
-const PENDING: ExpedientStatus[] = ["submetido", "recebido", "protocolado", "encaminhado", "em_analise", "aguardando_parecer", "aguardando_esclarecimento", "em_transito", "nota_pendente"];
+const PENDING: ExpedientStatus[] = ["submetido", "recebido", "protocolado", "encaminhado", "em_analise", "aguardando_parecer", "aguardando_esclarecimento", "em_transito", "nota_pendente", "nota_cobertura"];
 
 export function coreStats(data: Expedient[]) {
   const recebidos = data.length;
@@ -44,6 +44,7 @@ export const STATUS_GROUP: Record<ExpedientStatus, string> = {
   aguardando_esclarecimento: "Aguardando",
   em_transito: "Em curso",
   nota_pendente: "Em curso",
+  nota_cobertura: "Em curso",
   devolvido: "Devolvido",
   aprovado: "Concluído",
   rejeitado: "Devolvido",

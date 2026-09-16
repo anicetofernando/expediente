@@ -38,9 +38,12 @@ export function DespachoDialog({
   const { documentTemplates } = useCatalogs();
   const [modo, setModo] = React.useState<"sistema" | "importado">("sistema");
   const [modeloId, setModeloId] = React.useState("");
-  const [conteudo, setConteudo] = React.useState("");
+  // Na nota, o numero de referencia do expediente vem sempre pre-escrito no
+  // texto, para vincular claramente a nota ao processo original.
+  const [conteudo, setConteudo] = React.useState(() => (endpoint === "nota" ? `<p><strong>Referente ao Expediente: ${protocolo}</strong></p><p></p>` : ""));
   const [ficheiro, setFicheiro] = React.useState<File | null>(null);
   const [note, setNote] = React.useState("");
+  const [incluirCarimbo, setIncluirCarimbo] = React.useState(false);
   const [authorization, setAuthorization] = React.useState<{ stamp: Stamp | null; signature: Signature | null; loading: boolean }>({ stamp: null, signature: null, loading: true });
   const [documentId, setDocumentId] = React.useState<string | null>(null);
   const [pdfUrl, setPdfUrl] = React.useState<string | null>(null);
@@ -59,7 +62,10 @@ export function DespachoDialog({
   const template = documentTemplates.find((item) => item.id === modeloId);
   const activeTemplates = documentTemplates.filter((item) => item.estado === "activo");
   const readyToSign = Boolean((!requireStamp || authorization.stamp) && authorization.signature);
-  const hasFreePositionImages = Boolean(authorization.stamp?.imagemUrl || authorization.signature?.imagemUrl);
+  // No despacho normal o carimbo e' sempre obrigatorio; na nota, so' entra se a
+  // Secretaria escolher explicitamente inclui-lo -- nunca automaticamente.
+  const applyStamp = requireStamp || incluirCarimbo;
+  const hasFreePositionImages = Boolean((applyStamp && authorization.stamp?.imagemUrl) || authorization.signature?.imagemUrl);
   const successLabel = requireStamp ? "Despacho registado" : "Nota registada";
   const failureLabel = requireStamp ? "Despacho não registado" : "Nota não registada";
 
@@ -71,7 +77,7 @@ export function DespachoDialog({
     setSubmitting(true);
     try {
       const form = new FormData();
-      form.set("data", JSON.stringify({ modo: "sistema", modeloId, conteudo, note }));
+      form.set("data", JSON.stringify({ modo: "sistema", modeloId, conteudo, note, incluirCarimbo: applyStamp }));
       const response = await fetch(`/api/expedients/${expedientId}/${endpoint}`, { method: "POST", body: form });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error ?? `Não foi possível registar ${requireStamp ? "o despacho" : "a nota"}.`);
@@ -117,7 +123,7 @@ export function DespachoDialog({
     setSubmitting(true);
     try {
       const form = new FormData();
-      form.set("data", JSON.stringify({ modo: "sistema", documentId, ...result }));
+      form.set("data", JSON.stringify({ modo: "sistema", documentId, incluirCarimbo: applyStamp, ...result }));
       const response = await fetch(`/api/expedients/${expedientId}/${endpoint}`, { method: "POST", body: form });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error ?? "Não foi possível posicionar o carimbo/assinatura.");
@@ -136,7 +142,7 @@ export function DespachoDialog({
         open
         onOpenChange={(v) => { if (!v) { setPositioning(false); onClose(); } }}
         pdfUrl={pdfUrl}
-        stamp={authorization.stamp?.imagemUrl ? { imageUrl: authorization.stamp.imagemUrl, label: authorization.stamp.nome, initialPosition: authorization.stamp.posicaoLivre } : undefined}
+        stamp={applyStamp && authorization.stamp?.imagemUrl ? { imageUrl: authorization.stamp.imagemUrl, label: authorization.stamp.nome, initialPosition: authorization.stamp.posicaoLivre } : undefined}
         signature={authorization.signature?.imagemUrl ? { imageUrl: authorization.signature.imagemUrl, label: authorization.signature.proprietario, initialPosition: authorization.signature.posicaoLivre } : undefined}
         onConfirm={confirmPosition}
       />
@@ -215,6 +221,12 @@ export function DespachoDialog({
                 <Label required>{requireStamp ? "Texto do despacho" : "Texto da nota"}</Label>
                 <LetterEditor value={conteudo} onChange={setConteudo} title={requireStamp ? "Despacho" : "Nota"} template={template} compact />
               </div>
+              {!requireStamp && authorization.stamp && (
+                <label className="flex items-center gap-2 text-[13px] text-graphite-700">
+                  <input type="checkbox" checked={incluirCarimbo} onChange={(event) => setIncluirCarimbo(event.target.checked)} className="size-3.5" />
+                  Incluir também o carimbo da unidade (além da assinatura)
+                </label>
+              )}
             </div>
           )}
 

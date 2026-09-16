@@ -20,9 +20,9 @@ import { hasActionPermission } from "@/lib/permissions";
 const PROFILE_ACTIONS: Record<string, Set<string>> = {
   remetente: new Set(["confirmar", "resposta"]),
   secretaria: new Set(["receber_encaminhar", "devolver", "disponibilizar", "notificar"]),
-  superior: new Set(["encaminhar", "parecer", "esclarecimento", "aprovar", "aprovar_nota", "rejeitar", "devolver", "resposta", "retomar", "escalar", "disponibilizar", "notificar"]),
+  superior: new Set(["encaminhar", "parecer", "aprovar", "aprovar_nota", "rejeitar", "devolver", "resposta", "retomar", "escalar", "disponibilizar", "notificar"]),
   administracao: new Set([
-    "submeter", "receber_encaminhar", "encaminhar", "parecer", "esclarecimento", "aprovar", "aprovar_nota", "rejeitar",
+    "submeter", "receber_encaminhar", "encaminhar", "parecer", "aprovar", "aprovar_nota", "rejeitar",
     "devolver", "resposta", "disponibilizar", "confirmar", "arquivar", "retomar", "escalar", "notificar",
   ]),
 };
@@ -52,7 +52,7 @@ const LABELS: Record<string, string> = {
   parecer: "Parecer solicitado",
   esclarecimento: "Esclarecimento solicitado",
   aprovar: "Expediente aprovado",
-  aprovar_nota: "Nota aprovada -- Secretaria vai preparar a proxima nota",
+  aprovar_nota: "Nota de cobertura pedida -- Secretaria vai prepara-la",
   rejeitar: "Expediente rejeitado",
   devolver: "Devolvido para correcao",
   resposta: "Resposta registada",
@@ -70,15 +70,22 @@ const ALLOWED_BY_STATUS: Record<string, string[]> = {
   // Compatibilidade com expedientes que ficaram a meio no fluxo antigo.
   recebido: ["receber_encaminhar", "devolver"],
   protocolado: ["receber_encaminhar", "devolver"],
-  encaminhado: ["encaminhar", "parecer", "esclarecimento", "devolver", "aprovar", "aprovar_nota", "rejeitar"],
-  em_analise: ["encaminhar", "aprovar", "rejeitar", "devolver", "parecer", "esclarecimento"],
-  aguardando_parecer: ["resposta", "esclarecimento"],
+  // So' Aprovar (finalizar directamente OU emitir nota de cobertura) -- nao ha'
+  // Encaminhar/Solicitar parecer directo a partir daqui.
+  encaminhado: ["devolver", "aprovar", "aprovar_nota", "rejeitar"],
+  // So' depois de emitida e assinada a nota de cobertura (pelo chefe, nao pela
+  // Secretaria) e' que se pode subir de nivel ou pedir parecer a outra unidade.
+  nota_cobertura: ["encaminhar", "parecer"],
+  em_analise: ["encaminhar", "aprovar", "rejeitar", "devolver", "parecer"],
+  aguardando_parecer: ["resposta"],
   aguardando_esclarecimento: ["resposta"],
   // A caminho da secretaria da unidade seguinte (subida a director, ou pedido
   // de parecer a outra unidade) -- so ela pode receber, protocolar e preparar
   // a nota antes de chegar a pessoa responsavel.
   em_transito: ["receber_encaminhar"],
-  devolvido: ["resposta"],
+  // A correccao de um devolvido passa sempre pelo assistente de edicao
+  // (/api/expedients/[id]/draft), nunca por um "Responder" generico aqui.
+  devolvido: [],
   aprovado: ["disponibilizar"],
   rejeitado: ["notificar"],
   disponivel_remetente: ["confirmar"],
@@ -105,7 +112,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
   const session = await getCurrentSession();
   if (!session) return NextResponse.json({ error: "Nao autenticado." }, { status: 401 });
 
-  let input: { action?: string; note?: string; target?: string; posicaoCarimbo?: FreePosition; posicaoAssinatura?: FreePosition };
+  let input: { action?: string; note?: string; target?: string; posicaoCarimbo?: FreePosition; posicaoAssinatura?: FreePosition; alvo?: string };
   try {
     input = await request.json();
   } catch {
@@ -287,12 +294,12 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 
       if (action === "encaminhar" || action === "parecer") {
         if (!input.target) throw new Error("Seleccione a unidade destinataria.");
-        // Vindo de "encaminhado" (ja' com uma nota em maos), o salto passa
-        // sempre primeiro pela Secretaria da unidade destino -- ela protocola
-        // e prepara a proxima nota antes de chegar a pessoa responsavel. Vindo
-        // de "em_analise" (fluxo mais antigo, achatado) mantem-se o comportamento
-        // directo de sempre, sem tocar nisso.
-        const viaNota = exp.status === "encaminhado";
+        // So' se chega aqui a partir de "nota_cobertura" (nota de cobertura ja'
+        // emitida) -- o salto passa sempre primeiro pela Secretaria da unidade
+        // destino, que protocola e prepara a proxima nota antes de chegar a
+        // pessoa responsavel. Vindo de "em_analise" (fluxo mais antigo,
+        // achatado) mantem-se o comportamento directo de sempre, sem tocar nisso.
+        const viaNota = exp.status === "encaminhado" || exp.status === "nota_cobertura";
 
         if (viaNota) {
           const secretaryId = await resolveSecretaryId(client, input.target);
@@ -379,41 +386,16 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       }
 
       if (action === "aprovar_nota") {
-        const latestNota = await client.query<{
-          id: string; stamps_metadata: Array<{ id?: string }> | null; signatures_metadata: Array<{ id?: string }> | null;
-        }>(
-          "SELECT id,stamps_metadata,signatures_metadata FROM documents WHERE expedient_id=$1 AND document_kind='nota' ORDER BY created_at DESC LIMIT 1 FOR UPDATE",
-          [exp.id],
-        );
-        if (!latestNota.rows[0]) throw new Error("Nao existe nenhuma nota activa para aprovar.");
-        const signatures = await configuredSignatures(client);
-        const signature = resolveUserSignature(signatures, session.user);
-        if (!signature) throw new Error("Nao tem uma assinatura individual activa. Configure-a em Administracao > Assinaturas.");
-        const signatureEntries = latestNota.rows[0].signatures_metadata ?? [];
-        if (!signatureEntries.some((entry) => entry.id === signature.id)) {
-          const entry = signatureMetadataJson(signature, session.user, signature.posicaoLivre);
-          signatureEntries.push(entry);
-          await client.query(
-            `UPDATE documents SET signed=true,signature_metadata=$2::jsonb,signatures_metadata=$3::jsonb WHERE id=$1`,
-            [latestNota.rows[0].id, JSON.stringify(entry), JSON.stringify(signatureEntries)],
-          );
-        }
-        const stamps = await configuredStamps(client);
-        const stamp = resolveUnitStamp(stamps, session.user, session.unitName, session.perfilNavegacao);
-        const stampEntries = latestNota.rows[0].stamps_metadata ?? [];
-        if (stamp && !stampEntries.some((entry) => entry.id === stamp.id)) {
-          const entry = stampMetadataJson(stamp, session.user.nome, stamp.posicaoLivre);
-          stampEntries.push(entry);
-          await client.query(
-            `UPDATE documents SET stamped=true,stamp_metadata=$2::jsonb,stamps_metadata=$3::jsonb WHERE id=$1`,
-            [latestNota.rows[0].id, JSON.stringify(entry), JSON.stringify(stampEntries)],
-          );
-        }
+        // "Emitir nota de cobertura": ao contrario da 1a nota (assinada pela
+        // Secretaria), esta e' preparada em branco -- e' o proprio chefe de
+        // servico que a carimba e assina, mas so' mais tarde, ao encaminhar ou
+        // pedir parecer (estado "nota_cobertura"). Aqui so' se pede a
+        // Secretaria para a preparar; nao se assina nada agora.
         const secretaryId = await resolveSecretaryId(client, exp.recipient_unit_id);
-        if (!secretaryId) throw new Error("Nao existe utilizador activo da Secretaria para preparar a proxima nota.");
+        if (!secretaryId) throw new Error("Nao existe utilizador activo da Secretaria para preparar a nota de cobertura.");
         responsible = secretaryId;
-        pendingNextStatus = "encaminhado";
-        nextStep = "Secretaria a preparar nova nota de encaminhamento";
+        pendingNextStatus = "nota_cobertura";
+        nextStep = "Secretaria a preparar a nota de cobertura";
       }
 
       if (action === "resposta" && exp.status === "devolvido") {
@@ -450,16 +432,26 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         }
         const documentType = docTypes.find((item) => item.id === exp.document_type);
         if (!documentType) throw new Error("O tipo de documento deste expediente ja nao esta configurado.");
-        const principal = await client.query<{
-          id: string; stamps_metadata: Array<{ id?: string }> | null; signatures_metadata: Array<{ id?: string }> | null;
-        }>("SELECT id,stamps_metadata,signatures_metadata FROM documents WHERE expedient_id=$1 AND document_kind='principal' LIMIT 1 FOR UPDATE", [exp.id]);
-        if ((documentType.exigeCarimbo || documentType.exigeAssinatura) && !principal.rows[0]) {
+        // O chefe/director escolhe onde assina a aprovacao: na nota actual (se
+        // ja' houver alguma, do ciclo de notas) ou directamente no expediente
+        // original -- em ambos os casos e' uma marca directa, sem gerar um
+        // documento novo.
+        const alvoNota = input.alvo === "nota";
+        const targetDoc = alvoNota
+          ? await client.query<{
+              id: string; stamps_metadata: Array<{ id?: string }> | null; signatures_metadata: Array<{ id?: string }> | null;
+            }>("SELECT id,stamps_metadata,signatures_metadata FROM documents WHERE expedient_id=$1 AND document_kind='nota' ORDER BY created_at DESC LIMIT 1 FOR UPDATE", [exp.id])
+          : await client.query<{
+              id: string; stamps_metadata: Array<{ id?: string }> | null; signatures_metadata: Array<{ id?: string }> | null;
+            }>("SELECT id,stamps_metadata,signatures_metadata FROM documents WHERE expedient_id=$1 AND document_kind='principal' LIMIT 1 FOR UPDATE", [exp.id]);
+        if (alvoNota && !targetDoc.rows[0]) throw new Error("Nao existe nenhuma nota activa para assinar a aprovacao.");
+        if ((documentType.exigeCarimbo || documentType.exigeAssinatura) && !alvoNota && !targetDoc.rows[0]) {
           throw new Error("Este tipo de documento exige formalizacao, mas o expediente nao tem documento principal.");
         }
 
-        if (principal.rows[0]) {
-          const stampEntries = principal.rows[0].stamps_metadata ?? [];
-          const signatureEntries = principal.rows[0].signatures_metadata ?? [];
+        if (targetDoc.rows[0]) {
+          const stampEntries = targetDoc.rows[0].stamps_metadata ?? [];
+          const signatureEntries = targetDoc.rows[0].signatures_metadata ?? [];
           let latestStamp: Record<string, unknown> | null = null;
           let latestSignature: Record<string, unknown> | null = null;
           let stampId: string | null = null;
@@ -506,7 +498,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
                     stamps_metadata=$7::jsonb,signatures_metadata=$8::jsonb
               WHERE id=$1`,
             [
-              principal.rows[0].id,
+              targetDoc.rows[0].id,
               stampEntries.length > 0,
               signatureEntries.length > 0,
               stampId,

@@ -34,6 +34,7 @@ import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useCatalogs } from "@/lib/catalogs";
 import { useSession } from "@/lib/session";
+import { cn } from "@/lib/utils";
 
 const ACTION_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   Archive,
@@ -61,7 +62,7 @@ const PROFILE_ACTIONS: Record<string, Set<string>> = {
   // "disponibilizar"/"notificar" so' se aplicam ao superior quando o processo e'
   // confidencial (a Secretaria nunca chega a ve-lo nesse caso) -- ver o filtro
   // allowSuperiorConfidentialHandoff mais abaixo.
-  superior: new Set(["encaminhar", "parecer", "esclarecimento", "aprovar", "aprovar_nota", "rejeitar", "devolver", "resposta", "retomar", "escalar", "disponibilizar", "notificar"]),
+  superior: new Set(["encaminhar", "parecer", "aprovar", "aprovar_nota", "rejeitar", "devolver", "resposta", "retomar", "escalar", "disponibilizar", "notificar"]),
   administracao: new Set(Object.values(ACTIONS_BY_STATUS).flat().map((action) => action.key)),
 };
 
@@ -90,28 +91,17 @@ export function ActionPanel({ expedient, principalPdfUrl }: { expedient: ActionE
     .filter((action) => !(blockSecretaryReturn && action.key === "devolver"))
     .filter((action) => !(blockNonResponsibleHandoff && (action.key === "resposta" || action.key === "esclarecimento")))
     .filter((action) => !(perfilNavegacao === "superior" && (action.key === "disponibilizar" || action.key === "notificar") && !allowSuperiorConfidentialHandoff))
-    .map((action) => action.key === "aprovar"
-      ? {
-          ...action,
-          label: expedient.exigeCarimbo && expedient.exigeAssinatura
-            ? "Aprovar, carimbar e assinar"
-            : expedient.exigeAssinatura
-              ? "Aprovar e assinar"
-              : expedient.exigeCarimbo
-                ? "Aprovar e carimbar"
-                : "Aprovar",
-        }
-      : action.key === "resposta" && perfilNavegacao === "remetente"
-        ? { ...action, label: "Responder" }
-        : action);
+    .map((action) => action.key === "resposta" && perfilNavegacao === "remetente"
+      ? { ...action, label: "Responder" }
+      : action);
   const [activeAction, setActiveAction] = React.useState<ActionDef | null>(null);
 
-  async function complete(action: ActionDef, message: string, target?: string, posicaoCarimbo?: FreePosition, posicaoAssinatura?: FreePosition) {
+  async function complete(action: ActionDef, message: string, target?: string, posicaoCarimbo?: FreePosition, posicaoAssinatura?: FreePosition, alvo?: string) {
     try {
       const response = await fetch(`/api/expedients/${expedient.id}/actions`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ action: action.key, note: message, target, posicaoCarimbo, posicaoAssinatura }),
+        body: JSON.stringify({ action: action.key, note: message, target, posicaoCarimbo, posicaoAssinatura, alvo }),
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error ?? "Não foi possível registar a acção.");
@@ -137,6 +127,19 @@ export function ActionPanel({ expedient, principalPdfUrl }: { expedient: ActionE
     );
   }
 
+  // Enquanto o remetente corrige um expediente devolvido, mais ninguem tem
+  // nada a fazer aqui -- nem a Secretaria nem o superior podem agir sobre um
+  // processo que ainda esta a ser reescrito.
+  if (expedient.estado === "devolvido" && perfilNavegacao !== "remetente") {
+    return (
+      <div className="rounded-lg border border-graphite-200 bg-graphite-50 px-4 py-5 text-center">
+        <ClipboardCheck className="mx-auto mb-2 size-5 text-graphite-400" />
+        <p className="text-[13px] font-medium text-graphite-600">A aguardar correcção</p>
+        <p className="mt-1 text-2xs text-graphite-400">O expediente foi devolvido ao remetente e está a ser corrigido. Não há nenhuma acção a fazer aqui até ser reenviado.</p>
+      </div>
+    );
+  }
+
   if (actions.length === 0 && !["rascunho", "devolvido"].includes(expedient.estado)) {
     return (
       <div className="rounded-lg border border-graphite-200 bg-graphite-50 px-4 py-5 text-center">
@@ -154,7 +157,7 @@ export function ActionPanel({ expedient, principalPdfUrl }: { expedient: ActionE
           Este tipo de documento exige aprovação da direcção. Encaminhe para a unidade superior — não pode aprovar directamente aqui.
         </p>
       )}
-      {["rascunho", "devolvido"].includes(expedient.estado) && (
+      {["rascunho", "devolvido"].includes(expedient.estado) && perfilNavegacao === "remetente" && (
         <Button asChild className="w-full justify-start">
           <Link href={`/expedientes/novo?rascunho=${expedient.id}`}>
             <FileEdit className="size-3.5" /> {expedient.estado === "devolvido" ? "Corrigir e voltar a submeter" : "Continuar edição"}
@@ -176,7 +179,8 @@ export function ActionPanel({ expedient, principalPdfUrl }: { expedient: ActionE
           expedient={expedient}
           principalPdfUrl={principalPdfUrl}
           onClose={() => setActiveAction(null)}
-          onComplete={(msg, target, posicaoCarimbo, posicaoAssinatura) => complete(activeAction, msg, target, posicaoCarimbo, posicaoAssinatura)}
+          onComplete={(msg, target, posicaoCarimbo, posicaoAssinatura, actionKeyOverride, alvo) =>
+            complete(actionKeyOverride ? { ...activeAction, key: actionKeyOverride } : activeAction, msg, target, posicaoCarimbo, posicaoAssinatura, alvo)}
         />
       )}
     </div>
@@ -194,13 +198,25 @@ function ActionDialog({
   expedient: ActionExpedient;
   principalPdfUrl?: string;
   onClose: () => void;
-  onComplete: (message: string, target?: string, posicaoCarimbo?: FreePosition, posicaoAssinatura?: FreePosition) => void;
+  onComplete: (message: string, target?: string, posicaoCarimbo?: FreePosition, posicaoAssinatura?: FreePosition, actionKeyOverride?: string, alvo?: string) => void;
 }) {
   const { organizationalUnits } = useCatalogs();
   const { perfilNavegacao } = useSession();
   const router = useRouter();
   const [note, setNote] = React.useState("");
   const [target, setTarget] = React.useState("");
+  const [departmentId, setDepartmentId] = React.useState("");
+
+  if (action.kind === "aprovar") {
+    return (
+      <AprovarDialog
+        expedient={expedient}
+        onClose={onClose}
+        onFinalizar={(alvo) => onComplete(`Expediente aprovado (${alvo === "nota" ? "assinado na nota" : "assinado no expediente"}).`, undefined, undefined, undefined, "aprovar", alvo)}
+        onCobertura={() => onComplete("Nota de cobertura pedida.", undefined, undefined, undefined, "aprovar_nota")}
+      />
+    );
+  }
 
   if (action.kind === "confirm") {
     return (
@@ -251,6 +267,9 @@ function ActionDialog({
   }
 
   if (action.kind === "forward") {
+    const departments = organizationalUnits.filter((u) => u.tipo === "direccao");
+    const services = departmentId ? organizationalUnits.filter((u) => u.parentId === departmentId) : [];
+    const targetName = organizationalUnits.find((u) => u.id === target)?.nome;
     return (
       <Dialog open onOpenChange={(v) => !v && onClose()}>
         <DialogContent size="sm">
@@ -260,16 +279,32 @@ function ActionDialog({
           </DialogHeader>
           <DialogBody className="space-y-3.5">
             <div>
-              <Label required>Unidade / responsável de destino</Label>
-              <Select value={target} onValueChange={setTarget}>
-                <SelectTrigger><SelectValue placeholder="Seleccione o destino" /></SelectTrigger>
+              <Label required>Departamento</Label>
+              <Select
+                value={departmentId}
+                onValueChange={(value) => { setDepartmentId(value); setTarget(value); }}
+              >
+                <SelectTrigger><SelectValue placeholder="Seleccione o departamento" /></SelectTrigger>
                 <SelectContent>
-                  {organizationalUnits.map((u) => (
+                  {departments.map((u) => (
                     <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
+            {services.length > 0 && (
+              <div>
+                <Label>Serviço (opcional — sem escolher, vai para o departamento)</Label>
+                <Select value={target === departmentId ? "" : target} onValueChange={(value) => setTarget(value)}>
+                  <SelectTrigger><SelectValue placeholder="Enviar directamente ao departamento" /></SelectTrigger>
+                  <SelectContent>
+                    {services.map((u) => (
+                      <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             <div>
               <Label>Instruções (opcional)</Label>
               <Textarea rows={3} placeholder="Acrescente instruções para o destinatário…" value={note} onChange={(e) => setNote(e.target.value)} />
@@ -277,7 +312,7 @@ function ActionDialog({
           </DialogBody>
           <DialogFooter>
             <Button variant="secondary" onClick={onClose}>Cancelar</Button>
-            <Button disabled={!target} onClick={() => onComplete(`Encaminhado para ${organizationalUnits.find((u) => u.id === target)?.nome}.`, target)}>
+            <Button disabled={!target} onClick={() => onComplete(`Encaminhado para ${targetName}.`, target)}>
               {action.label}
             </Button>
           </DialogFooter>
@@ -412,11 +447,6 @@ function ReceiveForwardDialog({
           <DialogDescription>{expedient.protocolo} · {expedient.assunto}</DialogDescription>
         </DialogHeader>
         <DialogBody className="space-y-3.5">
-          <p className="border border-info-200 bg-info-50 px-3 py-2 text-xs leading-relaxed text-info-800">
-            {isFirstHop
-              ? "Uma única confirmação regista a recepção e atribui o número oficial. É gerada uma cópia de protocolo (carimbada e assinada pela Secretaria) para o remetente — o documento original não é alterado. De seguida terá de criar a nota de encaminhamento antes do processo seguir para o responsável."
-              : "Confirma a recepção deste processo nesta unidade. De seguida terá de criar a nota de encaminhamento antes de chegar à pessoa responsável."}
-          </p>
           <div>
             <Label required>Unidade responsável pela análise</Label>
             {isLocked ? (
@@ -468,6 +498,86 @@ function ReceiveForwardDialog({
               : onComplete(`Recebido em ${targetName}. ${note}`.trim(), target))}
           >
             {hasPositionableItems ? "Posicionar e concluir" : isFirstHop ? "Receber e protocolar" : "Confirmar recepção"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function AprovarDialog({
+  expedient,
+  onClose,
+  onFinalizar,
+  onCobertura,
+}: {
+  expedient: ActionExpedient;
+  onClose: () => void;
+  onFinalizar: (alvo: "nota" | "expediente") => void;
+  onCobertura: () => void;
+}) {
+  const [modo, setModo] = React.useState<"finalizar" | "cobertura" | null>(null);
+  const [alvo, setAlvo] = React.useState<"nota" | "expediente">("nota");
+
+  return (
+    <Dialog open onOpenChange={(v) => !v && onClose()}>
+      <DialogContent size="sm">
+        <DialogHeader>
+          <DialogTitle>Aprovar — {expedient.protocolo}</DialogTitle>
+          <DialogDescription>{expedient.assunto}</DialogDescription>
+        </DialogHeader>
+        <DialogBody className="space-y-3.5">
+          <div className="grid grid-cols-1 gap-2.5">
+            <button
+              type="button"
+              onClick={() => setModo("finalizar")}
+              className={cn(
+                "flex items-start gap-3 border px-3.5 py-2.5 text-left transition-colors",
+                modo === "finalizar" ? "border-navy-700 bg-navy-50" : "border-graphite-200 bg-white hover:border-graphite-400 hover:bg-graphite-50",
+              )}
+            >
+              <span className={cn("flex size-8 shrink-0 items-center justify-center border", modo === "finalizar" ? "border-navy-300 bg-white text-navy-800" : "border-graphite-200 bg-graphite-50 text-graphite-500")}>
+                <CheckCircle2 className="size-4" />
+              </span>
+              <span>
+                <span className="block text-[13px] font-medium text-graphite-900">Finalizar aprovação</span>
+                <span className="block text-xs text-graphite-500">Carimba/assina agora e termina — segue para a Secretaria disponibilizar ao remetente.</span>
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setModo("cobertura")}
+              className={cn(
+                "flex items-start gap-3 border px-3.5 py-2.5 text-left transition-colors",
+                modo === "cobertura" ? "border-navy-700 bg-navy-50" : "border-graphite-200 bg-white hover:border-graphite-400 hover:bg-graphite-50",
+              )}
+            >
+              <span className={cn("flex size-8 shrink-0 items-center justify-center border", modo === "cobertura" ? "border-navy-300 bg-white text-navy-800" : "border-graphite-200 bg-graphite-50 text-graphite-500")}>
+                <FileEdit className="size-4" />
+              </span>
+              <span>
+                <span className="block text-[13px] font-medium text-graphite-900">Emitir nota de cobertura</span>
+                <span className="block text-xs text-graphite-500">A Secretaria prepara uma nota em branco; você carimba e assina ao encaminhar ou pedir parecer a outra unidade.</span>
+              </span>
+            </button>
+          </div>
+          {modo === "finalizar" && (
+            <div>
+              <Label required>Onde assinar a aprovação</Label>
+              <Select value={alvo} onValueChange={(value) => setAlvo(value as "nota" | "expediente")}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="nota">Na nota actual</SelectItem>
+                  <SelectItem value="expediente">No expediente original</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+        </DialogBody>
+        <DialogFooter>
+          <Button variant="secondary" onClick={onClose}>Cancelar</Button>
+          <Button disabled={!modo} onClick={() => (modo === "finalizar" ? onFinalizar(alvo) : onCobertura())}>
+            {modo === "cobertura" ? "Emitir nota de cobertura" : "Aprovar"}
           </Button>
         </DialogFooter>
       </DialogContent>

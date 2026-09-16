@@ -105,8 +105,8 @@ const VIEW_FILTERS: Record<ExpedientView, string> = {
   // A caixa de saida do remetente mostra so o que ainda esta "em curso" (nao
   // decidido nem entregue) -- uma vez devolvido, disponibilizado ou concluido,
   // o processo passa a viver so na caixa correspondente, nunca em ambas.
-  outbox: "e.origin_unit_id=__UNIT__ AND e.status IN ('submetido','recebido','protocolado','encaminhado','em_analise','aguardando_parecer','aguardando_esclarecimento','em_transito','nota_pendente','aprovado','atrasado')",
-  pending: "e.status IN ('submetido','recebido','protocolado','encaminhado','em_analise','aguardando_parecer','aguardando_esclarecimento','em_transito','nota_pendente','atrasado')",
+  outbox: "e.origin_unit_id=__UNIT__ AND e.status IN ('submetido','recebido','protocolado','encaminhado','em_analise','aguardando_parecer','aguardando_esclarecimento','em_transito','nota_pendente','nota_cobertura','aprovado','atrasado')",
+  pending: "e.status IN ('submetido','recebido','protocolado','encaminhado','em_analise','aguardando_parecer','aguardando_esclarecimento','em_transito','nota_pendente','nota_cobertura','atrasado')",
   analysis: "e.status='em_analise'",
   returned: "e.status IN ('devolvido','rejeitado')",
   // "aprovado" so passa a Concluidos depois de a Secretaria disponibilizar e o

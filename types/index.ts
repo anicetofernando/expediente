@@ -11,6 +11,7 @@ export type ExpedientStatus =
   | "aguardando_esclarecimento"
   | "em_transito"
   | "nota_pendente"
+  | "nota_cobertura"
   | "devolvido"
   | "aprovado"
   | "rejeitado"

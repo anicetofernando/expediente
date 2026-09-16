@@ -1,6 +1,6 @@
 import type { ExpedientStatus } from "@/types";
 
-export type ActionKind = "confirm" | "forward" | "receive-forward" | "resposta" | "nota" | "note" | "archive";
+export type ActionKind = "confirm" | "forward" | "receive-forward" | "resposta" | "nota" | "note" | "archive" | "aprovar";
 
 export interface ActionDef {
   key: string;
@@ -16,8 +16,8 @@ const A = {
   encaminhar: { key: "encaminhar", label: "Encaminhar", icon: "Forward", variant: "primary", kind: "forward" } as ActionDef,
   parecer: { key: "parecer", label: "Solicitar parecer", icon: "MessageSquareText", variant: "secondary", kind: "forward" } as ActionDef,
   esclarecimento: { key: "esclarecimento", label: "Solicitar esclarecimento", icon: "HelpCircle", variant: "secondary", kind: "note" } as ActionDef,
-  aprovar: { key: "aprovar", label: "Aprovar", icon: "CheckCircle2", variant: "primary", kind: "confirm" } as ActionDef,
-  aprovarNota: { key: "aprovar_nota", label: "Aprovar e encaminhar para nova nota", icon: "FileEdit", variant: "secondary", kind: "confirm" } as ActionDef,
+  aprovar: { key: "aprovar", label: "Aprovar", icon: "CheckCircle2", variant: "primary", kind: "aprovar" } as ActionDef,
+  aprovarNota: { key: "aprovar_nota", label: "Emitir nota de cobertura", icon: "FileEdit", variant: "secondary", kind: "confirm" } as ActionDef,
   criarNota: { key: "criar_nota", label: "Criar nota de encaminhamento", icon: "FileEdit", variant: "primary", kind: "nota" } as ActionDef,
   rejeitar: { key: "rejeitar", label: "Rejeitar", icon: "XCircle", variant: "destructive", kind: "note" } as ActionDef,
   devolver: { key: "devolver", label: "Devolver para correcção", icon: "Undo2", variant: "secondary", kind: "note" } as ActionDef,
@@ -35,13 +35,18 @@ export const ACTIONS_BY_STATUS: Record<ExpedientStatus, ActionDef[]> = {
   submetido: [A.receberEncaminhar, A.devolver],
   recebido: [A.receberEncaminhar, A.devolver],
   protocolado: [A.receberEncaminhar, A.devolver],
-  encaminhado: [A.encaminhar, A.parecer, A.esclarecimento, A.devolver, A.aprovar, A.aprovarNota, A.rejeitar],
-  em_analise: [A.encaminhar, A.aprovar, A.rejeitar, A.devolver, A.parecer, A.esclarecimento],
-  aguardando_parecer: [A.resposta, A.esclarecimento],
+  // A partir da 1a nota (assinada pela Secretaria), so' ha' Aprovar -- que abre
+  // as duas formas (finalizar, ou emitir nota de cobertura para poder subir/
+  // pedir parecer). Encaminhar/Solicitar parecer so' ficam disponiveis depois
+  // de emitida e assinada essa nota de cobertura (estado "nota_cobertura").
+  encaminhado: [A.devolver, A.aprovar, A.rejeitar],
+  nota_cobertura: [A.encaminhar, A.parecer],
+  em_analise: [A.encaminhar, A.aprovar, A.rejeitar, A.devolver, A.parecer],
+  aguardando_parecer: [A.resposta],
   aguardando_esclarecimento: [A.resposta],
   em_transito: [A.receberEncaminhar],
   nota_pendente: [A.criarNota],
-  devolvido: [A.resposta],
+  devolvido: [],
   aprovado: [A.disponibilizar],
   rejeitado: [A.notificar],
   disponivel_remetente: [A.confirmar],

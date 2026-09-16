@@ -130,8 +130,14 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
           protocol = `SUBMISSAO-${current.id.slice(0,8).toUpperCase()}`;
         }
       }
+      // Enquanto se guarda uma pre-visualizacao (carimbo/assinatura) ou um rascunho
+      // parcial, NAO se pode voltar a "rascunho" se ja estava "devolvido" -- isso
+      // esconderia o processo da Secretaria (que so ve rascunhos que ela propria
+      // tocou) ate a submissao final. So a submissao final (rascunho=false) avanca.
+      const nextStatus = submitting ? "submetido" : (current.status === "devolvido" ? "devolvido" : "rascunho");
+      const nextStep = submitting ? "Recepcao pela Secretaria" : (current.status === "devolvido" ? "Correccao em curso pelo remetente" : "Continuar a edicao");
       await client.query(`UPDATE expedients SET protocol=$2,subject=$3,document_type=$4,status=$5,priority=$6,confidentiality=$7,sender_name=$8,origin_unit_id=$9,recipient_unit_id=$10,responsible_user_id=$11,origin_secretary_id=COALESCE(origin_secretary_id,$15),due_date=$12,next_step=$13,submitted_at=$14 WHERE id=$1`,
-        [params.id,protocol,input.assunto.trim(),input.tipo,submitting?"submetido":"rascunho",input.prioridade,input.confidencialidade,input.remetente.trim(),input.unidadeOrigem,input.destinatario,responsible,input.prazo,submitting?"Recepcao pela Secretaria":"Continuar a edicao",submitting?new Date().toISOString():null,submitting?responsible:null]);
+        [params.id,protocol,input.assunto.trim(),input.tipo,nextStatus,input.prioridade,input.confidencialidade,input.remetente.trim(),input.unidadeOrigem,input.destinatario,responsible,input.prazo,nextStep,submitting?new Date().toISOString():null,submitting?responsible:null]);
 
       let documentId: string | null = main?.id ?? null;
       if (input.origemDocumento === "apenas-processo") {
