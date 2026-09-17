@@ -1,4 +1,5 @@
 import type { Workflow, DocumentTemplate } from "@/types";
+import { CFM_LOGO_DATA_URI } from "@/data/cfm-logo";
 
 export const workflows: Workflow[] = [
   {
@@ -67,14 +68,23 @@ export const workflows: Workflow[] = [
   },
 ];
 
+// Modelo unico, institucional, usado para todos os tipos de expediente -- com o
+// logotipo oficial da CFM, para que todos tenham acesso ao mesmo modelo.
 export const documentTemplates: DocumentTemplate[] = [
-  { id: "tpl-oficio", nome: "Ofício Institucional", categoria: "Correspondência", descricao: "Modelo padrão para ofícios internos e externos com cabeçalho institucional.", camposCount: 8, utilizacoes: 412, actualizadoEm: "2026-06-01", estado: "activo", cabecalho: "CFM — Portos e Caminhos de Ferro de Moçambique", rodape: "Correspondência institucional · Maputo, Moçambique", logotipoPosicao: "sem-logotipo", conteudoInicial: "Exmo. Senhor,\n\nAssunto: \n\nCom os melhores cumprimentos." },
-  { id: "tpl-memorando", nome: "Memorando Interno", categoria: "Correspondência", descricao: "Comunicação interna entre unidades orgânicas.", camposCount: 6, utilizacoes: 289, actualizadoEm: "2026-05-20", estado: "activo" },
-  { id: "tpl-requisicao", nome: "Requisição de Material", categoria: "Aprovisionamento", descricao: "Formulário de requisição de bens e materiais com lista de itens.", camposCount: 10, utilizacoes: 201, actualizadoEm: "2026-06-15", estado: "activo" },
-  { id: "tpl-parecer", nome: "Parecer Técnico", categoria: "Técnico", descricao: "Modelo estruturado para emissão de pareceres técnicos e jurídicos.", camposCount: 7, utilizacoes: 134, actualizadoEm: "2026-04-18", estado: "activo" },
-  { id: "tpl-despacho", nome: "Despacho", categoria: "Decisão", descricao: "Modelo para registo formal de decisões e despachos de direcção.", camposCount: 5, utilizacoes: 98, actualizadoEm: "2026-06-22", estado: "activo" },
-  { id: "tpl-relatorio", nome: "Relatório de Actividades", categoria: "Relatório", descricao: "Estrutura padrão para relatórios periódicos de unidades orgânicas.", camposCount: 9, utilizacoes: 156, actualizadoEm: "2026-05-30", estado: "activo" },
-  { id: "tpl-nota-servico", nome: "Nota de Serviço", categoria: "Correspondência", descricao: "Comunicação administrativa breve de carácter interno.", camposCount: 4, utilizacoes: 67, actualizadoEm: "2026-03-11", estado: "inactivo" },
+  {
+    id: "tpl-oficio",
+    nome: "Modelo Institucional CFM",
+    categoria: "Correspondência",
+    descricao: "Modelo unico e obrigatorio para toda a correspondencia, com o cabecalho institucional da CFM.",
+    camposCount: 6,
+    utilizacoes: 412,
+    actualizadoEm: "2026-09-17",
+    estado: "activo",
+    rodape: "Correspondência institucional · Maputo, Moçambique",
+    logotipo: CFM_LOGO_DATA_URI,
+    logotipoPosicao: "cabecalho",
+    conteudoInicial: "Exmo. Senhor,\n\n\n\nSem mais de momento e ciente dos vossos bons oficios, subscrevemo-nos com elevada estima e consideracao de V. Excia.\n\nAtenciosamente,\n\n\n_________________________",
+  },
 ];
 
 export const documentTypes = [
