@@ -13,6 +13,7 @@ interface DocumentAccessRow {
   name:string; mime_type:string|null; storage_path:string|null; content_html:string|null; document_kind:string;
   stamps_metadata:PdfStampMetadata[]; signatures_metadata:PdfSignatureMetadata[];
   template_metadata:Partial<DocumentTemplate>|null; document_number:string|null; own_subject:string|null; issuing_unit_name:string|null;
+  decision_note:{ texto: string; autor: string; cargo?: string; data?: string }|null;
   protocol:string; subject:string; status:string; created_by:string; origin_unit_id:string; recipient_unit_id:string; responsible_user_id:string|null;
 }
 
@@ -21,7 +22,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
   if (!session) return NextResponse.json({ error: "Nao autenticado." }, { status: 401 });
   const result = await query<DocumentAccessRow>(
     `SELECT d.name,d.mime_type,d.storage_path,d.content_html,d.document_kind,d.stamps_metadata,d.signatures_metadata,d.template_metadata,
-            d.document_number,d.subject own_subject,ou.name issuing_unit_name,
+            d.document_number,d.subject own_subject,d.decision_note,ou.name issuing_unit_name,
             e.protocol,e.subject,e.status,e.created_by,e.origin_unit_id,e.recipient_unit_id,e.responsible_user_id
        FROM documents d
        JOIN expedients e ON e.id=d.expedient_id
@@ -51,6 +52,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       protocol: doc.protocol, subject: doc.own_subject ?? doc.subject, stamps: doc.stamps_metadata ?? [], signatures: doc.signatures_metadata ?? [],
       template: liveTemplate, institutionName, watermark: doc.document_kind === "protocolo" ? "Protocolo" : undefined,
       issuingUnit: doc.issuing_unit_name ?? undefined, documentNumber: doc.document_number, documentKind: doc.document_kind,
+      decisionNote: doc.decision_note,
     });
     const name = `${doc.name.replace(/\.[^.]+$/, "").replace(/["\r\n]/g, "")}.pdf`;
     const disposition = request.nextUrl.searchParams.get("download") === "1" ? "attachment" : "inline";

@@ -441,6 +441,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       }
 
       if (action === "aprovar") {
+        if (!input.note?.trim()) throw new Error("Escreva o texto de aprovacao (ex.: \"Autorizo\").");
         // O chefe de servico e o director tem exactamente a mesma capacidade de
         // aprovar directamente, seja qual for o tipo de documento -- nao ha
         // nenhuma obrigatoriedade de escalar ao director primeiro. A unica forma
@@ -505,11 +506,18 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
             }
           }
 
+          // O texto de aprovacao escrito pelo proprio chefe/director ("Autorizo",
+          // etc.) fica visivel dentro do documento, junto ao carimbo/assinatura --
+          // nao so' no historico -- para ficar claro quem decidiu e porque.
+          const decisionNote = JSON.stringify({
+            texto: input.note!.trim(), autor: session.user.nome, cargo: session.user.cargo || undefined,
+            data: todayInMaputo(),
+          });
           await client.query(
             `UPDATE documents
                 SET stamped=$2,signed=$3,stamp_id=COALESCE($4,stamp_id),
                     stamp_metadata=COALESCE($5::jsonb,stamp_metadata),signature_metadata=COALESCE($6::jsonb,signature_metadata),
-                    stamps_metadata=$7::jsonb,signatures_metadata=$8::jsonb
+                    stamps_metadata=$7::jsonb,signatures_metadata=$8::jsonb,decision_note=$9::jsonb
               WHERE id=$1`,
             [
               targetDoc.rows[0].id,
@@ -520,6 +528,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
               latestSignature ? JSON.stringify(latestSignature) : null,
               JSON.stringify(stampEntries),
               JSON.stringify(signatureEntries),
+              decisionNote,
             ],
           );
         }
@@ -566,9 +575,16 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
               signatureEntries.push(latestSignature);
             }
           }
+          // O motivo da rejeicao, escrito pelo proprio chefe/director, fica
+          // visivel dentro do documento, junto ao carimbo/assinatura -- tal como
+          // o texto de aprovacao.
+          const decisionNote = JSON.stringify({
+            texto: input.note!.trim(), autor: session.user.nome, cargo: session.user.cargo || undefined,
+            data: todayInMaputo(),
+          });
           await client.query(
-            `UPDATE documents SET stamped=$2,signed=$3,stamp_id=COALESCE($4,stamp_id),stamp_metadata=COALESCE($5::jsonb,stamp_metadata),signature_metadata=COALESCE($6::jsonb,signature_metadata),stamps_metadata=$7::jsonb,signatures_metadata=$8::jsonb WHERE id=$1`,
-            [targetDoc.rows[0].id, stampEntries.length > 0, signatureEntries.length > 0, stampId, latestStamp ? JSON.stringify(latestStamp) : null, latestSignature ? JSON.stringify(latestSignature) : null, JSON.stringify(stampEntries), JSON.stringify(signatureEntries)],
+            `UPDATE documents SET stamped=$2,signed=$3,stamp_id=COALESCE($4,stamp_id),stamp_metadata=COALESCE($5::jsonb,stamp_metadata),signature_metadata=COALESCE($6::jsonb,signature_metadata),stamps_metadata=$7::jsonb,signatures_metadata=$8::jsonb,decision_note=$9::jsonb WHERE id=$1`,
+            [targetDoc.rows[0].id, stampEntries.length > 0, signatureEntries.length > 0, stampId, latestStamp ? JSON.stringify(latestStamp) : null, latestSignature ? JSON.stringify(latestSignature) : null, JSON.stringify(stampEntries), JSON.stringify(signatureEntries), decisionNote],
           );
         }
         responsible = exp.origin_secretary_id ?? responsible;

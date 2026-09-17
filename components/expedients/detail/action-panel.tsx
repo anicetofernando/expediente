@@ -247,7 +247,7 @@ function ActionDialog({
       <AprovarDialog
         expedient={expedient}
         onClose={onClose}
-        onFinalizar={(alvo) => onComplete(`Expediente aprovado (${alvo === "nota" ? "assinado na nota" : "assinado no expediente"}).`, undefined, undefined, undefined, "aprovar", alvo)}
+        onFinalizar={(alvo, texto) => onComplete(texto, undefined, undefined, undefined, "aprovar", alvo)}
         onCobertura={() => onComplete("Nota de cobertura pedida.", undefined, undefined, undefined, "aprovar_nota")}
         onDespacho={() => setAprovarDespacho(true)}
       />
@@ -550,12 +550,13 @@ function AprovarDialog({
 }: {
   expedient: ActionExpedient;
   onClose: () => void;
-  onFinalizar: (alvo: "nota" | "expediente") => void;
+  onFinalizar: (alvo: "nota" | "expediente", texto: string) => void;
   onCobertura: () => void;
   onDespacho: () => void;
 }) {
   const [modo, setModo] = React.useState<"finalizar" | "cobertura" | null>(null);
   const [alvo, setAlvo] = React.useState<"nota" | "expediente" | "despacho">("nota");
+  const [texto, setTexto] = React.useState("");
 
   return (
     <Dialog open onOpenChange={(v) => !v && onClose()}>
@@ -612,15 +613,22 @@ function AprovarDialog({
               </Select>
             </div>
           )}
+          {modo === "finalizar" && alvo !== "despacho" && (
+            <div>
+              <Label required>Texto de aprovação</Label>
+              <Textarea rows={3} placeholder="Autorizo…" value={texto} onChange={(event) => setTexto(event.target.value)} />
+              <p className="mt-1 text-2xs text-graphite-400">Este texto fica visível dentro do documento, junto ao carimbo e à assinatura.</p>
+            </div>
+          )}
         </DialogBody>
         <DialogFooter>
           <Button variant="secondary" onClick={onClose}>Cancelar</Button>
           <Button
-            disabled={!modo}
+            disabled={!modo || (modo === "finalizar" && alvo !== "despacho" && !texto.trim())}
             onClick={() => {
               if (modo === "cobertura") return onCobertura();
               if (alvo === "despacho") return onDespacho();
-              return onFinalizar(alvo);
+              return onFinalizar(alvo, texto.trim());
             }}
           >
             {modo === "cobertura" ? "Emitir nota de cobertura" : alvo === "despacho" ? "Continuar" : "Aprovar"}
