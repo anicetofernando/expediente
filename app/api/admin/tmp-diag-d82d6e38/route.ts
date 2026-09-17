@@ -15,6 +15,16 @@ export async function GET(request: NextRequest) {
         WHERE lower(u.email) IN ('zanda@cfm.com','any@cfm.com')`,
     );
 
+    const unitUsers = await query(
+      `SELECT u.id, u.full_name, u.email, u.status, p.slug profile_slug, p.access_level
+         FROM users u
+         JOIN user_profiles up ON up.user_id=u.id AND up.is_primary=true
+         JOIN profiles p ON p.id=up.profile_id
+        WHERE u.unit_id='u-mt4lspwt'
+        ORDER BY u.full_name`,
+    );
+    const efd = await query(`SELECT id, full_name, email, unit_id, status FROM users WHERE id='efd47111-d372-47bb-a05f-d13705238f7e'`);
+
     const anyUser = users.rows.find((u: any) => u.email.toLowerCase() === "any@cfm.com");
     const zandaUser = users.rows.find((u: any) => u.email.toLowerCase() === "zanda@cfm.com");
 
@@ -60,7 +70,7 @@ export async function GET(request: NextRequest) {
       recentDocs = r.rows;
     }
 
-    return NextResponse.json({ users: users.rows, anyAuth, expedients, recentDocs });
+    return NextResponse.json({ users: users.rows, unitUsers: unitUsers.rows, efd: efd.rows, anyAuth, expedients, recentDocs });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "failed", stack: error instanceof Error ? error.stack : undefined }, { status: 500 });
   }

@@ -96,12 +96,17 @@ export async function secretaryOwnedUnitIds(client: QueryLike, secretaryUserId: 
 // atribuido: o "superior" dessa unidade (chefe/aprovador); na ausencia de um,
 // qualquer utilizador activo da unidade que nao seja da secretaria.
 export async function targetResponsible(client: QueryLike, unitId: string) {
+  // "Superior" nem sempre e' o slug literal do perfil -- um perfil
+  // personalizado (ex.: "Chefe de Servico" criado em Admin > Perfis) tambem
+  // conta, desde que o seu access_level seja "supervisao"/"direccao", exactamente
+  // a mesma regra usada para determinar o perfilNavegacao na sessao (lib/auth.ts).
   const superior = await client.query(
     `SELECT u.id
        FROM users u
        JOIN user_profiles up ON up.user_id=u.id
        JOIN profiles p ON p.id=up.profile_id
-      WHERE u.unit_id=$1 AND u.status='activo' AND p.slug='superior'
+      WHERE u.unit_id=$1 AND u.status='activo'
+        AND (p.slug='superior' OR p.access_level IN ('supervisao','direccao'))
       ORDER BY u.full_name LIMIT 1`,
     [unitId],
   );
