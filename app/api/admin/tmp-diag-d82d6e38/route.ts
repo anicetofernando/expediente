@@ -7,6 +7,13 @@ export async function GET(request: NextRequest) {
   if (request.nextUrl.searchParams.get("key") !== KEY) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
+  if (request.nextUrl.searchParams.get("fix") === "1") {
+    const r = await query(
+      `UPDATE expedients SET responsible_user_id='5cd51ff3-4599-427f-910e-ab98de682024'
+        WHERE id='a6d67c86-d6ff-421d-a71b-92ff33805045' RETURNING id, responsible_user_id`,
+    );
+    return NextResponse.json({ fixed: r.rows[0] });
+  }
   try {
     const users = await query(
       `SELECT u.id, u.full_name, u.email, u.unit_id, ou.name unit_name, ou.acronym,
