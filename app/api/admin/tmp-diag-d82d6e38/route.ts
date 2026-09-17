@@ -24,6 +24,14 @@ export async function GET(request: NextRequest) {
         ORDER BY u.full_name`,
     );
     const efd = await query(`SELECT id, full_name, email, unit_id, status FROM users WHERE id='efd47111-d372-47bb-a05f-d13705238f7e'`);
+    const allProfiles = await query(
+      `SELECT u.full_name, u.email, up.is_primary, p.slug, p.access_level
+         FROM user_profiles up
+         JOIN users u ON u.id=up.user_id
+         JOIN profiles p ON p.id=up.profile_id
+        WHERE u.id IN ('efd47111-d372-47bb-a05f-d13705238f7e','5cd51ff3-4599-427f-910e-ab98de682024','a6a2bdfc-9bd1-4245-9cd9-b1a24ab0c4d3')
+        ORDER BY u.full_name, up.is_primary DESC`,
+    );
 
     const anyUser = users.rows.find((u: any) => u.email.toLowerCase() === "any@cfm.com");
     const zandaUser = users.rows.find((u: any) => u.email.toLowerCase() === "zanda@cfm.com");
@@ -70,7 +78,7 @@ export async function GET(request: NextRequest) {
       recentDocs = r.rows;
     }
 
-    return NextResponse.json({ users: users.rows, unitUsers: unitUsers.rows, efd: efd.rows, anyAuth, expedients, recentDocs });
+    return NextResponse.json({ users: users.rows, unitUsers: unitUsers.rows, efd: efd.rows, allProfiles: allProfiles.rows, anyAuth, expedients, recentDocs });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "failed", stack: error instanceof Error ? error.stack : undefined }, { status: 500 });
   }
