@@ -38,8 +38,12 @@ interface SecretaryAssignment { id: string; unit_id: string }
 interface UnitId { id: string }
 
 async function loadSecretaryAssignments(client: QueryLike): Promise<SecretaryAssignment[]> {
+  // So' o perfil PRINCIPAL de cada utilizador conta -- e' o unico que define o
+  // seu perfilNavegacao efectivo (tal como a sessao o calcula em lib/auth.ts).
+  // Um perfil secundario "secretaria" nao deve, por si so, fazer alguem
+  // aparecer como secretaria de uma unidade.
   const result = await client.query(
-    `SELECT u.id,u.unit_id FROM users u JOIN user_profiles up ON up.user_id=u.id JOIN profiles p ON p.id=up.profile_id
+    `SELECT u.id,u.unit_id FROM users u JOIN user_profiles up ON up.user_id=u.id AND up.is_primary=true JOIN profiles p ON p.id=up.profile_id
      WHERE p.slug='secretaria' AND u.status='activo' ORDER BY u.full_name`,
   );
   return result.rows as SecretaryAssignment[];
@@ -100,10 +104,14 @@ export async function targetResponsible(client: QueryLike, unitId: string) {
   // personalizado (ex.: "Chefe de Servico" criado em Admin > Perfis) tambem
   // conta, desde que o seu access_level seja "supervisao"/"direccao", exactamente
   // a mesma regra usada para determinar o perfilNavegacao na sessao (lib/auth.ts).
+  // So' o perfil PRINCIPAL conta -- um utilizador com um perfil secundario
+  // "superior" (ex.: uma secretaria que tambem tem um perfil de chefe
+  // atribuido para outro fim) nao deve, por causa disso, comecar a receber
+  // expedientes como se fosse o chefe efectivo desta unidade.
   const superior = await client.query(
     `SELECT u.id
        FROM users u
-       JOIN user_profiles up ON up.user_id=u.id
+       JOIN user_profiles up ON up.user_id=u.id AND up.is_primary=true
        JOIN profiles p ON p.id=up.profile_id
       WHERE u.unit_id=$1 AND u.status='activo'
         AND (p.slug='superior' OR p.access_level IN ('supervisao','direccao'))
@@ -118,7 +126,7 @@ export async function targetResponsible(client: QueryLike, unitId: string) {
       WHERE u.unit_id=$1 AND u.status='activo'
         AND NOT EXISTS (
           SELECT 1 FROM user_profiles up JOIN profiles p ON p.id=up.profile_id
-           WHERE up.user_id=u.id AND p.slug='secretaria'
+           WHERE up.user_id=u.id AND up.is_primary=true AND p.slug='secretaria'
         )
       ORDER BY u.full_name LIMIT 1`,
     [unitId],
