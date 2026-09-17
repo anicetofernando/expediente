@@ -1,6 +1,6 @@
 import type { ExpedientStatus } from "@/types";
 
-export type ActionKind = "confirm" | "forward" | "receive-forward" | "resposta" | "nota" | "note" | "archive" | "aprovar";
+export type ActionKind = "confirm" | "forward" | "receive-forward" | "resposta" | "nota" | "note" | "archive" | "aprovar" | "rejeitar";
 
 export interface ActionDef {
   key: string;
@@ -19,7 +19,7 @@ const A = {
   aprovar: { key: "aprovar", label: "Aprovar", icon: "CheckCircle2", variant: "primary", kind: "aprovar" } as ActionDef,
   aprovarNota: { key: "aprovar_nota", label: "Emitir nota de cobertura", icon: "FileEdit", variant: "secondary", kind: "confirm" } as ActionDef,
   criarNota: { key: "criar_nota", label: "Criar nota", icon: "FileEdit", variant: "primary", kind: "nota" } as ActionDef,
-  rejeitar: { key: "rejeitar", label: "Rejeitar", icon: "XCircle", variant: "destructive", kind: "note" } as ActionDef,
+  rejeitar: { key: "rejeitar", label: "Rejeitar", icon: "XCircle", variant: "destructive", kind: "rejeitar" } as ActionDef,
   devolver: { key: "devolver", label: "Devolver para correcção", icon: "Undo2", variant: "secondary", kind: "note" } as ActionDef,
   resposta: { key: "resposta", label: "Criar despacho / resposta", icon: "FileEdit", variant: "secondary", kind: "resposta" } as ActionDef,
   disponibilizar: { key: "disponibilizar", label: "Disponibilizar ao remetente", icon: "PackageCheck", variant: "primary", kind: "confirm" } as ActionDef,

@@ -209,6 +209,32 @@ function ActionDialog({
   const [target, setTarget] = React.useState("");
   const [departmentId, setDepartmentId] = React.useState("");
   const [aprovarDespacho, setAprovarDespacho] = React.useState(false);
+  const [rejeitarDespacho, setRejeitarDespacho] = React.useState(false);
+
+  if (action.kind === "rejeitar") {
+    if (rejeitarDespacho) {
+      return (
+        <DespachoDialog
+          expedientId={expedient.id}
+          protocolo={expedient.protocolo}
+          onClose={onClose}
+          onDone={() => { onClose(); router.refresh(); }}
+          endpoint="resposta"
+          dialogTitle="Criar despacho de rejeição"
+          submitLabel="Registar e rejeitar"
+          intent="rejeitar"
+        />
+      );
+    }
+    return (
+      <RejeitarDialog
+        expedient={expedient}
+        onClose={onClose}
+        onMarcar={(alvo, motivo) => onComplete(motivo, undefined, undefined, undefined, undefined, alvo)}
+        onDespacho={() => setRejeitarDespacho(true)}
+      />
+    );
+  }
 
   if (action.kind === "aprovar") {
     if (aprovarDespacho) {
@@ -605,6 +631,61 @@ function AprovarDialog({
             }}
           >
             {modo === "cobertura" ? "Emitir nota de cobertura" : alvo === "despacho" ? "Continuar" : "Aprovar"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function RejeitarDialog({
+  expedient,
+  onClose,
+  onMarcar,
+  onDespacho,
+}: {
+  expedient: ActionExpedient;
+  onClose: () => void;
+  onMarcar: (alvo: "nota" | "expediente", motivo: string) => void;
+  onDespacho: () => void;
+}) {
+  const [alvo, setAlvo] = React.useState<"nota" | "expediente" | "despacho">("expediente");
+  const [motivo, setMotivo] = React.useState("");
+
+  return (
+    <Dialog open onOpenChange={(v) => !v && onClose()}>
+      <DialogContent size="sm">
+        <DialogHeader>
+          <DialogTitle>Rejeitar — {expedient.protocolo}</DialogTitle>
+          <DialogDescription>{expedient.assunto}</DialogDescription>
+        </DialogHeader>
+        <DialogBody className="space-y-3.5">
+          <div>
+            <Label required>Como registar a rejeição</Label>
+            <Select value={alvo} onValueChange={(value) => setAlvo(value as "nota" | "expediente" | "despacho")}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="expediente">Carimbar/assinar no expediente original</SelectItem>
+                <SelectItem value="nota">Carimbar/assinar na nota actual</SelectItem>
+                <SelectItem value="despacho">Criar um despacho de rejeição (carimbo e assinatura)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          {alvo !== "despacho" && (
+            <div>
+              <Label required>Motivo da rejeição</Label>
+              <Textarea rows={4} placeholder="Descreva o motivo da rejeição…" value={motivo} onChange={(event) => setMotivo(event.target.value)} />
+            </div>
+          )}
+        </DialogBody>
+        <DialogFooter>
+          <Button variant="secondary" onClick={onClose}>Cancelar</Button>
+          <Button
+            variant="destructive"
+            disabled={alvo !== "despacho" && !motivo.trim()}
+            onClick={() => (alvo === "despacho" ? onDespacho() : onMarcar(alvo, motivo))}
+          >
+            {alvo === "despacho" ? "Continuar" : "Rejeitar"}
           </Button>
         </DialogFooter>
       </DialogContent>

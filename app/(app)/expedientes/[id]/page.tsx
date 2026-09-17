@@ -28,7 +28,15 @@ export default async function ExpedientDetailPage({ params }: { params: { id: st
   if (!result) notFound();
   const { expedient, audit } = result;
 
-  const principal = expedient.documentos.find((d) => d.tipo === "principal") ?? expedient.documentos[0];
+  // Cada interveniente ve' a frente o documento mais recente que lhe diz
+  // respeito -- o remetente ve' o protocolo assim que ele existe, o chefe/
+  // director ve' a ultima nota preparada para ele -- excepto a Secretaria, que
+  // trabalha sempre a partir do expediente original (e' ela que prepara a
+  // nota, precisa de ver o conteudo original, nao a sua propria nota).
+  const nonAttachments = expedient.documentos.filter((d) => d.tipo !== "anexo");
+  const principal = session.perfilNavegacao === "secretaria"
+    ? expedient.documentos.find((d) => d.tipo === "principal") ?? nonAttachments[0] ?? expedient.documentos[0]
+    : nonAttachments.at(-1) ?? expedient.documentos[0];
   // O remetente nao ve o detalhe interno da tramitacao do lado do superior --
   // ver lib/status.ts#remetenteDisplayStatus. Isto e so' para a etiqueta
   // apresentada; a logica de accoes usa sempre expedient.estado real.

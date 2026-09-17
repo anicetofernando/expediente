@@ -95,19 +95,6 @@ const ALLOWED_BY_STATUS: Record<string, string[]> = {
   atrasado: ["escalar", "encaminhar", "aprovar"],
 };
 
-function normalized(value: string) {
-  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase();
-}
-
-function permitsDocument(configured: string[] | undefined | null, documentType: string) {
-  if (!configured || configured.length === 0) return true;
-  const target = normalized(documentType);
-  return configured.some((value) => {
-    const allowed = normalized(value);
-    return allowed === "todos" || allowed === target || allowed.startsWith(target) || target.startsWith(allowed);
-  });
-}
-
 export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
   const session = await getCurrentSession();
   if (!session) return NextResponse.json({ error: "Nao autenticado." }, { status: 401 });
@@ -457,16 +444,13 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
           let stampId: string | null = null;
 
           // A marca de aprovacao (na nota ou no expediente) leva sempre carimbo E
-          // assinatura -- independentemente do que o tipo de documento exige --
-          // tal como o despacho formal e a submissao original do remetente.
+          // assinatura -- independentemente do que o tipo de documento exige ou
+          // permite -- tal como o despacho formal e a submissao original do
+          // remetente. O chefe/director que tem carimbo/assinatura activos tem de
+          // conseguir sempre aprovar, sem restricoes por tipo de documento.
           {
             const stamps = await configuredStamps(client);
-            const stamp = resolveUnitStamp(
-              stamps.filter((candidate) => permitsDocument(candidate.tiposDocumento, documentType.nome)),
-              session.user,
-              session.unitName,
-              session.perfilNavegacao,
-            );
+            const stamp = resolveUnitStamp(stamps, session.user, session.unitName, session.perfilNavegacao);
             if (!stamp) throw new Error("A sua unidade ainda nao tem um carimbo activo. Configure-o em Administracao > Carimbos.");
             stampId = stamp.id;
             if (!stampEntries.some((entry) => entry.id === stamp.id)) {
@@ -483,9 +467,6 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
             const today = todayInMaputo();
             if (signature.validadeInicio > today || signature.validadeFim < today) {
               throw new Error("A sua assinatura individual esta fora do periodo de validade.");
-            }
-            if (!permitsDocument(signature.documentosPermitidos, documentType.nome)) {
-              throw new Error(`A sua assinatura nao esta autorizada para documentos do tipo ${documentType.nome}.`);
             }
             if (!signatureEntries.some((entry) => entry.id === signature.id)) {
               latestSignature = signatureMetadataJson(signature, session.user, input.posicaoAssinatura ?? signature.posicaoLivre);
@@ -517,6 +498,49 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       }
 
       if (action === "rejeitar") {
+        if (!input.note?.trim()) throw new Error("Indique o motivo da rejeicao.");
+        // Tal como o Aprovar, a rejeicao marca-se directamente na nota actual ou
+        // no expediente original -- sempre com carimbo e assinatura de quem
+        // rejeita, para ficar claro quem tomou a decisao.
+        if (input.alvo === "nota" || input.alvo === "expediente") {
+          const alvoNota = input.alvo === "nota";
+          const targetDoc = alvoNota
+            ? await client.query<{
+                id: string; stamps_metadata: Array<{ id?: string }> | null; signatures_metadata: Array<{ id?: string }> | null;
+              }>("SELECT id,stamps_metadata,signatures_metadata FROM documents WHERE expedient_id=$1 AND document_kind='nota' ORDER BY created_at DESC LIMIT 1 FOR UPDATE", [exp.id])
+            : await client.query<{
+                id: string; stamps_metadata: Array<{ id?: string }> | null; signatures_metadata: Array<{ id?: string }> | null;
+              }>("SELECT id,stamps_metadata,signatures_metadata FROM documents WHERE expedient_id=$1 AND document_kind='principal' LIMIT 1 FOR UPDATE", [exp.id]);
+          if (!targetDoc.rows[0]) throw new Error(alvoNota ? "Nao existe nenhuma nota activa para marcar a rejeicao." : "O expediente nao tem documento principal.");
+          const stampEntries = targetDoc.rows[0].stamps_metadata ?? [];
+          const signatureEntries = targetDoc.rows[0].signatures_metadata ?? [];
+          let latestStamp: Record<string, unknown> | null = null;
+          let latestSignature: Record<string, unknown> | null = null;
+          let stampId: string | null = null;
+          {
+            const stamps = await configuredStamps(client);
+            const stamp = resolveUnitStamp(stamps, session.user, session.unitName, session.perfilNavegacao);
+            if (!stamp) throw new Error("A sua unidade ainda nao tem um carimbo activo. Configure-o em Administracao > Carimbos.");
+            stampId = stamp.id;
+            if (!stampEntries.some((entry) => entry.id === stamp.id)) {
+              latestStamp = stampMetadataJson(stamp, session.user.nome, input.posicaoCarimbo);
+              stampEntries.push(latestStamp);
+            }
+          }
+          {
+            const signatures = await configuredSignatures(client);
+            const signature = resolveUserSignature(signatures, session.user);
+            if (!signature) throw new Error("Nao tem uma assinatura individual activa. Configure-a em Administracao > Assinaturas.");
+            if (!signatureEntries.some((entry) => entry.id === signature.id)) {
+              latestSignature = signatureMetadataJson(signature, session.user, input.posicaoAssinatura);
+              signatureEntries.push(latestSignature);
+            }
+          }
+          await client.query(
+            `UPDATE documents SET stamped=$2,signed=$3,stamp_id=COALESCE($4,stamp_id),stamp_metadata=COALESCE($5::jsonb,stamp_metadata),signature_metadata=COALESCE($6::jsonb,signature_metadata),stamps_metadata=$7::jsonb,signatures_metadata=$8::jsonb WHERE id=$1`,
+            [targetDoc.rows[0].id, stampEntries.length > 0, signatureEntries.length > 0, stampId, latestStamp ? JSON.stringify(latestStamp) : null, latestSignature ? JSON.stringify(latestSignature) : null, JSON.stringify(stampEntries), JSON.stringify(signatureEntries)],
+          );
+        }
         responsible = exp.origin_secretary_id ?? responsible;
         nextStep = "Notificacao do remetente pela Secretaria";
       }

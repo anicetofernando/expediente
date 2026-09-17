@@ -42,19 +42,23 @@ async function returnToRequesterIfPending(
 }
 
 /**
- * Uma das formas de "Finalizar aprovação" e' criar aqui um despacho formal
- * (com carimbo e assinatura obrigatorios) -- assim que fica pronto, isso ja'
- * e' a propria aprovacao: fecha o ciclo exactamente como o "Aprovar" directo,
- * entregando a` secretaria de origem para disponibilizar ao remetente.
+ * Uma das formas de "Finalizar aprovação" (ou de rejeitar) e' criar aqui um
+ * despacho formal (com carimbo e assinatura obrigatorios) -- assim que fica
+ * pronto, isso ja' e' a propria decisao: fecha o ciclo exactamente como o
+ * "Aprovar"/"Rejeitar" directo, entregando a` secretaria de origem para
+ * disponibilizar/notificar o remetente.
  */
-async function finalizeApprovalIfEncaminhado(
+async function finalizeDecisionIfEncaminhado(
   client: Parameters<Parameters<typeof transaction>[0]>[0],
   exp: { id: string; status: string; responsible_user_id: string | null; origin_secretary_id: string | null },
+  intent: "aprovar" | "rejeitar",
 ) {
   if (exp.status !== "encaminhado") return;
+  const status = intent === "rejeitar" ? "rejeitado" : "aprovado";
+  const nextStep = intent === "rejeitar" ? "Notificacao do remetente pela Secretaria" : "Disponibilizacao ao remetente pela Secretaria";
   await client.query(
-    "UPDATE expedients SET status='aprovado', responsible_user_id=$2, next_step='Disponibilizacao ao remetente pela Secretaria' WHERE id=$1",
-    [exp.id, exp.origin_secretary_id ?? exp.responsible_user_id],
+    "UPDATE expedients SET status=$2, responsible_user_id=$3, next_step=$4 WHERE id=$1",
+    [exp.id, status, exp.origin_secretary_id ?? exp.responsible_user_id, nextStep],
   );
 }
 
@@ -76,6 +80,9 @@ interface DespachoInput {
   posicaoCarimbo?: FreePosition;
   posicaoAssinatura?: FreePosition;
   note?: string;
+  /** So' importa quando o despacho e' criado a partir de "encaminhado" --
+   * decide se, ao ficar pronto, o processo fica aprovado ou rejeitado. */
+  intent?: "aprovar" | "rejeitar";
 }
 
 /**
@@ -135,7 +142,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         );
         await rememberStampSignaturePositions(client, resolved.stamp, resolved.signature, input.posicaoCarimbo, input.posicaoAssinatura);
         await returnToRequesterIfPending(client, exp);
-        await finalizeApprovalIfEncaminhado(client, exp);
+        await finalizeDecisionIfEncaminhado(client, exp, input.intent ?? "aprovar");
         return { documentId: input.documentId, finalized: true };
       }
 
@@ -157,10 +164,11 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         sistemaHasFreePositionImages = Boolean(resolved.stamp.imagemUrl || resolved.signature.imagemUrl);
         const stampEntry = JSON.stringify(stampMetadataJson(resolved.stamp, session.user.nome));
         const signatureEntry = JSON.stringify(signatureMetadataJson(resolved.signature, session.user));
+        const despachoLabel = input.intent === "rejeitar" ? "Despacho de Rejeição" : "Despacho";
         await client.query(
           `INSERT INTO documents(id,expedient_id,name,document_kind,source,mime_type,size_bytes,page_count,content_html,confidentiality,created_by,stamp_id,stamped,signed,stamp_metadata,signature_metadata,stamps_metadata,signatures_metadata,template_metadata,document_number)
            VALUES($1,$2,$3,'resposta','sistema','text/html',$4,1,$5,'interno',$6,$7,true,true,$8::jsonb,$9::jsonb,$10::jsonb,$11::jsonb,$12::jsonb,$13)`,
-          [documentId, exp.id, `Despacho - ${exp.protocol}.html`, Buffer.byteLength(clean, "utf8"), clean, session.user.id, resolved.stamp.id,
+          [documentId, exp.id, `${despachoLabel} - ${exp.protocol}.html`, Buffer.byteLength(clean, "utf8"), clean, session.user.id, resolved.stamp.id,
             stampEntry, signatureEntry, `[${stampEntry}]`, `[${signatureEntry}]`, template ? JSON.stringify(template) : null, documentNumber],
         );
       } else if (file) {
@@ -177,7 +185,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       // posicionar carimbo/assinatura, a chamada seguinte (com documentId) e que fecha.
       if (input.modo === "importado" || !sistemaHasFreePositionImages) {
         await returnToRequesterIfPending(client, exp);
-        await finalizeApprovalIfEncaminhado(client, exp);
+        await finalizeDecisionIfEncaminhado(client, exp, input.intent ?? "aprovar");
       }
       await client.query(
         `INSERT INTO timeline_events(expedient_id,event_type,title,description,user_id,unit_id) VALUES($1,'resposta','Despacho registado',$2,$3,$4)`,

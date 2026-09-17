@@ -22,6 +22,7 @@ export function DespachoDialog({
   dialogTitle = "Criar despacho / resposta",
   requireStamp = true,
   submitLabel = "Registar despacho",
+  intent,
 }: {
   expedientId: string;
   protocolo: string;
@@ -33,14 +34,18 @@ export function DespachoDialog({
   /** Na nota, o carimbo e opcional -- so a assinatura e sempre exigida. */
   requireStamp?: boolean;
   submitLabel?: string;
+  /** So' para o endpoint "resposta" a partir de "encaminhado": decide se o
+   * despacho, ao ficar pronto, aprova ou rejeita o expediente. */
+  intent?: "aprovar" | "rejeitar";
 }) {
   const { toast } = useToast();
   const { documentTemplates } = useCatalogs();
   const [modo, setModo] = React.useState<"sistema" | "importado">("sistema");
   const [modeloId, setModeloId] = React.useState("");
-  // Na nota, o numero de referencia do expediente vem sempre pre-escrito no
-  // texto, para vincular claramente a nota ao processo original.
-  const [conteudo, setConteudo] = React.useState(() => (endpoint === "nota" ? `<p><strong>Referente ao Expediente: ${protocolo}</strong></p><p></p>` : ""));
+  const [conteudo, setConteudo] = React.useState("");
+  // A referencia ao expediente original fica sempre fixa no cabecalho do
+  // documento (gerada pelo sistema) -- nunca e' texto editavel no corpo.
+  const [assunto, setAssunto] = React.useState("");
   const [ficheiro, setFicheiro] = React.useState<File | null>(null);
   const [note, setNote] = React.useState("");
   const [incluirCarimbo, setIncluirCarimbo] = React.useState(true);
@@ -70,6 +75,10 @@ export function DespachoDialog({
   const failureLabel = requireStamp ? "Despacho não registado" : "Nota não registada";
 
   async function submitSistema() {
+    if (endpoint === "nota" && !assunto.trim()) {
+      toast({ title: "Escreva o assunto da nota.", variant: "destructive" });
+      return;
+    }
     if (!conteudo.replace(/<[^>]*>/g, "").trim()) {
       toast({ title: requireStamp ? "Escreva o conteúdo do despacho." : "Escreva o conteúdo da nota.", variant: "destructive" });
       return;
@@ -77,7 +86,7 @@ export function DespachoDialog({
     setSubmitting(true);
     try {
       const form = new FormData();
-      form.set("data", JSON.stringify({ modo: "sistema", modeloId, conteudo, note, incluirCarimbo: applyStamp }));
+      form.set("data", JSON.stringify({ modo: "sistema", modeloId, conteudo, note, incluirCarimbo: applyStamp, assunto: endpoint === "nota" ? assunto : undefined, intent }));
       const response = await fetch(`/api/expedients/${expedientId}/${endpoint}`, { method: "POST", body: form });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error ?? `Não foi possível registar ${requireStamp ? "o despacho" : "a nota"}.`);
@@ -97,6 +106,10 @@ export function DespachoDialog({
   }
 
   async function submitImportado() {
+    if (endpoint === "nota" && !assunto.trim()) {
+      toast({ title: "Escreva o assunto da nota.", variant: "destructive" });
+      return;
+    }
     if (!ficheiro) {
       toast({ title: requireStamp ? "Seleccione o ficheiro da resposta." : "Seleccione o ficheiro da nota.", variant: "destructive" });
       return;
@@ -104,7 +117,7 @@ export function DespachoDialog({
     setSubmitting(true);
     try {
       const form = new FormData();
-      form.set("data", JSON.stringify({ modo: "importado", note }));
+      form.set("data", JSON.stringify({ modo: "importado", note, assunto: endpoint === "nota" ? assunto : undefined, intent }));
       form.set("file", ficheiro);
       const response = await fetch(`/api/expedients/${expedientId}/${endpoint}`, { method: "POST", body: form });
       const result = await response.json();
@@ -123,7 +136,7 @@ export function DespachoDialog({
     setSubmitting(true);
     try {
       const form = new FormData();
-      form.set("data", JSON.stringify({ modo: "sistema", documentId, incluirCarimbo: applyStamp, ...result }));
+      form.set("data", JSON.stringify({ modo: "sistema", documentId, incluirCarimbo: applyStamp, intent, ...result }));
       const response = await fetch(`/api/expedients/${expedientId}/${endpoint}`, { method: "POST", body: form });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error ?? "Não foi possível posicionar o carimbo/assinatura.");
@@ -192,6 +205,19 @@ export function DespachoDialog({
             </button>
           </div>
 
+          {endpoint === "nota" && (
+            <div>
+              <Label required>Assunto da nota</Label>
+              <input
+                type="text"
+                value={assunto}
+                onChange={(event) => setAssunto(event.target.value)}
+                placeholder="Escreva o assunto desta nota…"
+                className="mt-1 block w-full border border-graphite-300 px-3 py-1.5 text-[13px] text-graphite-800 outline-none focus:border-navy-500"
+              />
+            </div>
+          )}
+
           {modo === "sistema" && (
             <div className="space-y-3.5">
               {!authorization.loading && !readyToSign && (
@@ -254,7 +280,7 @@ export function DespachoDialog({
           <div className="flex justify-end gap-2">
             <Button variant="secondary" onClick={onClose}>Cancelar</Button>
             <Button
-              disabled={submitting || (modo === "sistema" && (!readyToSign || authorization.loading))}
+              disabled={submitting || (modo === "sistema" && (!readyToSign || authorization.loading)) || (endpoint === "nota" && !assunto.trim())}
               loading={submitting}
               onClick={() => (modo === "sistema" ? submitSistema() : submitImportado())}
             >

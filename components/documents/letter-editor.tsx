@@ -35,9 +35,10 @@ export function LetterEditor({ value, onChange, title = "Carta institucional", t
       });
       return;
     }
-    const logoHeader = template?.logotipo && template.logotipoPosicao === "cabecalho" ? `<img src="${template.logotipo}" style="display:block;max-height:20mm;max-width:45mm;margin:0 auto 4mm">` : "";
+    const logoHeader = template?.logotipo && template.logotipoPosicao === "cabecalho" ? `<img src="${template.logotipo}" style="display:block;width:100%;max-width:170mm;margin:0 auto 4mm">` : "";
+    const textHeader = logoHeader ? "" : (template?.cabecalho ?? "CFM — Portos e Caminhos de Ferro de Moçambique");
     const logoFooter = template?.logotipo && template.logotipoPosicao === "rodape" ? `<img src="${template.logotipo}" style="display:block;max-height:14mm;max-width:35mm;margin:0 auto 3mm">` : "";
-    popup.document.write(`<!doctype html><html><head><title>${title}</title><style>@page{size:A4;margin:20mm}*{box-sizing:border-box}body{font:12pt Arial;line-height:1.5;overflow-wrap:anywhere}header{text-align:center;border-bottom:1px solid #ccd3dc;padding-bottom:5mm;margin-bottom:10mm}footer{text-align:center;border-top:1px solid #ccd3dc;padding-top:4mm;margin-top:12mm;color:#667085;font-size:9pt}</style></head><body><header>${logoHeader}${template?.cabecalho ?? "CFM — Portos e Caminhos de Ferro de Moçambique"}</header>${editorRef.current?.innerHTML ?? ""}<footer>${logoFooter}${template?.rodape ?? "Correspondência institucional"}</footer></body></html>`);
+    popup.document.write(`<!doctype html><html><head><title>${title}</title><style>@page{size:A4;margin:20mm}*{box-sizing:border-box}body{font:12pt Arial;line-height:1.5;overflow-wrap:anywhere}header{text-align:center;border-bottom:1px solid #ccd3dc;padding-bottom:5mm;margin-bottom:10mm}footer{text-align:center;border-top:1px solid #ccd3dc;padding-top:4mm;margin-top:12mm;color:#667085;font-size:9pt}</style></head><body><header>${logoHeader}${textHeader}</header>${editorRef.current?.innerHTML ?? ""}<footer>${logoFooter}${template?.rodape ?? "Correspondência institucional"}</footer></body></html>`);
     popup.document.close();
     // document.write numa popup ja aberta nem sempre dispara onload de forma
     // fiavel entre browsers -- um pequeno atraso garante que o conteudo ja
@@ -86,8 +87,11 @@ export function LetterEditor({ value, onChange, title = "Carta institucional", t
       <div className={cn("overflow-auto p-4 sm:p-7", compact ? "h-[62vh] min-h-[520px] max-h-[720px]" : "h-[78vh] min-h-[720px] max-h-[920px]")}>
         <div className={cn("mx-auto w-full max-w-[794px] bg-white px-[9%] py-[8%] shadow-card", compact ? "min-h-[720px]" : "min-h-[1123px]")}>
           <div className="mb-8 border-b border-graphite-200 pb-4 text-center">
-            {template?.logotipo && template.logotipoPosicao === "cabecalho" && <img src={template.logotipo} alt="Logótipo" className="mx-auto mb-3 max-h-20 max-w-48 object-contain" />}
-            <p className="whitespace-pre-line text-[11px] font-bold uppercase tracking-[0.12em] text-cfm-900">{template?.cabecalho ?? "CFM — Portos e Caminhos de Ferro de Moçambique"}</p>
+            {template?.logotipo && template.logotipoPosicao === "cabecalho" ? (
+              <img src={template.logotipo} alt="Logótipo" className="mx-auto w-full max-w-[520px] object-contain" />
+            ) : (
+              <p className="whitespace-pre-line text-[11px] font-bold uppercase tracking-[0.12em] text-cfm-900">{template?.cabecalho ?? "CFM — Portos e Caminhos de Ferro de Moçambique"}</p>
+            )}
           </div>
           <div
             ref={editorRef}

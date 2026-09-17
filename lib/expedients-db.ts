@@ -224,14 +224,19 @@ export async function getExpedient(session: AuthSession, id: string) {
   // O chefe/director so' ve' o expediente original, os seus anexos e as notas
   // do seu proprio nivel/salto -- nunca o "protocolo" (que e' sempre para quem
   // enviou aquele salto, nao para quem o recebeu) nem as notas de outra
-  // unidade (internas ao nivel anterior ou seguinte da cadeia).
+  // unidade (internas ao nivel anterior ou seguinte da cadeia). A Secretaria
+  // tambem nao guarda o "protocolo" entre os seus documentos -- essa copia e'
+  // sempre para o remetente (ou para quem enviou o salto anterior), nunca
+  // para quem protocolou.
   const visibleDocuments = session.perfilNavegacao === "superior"
     ? documents.rows.filter((doc) => {
         if (doc.document_kind === "protocolo") return false;
         if (doc.document_kind === "nota") return doc.created_for_unit_id === null || doc.created_for_unit_id === session.user.unidadeId;
         return true;
       })
-    : documents.rows;
+    : session.perfilNavegacao === "secretaria"
+      ? documents.rows.filter((doc) => doc.document_kind !== "protocolo")
+      : documents.rows;
   expedient.documentos = visibleDocuments.map((doc) => ({
     id: doc.id, nome: doc.name, numero: doc.document_number ?? undefined, tipo: doc.document_kind, formato: doc.mime_type?.includes("pdf") ? "pdf" : doc.mime_type?.includes("image") ? "imagem" : "docx",
     paginas: doc.page_count, tamanho: formatSize(Number(doc.size_bytes)), criadoEm: iso(doc.created_at), criadoPor: doc.creator_name,
