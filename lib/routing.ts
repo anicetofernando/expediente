@@ -34,11 +34,6 @@ export async function configuredDocumentTypes(client: QueryLike): Promise<Docume
   return defaultDocumentTypes;
 }
 
-export function requiresDirectorEscalation(recipientUnitType: string | null | undefined, documentTypeId: string, docTypes: DocumentTypeConfig[]) {
-  const config = docTypes.find((item) => item.id === documentTypeId);
-  return Boolean(config?.exigeAprovacaoDirector) && recipientUnitType !== "direccao";
-}
-
 interface SecretaryAssignment { id: string; unit_id: string }
 interface UnitId { id: string }
 

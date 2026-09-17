@@ -22,24 +22,35 @@ export function DespachoDialog({
   dialogTitle = "Criar despacho / resposta",
   submitLabel = "Registar despacho",
   intent,
+  isCobertura = false,
 }: {
   expedientId: string;
   protocolo: string;
   onClose: () => void;
   onDone: () => void;
   /** Endpoint irmao "/resposta" (despacho, com carimbo/assinatura obrigatorios
-   * de quem decide) ou "/nota" (nota de encaminhamento da Secretaria, que
-   * nunca leva carimbo nem assinatura dela -- so' protocola e transmite). */
+   * de quem decide) ou "/nota" (nota de encaminhamento da Secretaria -- a
+   * primeira de cada salto leva a assinatura dela, obrigatoria, e o carimbo,
+   * opcional; a nota de cobertura fica sempre em branco). */
   endpoint?: "resposta" | "nota";
   dialogTitle?: string;
   submitLabel?: string;
   /** So' para o endpoint "resposta" a partir de "encaminhado": decide se o
    * despacho, ao ficar pronto, aprova ou rejeita o expediente. */
   intent?: "aprovar" | "rejeitar";
+  /** So' para o endpoint "nota": indica que esta e' a nota de cobertura --
+   * nunca leva carimbo nem assinatura da Secretaria, so' o chefe/director a
+   * marca mais tarde, ao encaminhar ou pedir parecer. */
+  isCobertura?: boolean;
 }) {
   const { toast } = useToast();
   const { documentTemplates } = useCatalogs();
   const isDespacho = endpoint === "resposta";
+  // Precisa de carimbo/assinatura de quem esta a criar o documento em ambos os
+  // casos -- despacho (sempre) e a primeira nota de cada salto (assinatura
+  // obrigatoria, carimbo opcional). So' a nota de cobertura fica em branco.
+  const needsAuthorization = isDespacho || !isCobertura;
+  const requireStamp = isDespacho;
   const [modo, setModo] = React.useState<"sistema" | "importado">("sistema");
   const [modeloId, setModeloId] = React.useState("");
   const [conteudo, setConteudo] = React.useState("");
@@ -48,28 +59,32 @@ export function DespachoDialog({
   const [assunto, setAssunto] = React.useState("");
   const [ficheiro, setFicheiro] = React.useState<File | null>(null);
   const [note, setNote] = React.useState("");
-  const [authorization, setAuthorization] = React.useState<{ stamp: Stamp | null; signature: Signature | null; loading: boolean }>({ stamp: null, signature: null, loading: !isDespacho ? false : true });
+  const [incluirCarimbo, setIncluirCarimbo] = React.useState(true);
+  const [authorization, setAuthorization] = React.useState<{ stamp: Stamp | null; signature: Signature | null; loading: boolean }>({ stamp: null, signature: null, loading: needsAuthorization });
   const [documentId, setDocumentId] = React.useState<string | null>(null);
   const [pdfUrl, setPdfUrl] = React.useState<string | null>(null);
   const [positioning, setPositioning] = React.useState(false);
   const [submitting, setSubmitting] = React.useState(false);
 
   React.useEffect(() => {
-    // A nota nunca leva carimbo/assinatura da Secretaria -- nao ha nada a
-    // verificar aqui, ela pode sempre escrever.
-    if (!isDespacho) return;
+    // A nota de cobertura nunca leva carimbo/assinatura da Secretaria -- nao
+    // ha nada a verificar aqui, ela pode sempre escrever.
+    if (!needsAuthorization) return;
     let cancelled = false;
     void fetch("/api/document-authorizations", { cache: "no-store" })
       .then((response) => response.json())
       .then((data) => { if (!cancelled) setAuthorization({ stamp: data.stamp ?? null, signature: data.signature ?? null, loading: false }); })
       .catch(() => { if (!cancelled) setAuthorization({ stamp: null, signature: null, loading: false }); });
     return () => { cancelled = true; };
-  }, [isDespacho]);
+  }, [needsAuthorization]);
 
   const template = documentTemplates.find((item) => item.id === modeloId);
   const activeTemplates = documentTemplates.filter((item) => item.estado === "activo");
-  const readyToSign = !isDespacho || Boolean(authorization.stamp && authorization.signature);
-  const hasFreePositionImages = isDespacho && Boolean(authorization.stamp?.imagemUrl || authorization.signature?.imagemUrl);
+  const readyToSign = !needsAuthorization || Boolean((!requireStamp || authorization.stamp) && authorization.signature);
+  // No despacho o carimbo e' sempre obrigatorio; na primeira nota, so' entra
+  // se a Secretaria escolher explicitamente inclui-lo -- nunca automaticamente.
+  const applyStamp = needsAuthorization && (requireStamp || incluirCarimbo);
+  const hasFreePositionImages = Boolean((applyStamp && authorization.stamp?.imagemUrl) || (needsAuthorization && authorization.signature?.imagemUrl));
   const successLabel = isDespacho ? "Despacho registado" : "Nota registada";
   const failureLabel = isDespacho ? "Despacho não registado" : "Nota não registada";
 
@@ -85,7 +100,7 @@ export function DespachoDialog({
     setSubmitting(true);
     try {
       const form = new FormData();
-      form.set("data", JSON.stringify({ modo: "sistema", modeloId, conteudo, note, assunto: !isDespacho ? assunto : undefined, intent }));
+      form.set("data", JSON.stringify({ modo: "sistema", modeloId, conteudo, note, incluirCarimbo: applyStamp, assunto: !isDespacho ? assunto : undefined, intent }));
       const response = await fetch(`/api/expedients/${expedientId}/${endpoint}`, { method: "POST", body: form });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error ?? `Não foi possível registar ${isDespacho ? "o despacho" : "a nota"}.`);
@@ -135,7 +150,7 @@ export function DespachoDialog({
     setSubmitting(true);
     try {
       const form = new FormData();
-      form.set("data", JSON.stringify({ modo: "sistema", documentId, intent, ...result }));
+      form.set("data", JSON.stringify({ modo: "sistema", documentId, incluirCarimbo: applyStamp, intent, ...result }));
       const response = await fetch(`/api/expedients/${expedientId}/${endpoint}`, { method: "POST", body: form });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error ?? "Não foi possível posicionar o carimbo/assinatura.");
@@ -154,7 +169,7 @@ export function DespachoDialog({
         open
         onOpenChange={(v) => { if (!v) { setPositioning(false); onClose(); } }}
         pdfUrl={pdfUrl}
-        stamp={authorization.stamp?.imagemUrl ? { imageUrl: authorization.stamp.imagemUrl, label: authorization.stamp.nome, initialPosition: authorization.stamp.posicaoLivre } : undefined}
+        stamp={applyStamp && authorization.stamp?.imagemUrl ? { imageUrl: authorization.stamp.imagemUrl, label: authorization.stamp.nome, initialPosition: authorization.stamp.posicaoLivre } : undefined}
         signature={authorization.signature?.imagemUrl ? { imageUrl: authorization.signature.imagemUrl, label: authorization.signature.proprietario, initialPosition: authorization.signature.posicaoLivre } : undefined}
         onConfirm={confirmPosition}
       />
@@ -183,7 +198,9 @@ export function DespachoDialog({
               </span>
               <span>
                 <span className="block text-[13px] font-medium text-graphite-900">Escrever no sistema</span>
-                <span className="block text-xs text-graphite-500">{isDespacho ? "Carimbo e assinatura aplicados automaticamente" : "Sem carimbo nem assinatura da Secretaria"}</span>
+                <span className="block text-xs text-graphite-500">
+                  {isDespacho ? "Carimbo e assinatura aplicados automaticamente" : isCobertura ? "Sem carimbo nem assinatura da Secretaria" : "Assinatura da Secretaria aplicada automaticamente"}
+                </span>
               </span>
             </button>
             <button
@@ -219,14 +236,14 @@ export function DespachoDialog({
 
           {modo === "sistema" && (
             <div className="space-y-3.5">
-              {isDespacho && !authorization.loading && !readyToSign && (
+              {needsAuthorization && !authorization.loading && !readyToSign && (
                 <p className="border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-relaxed text-amber-800">
-                  {!authorization.stamp && "A sua unidade ainda não tem um carimbo configurado. "}
+                  {requireStamp && !authorization.stamp && "A sua unidade ainda não tem um carimbo configurado. "}
                   {!authorization.signature && "Não tem uma assinatura configurada. "}
-                  Contacte a administração — não é possível escrever despachos no sistema sem os dois.
+                  Contacte a administração — não é possível escrever {isDespacho ? "despachos" : "notas"} no sistema sem {requireStamp ? "os dois" : "assinatura"}.
                 </p>
               )}
-              {isDespacho && !authorization.loading && readyToSign && !authorization.signature?.imagemUrl && (
+              {needsAuthorization && !authorization.loading && readyToSign && !authorization.signature?.imagemUrl && (
                 <p className="border border-info-200 bg-info-50 px-3 py-2 text-xs leading-relaxed text-info-800">
                   A sua assinatura ainda não tem uma imagem carregada, por isso vai ser aplicada como texto num local fixo do documento — não pode ser arrastada para uma posição específica. Peça a um administrador para carregar a imagem em Administração → Assinaturas.
                 </p>
@@ -246,6 +263,12 @@ export function DespachoDialog({
                 <Label required>{isDespacho ? "Texto do despacho" : "Texto da nota"}</Label>
                 <LetterEditor value={conteudo} onChange={setConteudo} title={isDespacho ? "Despacho" : "Nota"} template={template} compact />
               </div>
+              {needsAuthorization && !requireStamp && authorization.stamp && (
+                <label className="flex items-center gap-2 text-[13px] text-graphite-700">
+                  <input type="checkbox" checked={incluirCarimbo} onChange={(event) => setIncluirCarimbo(event.target.checked)} className="size-3.5" />
+                  Incluir também o carimbo da unidade (além da assinatura)
+                </label>
+              )}
             </div>
           )}
 

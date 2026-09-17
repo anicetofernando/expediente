@@ -2,7 +2,7 @@ import "server-only";
 import type { AuthSession } from "@/lib/session-types";
 import type { AuditEntry, Comment, Confidentiality, Expedient, ExpedientDocument, ExpedientStatus, Priority, TimelineEvent } from "@/types";
 import { db, query } from "@/lib/db";
-import { configuredDocumentTypes, requiresDirectorEscalation, secretaryOwnedUnitIds } from "@/lib/routing";
+import { configuredDocumentTypes, secretaryOwnedUnitIds } from "@/lib/routing";
 
 interface ExpedientRow {
   id: string; protocol: string; subject: string; document_type: string; description: string;
@@ -92,7 +92,6 @@ function mapBase(row: ExpedientRow): Expedient {
     proximaEtapa: row.next_step,
     observacoes: row.notes ?? undefined,
     documentos: [], timeline: [], comentarios: [],
-    precisaEscalarDirector: false,
     exigeCarimbo: false,
     exigeAssinatura: false,
     tipoLabel: row.document_type,
@@ -217,7 +216,6 @@ export async function getExpedient(session: AuthSession, id: string) {
   const expedient = mapBase(row);
   const docTypes = await configuredDocumentTypes(db);
   const documentType = docTypes.find((item) => item.id === row.document_type);
-  expedient.precisaEscalarDirector = requiresDirectorEscalation(row.recipient_unit_type, row.document_type, docTypes);
   expedient.exigeCarimbo = Boolean(documentType?.exigeCarimbo);
   expedient.exigeAssinatura = Boolean(documentType?.exigeAssinatura);
   expedient.tipoLabel = documentType?.nome ?? row.document_type;

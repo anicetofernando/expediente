@@ -6,7 +6,6 @@ import type { FreePosition } from "@/types";
 import { dateValueInMaputo, isValidFutureOrTodayDate, todayInMaputo } from "@/lib/date-only";
 import {
   configuredDocumentTypes,
-  requiresDirectorEscalation,
   resolveSecretaryId,
   secretaryOwnedUnitIds,
   targetResponsible,
@@ -442,13 +441,12 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       }
 
       if (action === "aprovar") {
-        const [docTypes, recipientUnit] = await Promise.all([
-          configuredDocumentTypes(client),
-          client.query<{ unit_type: string }>("SELECT unit_type FROM organizational_units WHERE id=$1", [exp.recipient_unit_id]),
-        ]);
-        if (session.perfilNavegacao === "superior" && requiresDirectorEscalation(recipientUnit.rows[0]?.unit_type, exp.document_type, docTypes)) {
-          throw new Error("Este tipo de documento exige aprovacao da direccao. Encaminhe para a unidade superior antes de aprovar.");
-        }
+        // O chefe de servico e o director tem exactamente a mesma capacidade de
+        // aprovar directamente, seja qual for o tipo de documento -- nao ha
+        // nenhuma obrigatoriedade de escalar ao director primeiro. A unica forma
+        // de o director intervir e' o proprio chefe escolher subir (Aprovar >
+        // Emitir nota de cobertura > Encaminhar), nunca uma imposicao do sistema.
+        const docTypes = await configuredDocumentTypes(client);
         const documentType = docTypes.find((item) => item.id === exp.document_type);
         if (!documentType) throw new Error("O tipo de documento deste expediente ja nao esta configurado.");
         // O chefe/director escolhe onde assina a aprovacao: na nota actual (se

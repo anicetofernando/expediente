@@ -204,7 +204,6 @@ export interface Expedient {
   timeline: TimelineEvent[];
   comentarios: Comment[];
   atrasado: boolean;
-  precisaEscalarDirector: boolean;
   exigeCarimbo: boolean;
   exigeAssinatura: boolean;
   tipoLabel: string;

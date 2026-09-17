@@ -54,7 +54,7 @@ const ACTION_ICONS: Record<string, React.ComponentType<{ className?: string }>> 
   XCircle,
 };
 
-type ActionExpedient = Pick<Expedient, "id" | "estado" | "protocolo" | "assunto" | "precisaEscalarDirector" | "exigeCarimbo" | "exigeAssinatura" | "responsavelActualId" | "destinatario" | "destinatarioId" | "destinatarioTipo" | "confidencialidade" | "pendingNextStatus">;
+type ActionExpedient = Pick<Expedient, "id" | "estado" | "protocolo" | "assunto" | "exigeCarimbo" | "exigeAssinatura" | "responsavelActualId" | "destinatario" | "destinatarioId" | "destinatarioTipo" | "confidencialidade" | "pendingNextStatus">;
 
 const PROFILE_ACTIONS: Record<string, Set<string>> = {
   remetente: new Set(["confirmar", "resposta"]),
@@ -70,7 +70,6 @@ export function ActionPanel({ expedient, principalPdfUrl }: { expedient: ActionE
   const { toast } = useToast();
   const { perfilNavegacao, profile, user } = useSession();
   const router = useRouter();
-  const blockDirectApproval = perfilNavegacao === "superior" && expedient.precisaEscalarDirector;
   // Depois de encaminhar, a Secretaria deixa de poder devolver por iniciativa
   // propria -- o processo ja esta em maos do superior. So ele pode devolve-lo
   // a partir daqui (espelha a mesma regra aplicada no backend).
@@ -87,7 +86,6 @@ export function ActionPanel({ expedient, principalPdfUrl }: { expedient: ActionE
   const actions = (ACTIONS_BY_STATUS[expedient.estado] ?? [])
     .filter((action) => PROFILE_ACTIONS[perfilNavegacao]?.has(action.key))
     .filter((action) => hasActionPermission(profile.permissoes, action.key))
-    .filter((action) => !(blockDirectApproval && action.key === "aprovar"))
     .filter((action) => !(blockSecretaryReturn && action.key === "devolver"))
     .filter((action) => !(blockNonResponsibleHandoff && (action.key === "resposta" || action.key === "esclarecimento")))
     .filter((action) => !(perfilNavegacao === "superior" && (action.key === "disponibilizar" || action.key === "notificar") && !allowSuperiorConfidentialHandoff))
@@ -154,11 +152,6 @@ export function ActionPanel({ expedient, principalPdfUrl }: { expedient: ActionE
 
   return (
     <div className="space-y-2">
-      {blockDirectApproval && (
-        <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs leading-relaxed text-amber-800">
-          Este tipo de documento exige aprovação da direcção. Encaminhe para a unidade superior — não pode aprovar directamente aqui.
-        </p>
-      )}
       {["rascunho", "devolvido"].includes(expedient.estado) && perfilNavegacao === "remetente" && (
         <Button asChild className="w-full justify-start">
           <Link href={`/expedientes/novo?rascunho=${expedient.id}`}>
@@ -385,6 +378,7 @@ function ActionDialog({
         endpoint="nota"
         dialogTitle={expedient.pendingNextStatus === "nota_cobertura" ? "Criar nota de cobertura" : "Criar nota"}
         submitLabel={expedient.pendingNextStatus === "nota_cobertura" ? "Registar nota de cobertura" : "Registar nota"}
+        isCobertura={expedient.pendingNextStatus === "nota_cobertura"}
       />
     );
   }

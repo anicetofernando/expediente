@@ -173,7 +173,6 @@ export default async function ExpedientDetailPage({ params }: { params: { id: st
                   estado: expedient.estado,
                   protocolo: expedient.protocolo,
                   assunto: expedient.assunto,
-                  precisaEscalarDirector: expedient.precisaEscalarDirector,
                   exigeCarimbo: expedient.exigeCarimbo,
                   exigeAssinatura: expedient.exigeAssinatura,
                   responsavelActualId: expedient.responsavelActualId,
