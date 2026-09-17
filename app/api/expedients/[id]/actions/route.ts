@@ -373,11 +373,43 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       }
 
       if (action === "aprovar_nota") {
-        // "Emitir nota de cobertura": ao contrario da 1a nota (assinada pela
-        // Secretaria), esta e' preparada em branco -- e' o proprio chefe de
-        // servico que a carimba e assina, mas so' mais tarde, ao encaminhar ou
-        // pedir parecer (estado "nota_cobertura"). Aqui so' se pede a
-        // Secretaria para a preparar; nao se assina nada agora.
+        // A Secretaria nunca assina nem carimba nenhuma nota -- so' protocola e
+        // transmite. Ao "aprovar para nova nota", e' o proprio chefe/director
+        // que carimba e assina a nota ACTUAL (a que tem em maos agora), antes
+        // de pedir a Secretaria para preparar a proxima (em branco, "nota de
+        // cobertura") -- so' mais tarde, ao encaminhar ou pedir parecer, e' que
+        // ele volta a carimbar/assinar essa nota seguinte.
+        const latestNota = await client.query<{
+          id: string; stamps_metadata: Array<{ id?: string }> | null; signatures_metadata: Array<{ id?: string }> | null;
+        }>(
+          "SELECT id,stamps_metadata,signatures_metadata FROM documents WHERE expedient_id=$1 AND document_kind='nota' ORDER BY created_at DESC LIMIT 1 FOR UPDATE",
+          [exp.id],
+        );
+        if (latestNota.rows[0]) {
+          const signatures = await configuredSignatures(client);
+          const signature = resolveUserSignature(signatures, session.user);
+          if (!signature) throw new Error("Nao tem uma assinatura individual activa. Configure-a em Administracao > Assinaturas.");
+          const signatureEntries = latestNota.rows[0].signatures_metadata ?? [];
+          if (!signatureEntries.some((entry) => entry.id === signature.id)) {
+            const entry = signatureMetadataJson(signature, session.user, signature.posicaoLivre);
+            signatureEntries.push(entry);
+            await client.query(
+              `UPDATE documents SET signed=true,signature_metadata=$2::jsonb,signatures_metadata=$3::jsonb WHERE id=$1`,
+              [latestNota.rows[0].id, JSON.stringify(entry), JSON.stringify(signatureEntries)],
+            );
+          }
+          const stamps = await configuredStamps(client);
+          const stamp = resolveUnitStamp(stamps, session.user, session.unitName, session.perfilNavegacao);
+          const stampEntries = latestNota.rows[0].stamps_metadata ?? [];
+          if (stamp && !stampEntries.some((entry) => entry.id === stamp.id)) {
+            const entry = stampMetadataJson(stamp, session.user.nome, stamp.posicaoLivre);
+            stampEntries.push(entry);
+            await client.query(
+              `UPDATE documents SET stamped=true,stamp_metadata=$2::jsonb,stamps_metadata=$3::jsonb WHERE id=$1`,
+              [latestNota.rows[0].id, JSON.stringify(entry), JSON.stringify(stampEntries)],
+            );
+          }
+        }
         const secretaryId = await resolveSecretaryId(client, exp.recipient_unit_id);
         if (!secretaryId) throw new Error("Nao existe utilizador activo da Secretaria para preparar a nota de cobertura.");
         responsible = secretaryId;

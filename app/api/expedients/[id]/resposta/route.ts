@@ -10,6 +10,7 @@ import { rememberStampSignaturePositions, resolveMandatoryStampSignature, signat
 import { saveFile } from "@/lib/file-storage";
 import { hasAllPermissions } from "@/lib/permissions";
 import { generateProtocolNumber } from "@/lib/numbering";
+import { resolveSecretaryId } from "@/lib/routing";
 import type { FreePosition } from "@/types";
 
 export const runtime = "nodejs";
@@ -22,7 +23,10 @@ const ALLOWED_STATUS = new Set(["aguardando_parecer", "aguardando_esclarecimento
  * Quando o despacho responde a um pedido de parecer/esclarecimento, o processo
  * deixa de estar "a aguardar" e volta para quem o solicitou, para continuar a
  * analise -- caso contrario ficaria preso em "aguardando_parecer" para sempre,
- * mesmo depois de respondido.
+ * mesmo depois de respondido. O esclarecimento e' sempre um vai-e-vem directo
+ * com o remetente (sem secretaria no meio). Ja o parecer volta sempre pela
+ * Secretaria da unidade que o pediu -- exactamente como qualquer outro salto
+ * entre unidades -- nunca directo de chefe para chefe.
  */
 async function returnToRequesterIfPending(
   client: Parameters<Parameters<typeof transaction>[0]>[0],
@@ -30,15 +34,26 @@ async function returnToRequesterIfPending(
 ) {
   if (exp.status !== "aguardando_parecer" && exp.status !== "aguardando_esclarecimento") return;
   const eventType = exp.status === "aguardando_parecer" ? "parecer" : "esclarecimento";
-  const requester = await client.query<{ user_id: string | null }>(
-    "SELECT user_id FROM timeline_events WHERE expedient_id=$1 AND event_type=$2 ORDER BY created_at DESC LIMIT 1",
+  const requester = await client.query<{ user_id: string | null; unit_id: string | null }>(
+    "SELECT user_id,unit_id FROM timeline_events WHERE expedient_id=$1 AND event_type=$2 ORDER BY created_at DESC LIMIT 1",
     [exp.id, eventType],
   );
-  const nextResponsible = requester.rows[0]?.user_id ?? exp.responsible_user_id;
-  // Volta para "encaminhado" (nao "em_analise") para que quem solicitou continue
-  // no mesmo ciclo de notas -- pode aprovar, aprovar-para-nova-nota, rejeitar,
-  // encaminhar ou pedir outro parecer, exactamente como antes de ter pedido este.
-  await client.query("UPDATE expedients SET status='encaminhado', responsible_user_id=$2 WHERE id=$1", [exp.id, nextResponsible]);
+  const requesterUserId = requester.rows[0]?.user_id ?? exp.responsible_user_id;
+  const requesterUnitId = requester.rows[0]?.unit_id;
+
+  if (eventType === "parecer" && requesterUnitId) {
+    const secretaryId = await resolveSecretaryId(client, requesterUnitId);
+    if (secretaryId) {
+      await client.query(
+        "UPDATE expedients SET status='em_transito',recipient_unit_id=$2,responsible_user_id=$3,pending_next_status='encaminhado' WHERE id=$1",
+        [exp.id, requesterUnitId, secretaryId],
+      );
+      return;
+    }
+  }
+  // Esclarecimento (ou parecer sem secretaria configurada para a unidade que
+  // pediu) continua directo -- volta ao mesmo ciclo de notas de quem pediu.
+  await client.query("UPDATE expedients SET status='encaminhado', responsible_user_id=$2 WHERE id=$1", [exp.id, requesterUserId]);
 }
 
 /**

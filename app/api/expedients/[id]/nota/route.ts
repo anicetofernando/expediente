@@ -6,11 +6,9 @@ import { audit, getCurrentSession } from "@/lib/auth";
 import { transaction } from "@/lib/db";
 import { sanitizeDocumentHtml } from "@/lib/sanitize-html";
 import { templateSnapshot } from "@/lib/document-configuration";
-import { rememberStampSignaturePositions, resolveOptionalStampSignature, signatureMetadataJson, stampMetadataJson } from "@/lib/stamping";
 import { saveFile } from "@/lib/file-storage";
 import { generateProtocolNumber } from "@/lib/numbering";
 import { targetResponsible } from "@/lib/routing";
-import type { FreePosition } from "@/types";
 
 export const runtime = "nodejs";
 
@@ -29,15 +27,9 @@ function validateFile(file: File) {
 
 interface NotaInput {
   modo: "sistema" | "importado";
-  documentId?: string;
   modeloId?: string;
   conteudo?: string;
-  posicaoCarimbo?: FreePosition;
-  posicaoAssinatura?: FreePosition;
   note?: string;
-  /** A Secretaria escolhe explicitamente se a nota leva tambem o carimbo da
-   * unidade -- nunca e' aplicado automaticamente so por estar configurado. */
-  incluirCarimbo?: boolean;
   /** O assunto da nota e' escrito pela Secretaria -- nunca herdado
    * automaticamente do expediente original. */
   assunto?: string;
@@ -45,10 +37,12 @@ interface NotaInput {
 
 /**
  * A Secretaria cria a Nota de encaminhamento -- escrita no sistema ou
- * importada, com a sua assinatura pessoal (obrigatoria) e o carimbo da
- * unidade (opcional, ao contrario do despacho/remetente onde os dois sao
- * sempre exigidos). O expediente original fica sempre visivel junto, como
- * outro documento do mesmo processo -- a nota nunca o substitui.
+ * importada -- mas nunca a assina nem carimba: ela e' so' quem protocola e
+ * transmite. Quem marca a nota com carimbo/assinatura e' sempre o chefe de
+ * servico ou o director, quando a recebe e decide (aprovar, aprovar para
+ * nova nota, encaminhar, pedir parecer ou rejeitar). O expediente original
+ * fica sempre visivel junto, como outro documento do mesmo processo -- a
+ * nota nunca o substitui.
  */
 export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
   const session = await getCurrentSession();
@@ -64,13 +58,11 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     const input = JSON.parse(raw) as NotaInput;
     const filePart = form.get("file");
     const file = filePart instanceof File && filePart.size > 0 ? filePart : null;
-    if (!input.documentId) {
-      if (!input.assunto?.trim()) throw new Error("Escreva o assunto da nota.");
-      if (input.modo === "importado" && !file) throw new Error("Seleccione o ficheiro da nota.");
-      if (input.modo === "sistema") {
-        const clean = sanitizeDocumentHtml(input.conteudo ?? "");
-        if (!clean.replace(/<[^>]*>/g, "").trim()) throw new Error("Escreva o conteudo da nota.");
-      }
+    if (!input.assunto?.trim()) throw new Error("Escreva o assunto da nota.");
+    if (input.modo === "importado" && !file) throw new Error("Seleccione o ficheiro da nota.");
+    if (input.modo === "sistema") {
+      const clean = sanitizeDocumentHtml(input.conteudo ?? "");
+      if (!clean.replace(/<[^>]*>/g, "").trim()) throw new Error("Escreva o conteudo da nota.");
     }
     if (file) validateFile(file);
 
@@ -100,26 +92,10 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         return nextResponsible;
       }
 
-      // Nota de cobertura: a Secretaria so' cria o documento em branco -- nao
-      // assina nem carimba. Quem o faz e' o chefe de servico, mais tarde, ao
-      // encaminhar ou pedir parecer (estado "nota_cobertura").
+      // A nota e' sempre criada em branco -- a Secretaria nunca a assina nem
+      // carimba, so' protocola e transmite. Quem a marca e' sempre o chefe de
+      // servico/director, quando a recebe e decide.
       const isCobertura = exp.pending_next_status === "nota_cobertura";
-
-      if (input.documentId) {
-        const doc = await client.query<{ id: string }>("SELECT id FROM documents WHERE id=$1 AND expedient_id=$2 AND document_kind='nota'", [input.documentId, exp.id]);
-        if (!doc.rows[0]) throw new Error("Nota nao encontrada.");
-        const resolved = await resolveOptionalStampSignature(client, session.user, session.unitName, session.perfilNavegacao);
-        if (!input.incluirCarimbo) resolved.stamp = null;
-        const signatureEntry = JSON.stringify(signatureMetadataJson(resolved.signature, session.user, input.posicaoAssinatura));
-        const stampEntry = resolved.stamp ? JSON.stringify(stampMetadataJson(resolved.stamp, session.user.nome, input.posicaoCarimbo)) : null;
-        await client.query(
-          "UPDATE documents SET signature_metadata=$2::jsonb,signatures_metadata=$3::jsonb,stamp_metadata=COALESCE($4::jsonb,stamp_metadata),stamps_metadata=COALESCE($5::jsonb,stamps_metadata),stamped=$6,signed=true WHERE id=$1",
-          [input.documentId, signatureEntry, `[${signatureEntry}]`, stampEntry, stampEntry ? `[${stampEntry}]` : null, Boolean(resolved.stamp)],
-        );
-        if (resolved.stamp) await rememberStampSignaturePositions(client, resolved.stamp, resolved.signature, input.posicaoCarimbo, input.posicaoAssinatura);
-        const nextResponsible = await completeHandoff();
-        return { documentId: input.documentId, finalized: true, nextResponsible };
-      }
 
       const documentId = randomUUID();
       const unit = await client.query<{ acronym: string }>(
@@ -128,30 +104,14 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       const documentNumber = unit.rows[0]
         ? await generateProtocolNumber(client, session.user.unidadeId, unit.rows[0].acronym, new Date().getFullYear())
         : null;
-      let sistemaHasFreePositionImages = false;
       if (input.modo === "sistema") {
         const clean = sanitizeDocumentHtml(input.conteudo ?? "");
         const template = await templateSnapshot(client, input.modeloId);
-        let stampId: string | null = null;
-        let stamped = false;
-        let signed = false;
-        let stampEntry: string | null = null;
-        let signatureEntry: string | null = null;
-        if (!isCobertura) {
-          const resolved = await resolveOptionalStampSignature(client, session.user, session.unitName, session.perfilNavegacao);
-          if (!input.incluirCarimbo) resolved.stamp = null;
-          sistemaHasFreePositionImages = Boolean(resolved.stamp?.imagemUrl || resolved.signature.imagemUrl);
-          signatureEntry = JSON.stringify(signatureMetadataJson(resolved.signature, session.user));
-          stampEntry = resolved.stamp ? JSON.stringify(stampMetadataJson(resolved.stamp, session.user.nome)) : null;
-          stampId = resolved.stamp?.id ?? null;
-          stamped = Boolean(resolved.stamp);
-          signed = true;
-        }
         await client.query(
-          `INSERT INTO documents(id,expedient_id,name,document_kind,source,mime_type,size_bytes,page_count,content_html,confidentiality,created_by,stamp_id,stamped,signed,stamp_metadata,signature_metadata,stamps_metadata,signatures_metadata,template_metadata,document_number,created_for_unit_id,subject)
-           VALUES($1,$2,$3,'nota','sistema','text/html',$4,1,$5,'interno',$6,$7,$8,$9,$10::jsonb,$11::jsonb,$12::jsonb,$13::jsonb,$14::jsonb,$15,$16,$17)`,
-          [documentId, exp.id, `${isCobertura ? "Nota de cobertura" : "Nota"} - ${exp.protocol}.html`, Buffer.byteLength(clean, "utf8"), clean, session.user.id, stampId,
-            stamped, signed, stampEntry, signatureEntry, stampEntry ? `[${stampEntry}]` : "[]", signatureEntry ? `[${signatureEntry}]` : "[]", template ? JSON.stringify(template) : null, documentNumber, exp.recipient_unit_id, input.assunto?.trim()],
+          `INSERT INTO documents(id,expedient_id,name,document_kind,source,mime_type,size_bytes,page_count,content_html,confidentiality,created_by,stamped,signed,stamps_metadata,signatures_metadata,template_metadata,document_number,created_for_unit_id,subject)
+           VALUES($1,$2,$3,'nota','sistema','text/html',$4,1,$5,'interno',$6,false,false,'[]'::jsonb,'[]'::jsonb,$7::jsonb,$8,$9,$10)`,
+          [documentId, exp.id, `${isCobertura ? "Nota de cobertura" : "Nota"} - ${exp.protocol}.html`, Buffer.byteLength(clean, "utf8"), clean, session.user.id,
+            template ? JSON.stringify(template) : null, documentNumber, exp.recipient_unit_id, input.assunto?.trim()],
         );
       } else if (file) {
         const bytes = Buffer.from(await file.arrayBuffer());
@@ -164,10 +124,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         );
       }
 
-      let nextResponsible: string | null = null;
-      if (input.modo === "importado" || !sistemaHasFreePositionImages) {
-        nextResponsible = await completeHandoff();
-      }
+      const nextResponsible = await completeHandoff();
       const eventTitle = isCobertura ? "Nota de cobertura emitida" : "Nota de encaminhamento criada";
       await client.query(
         `INSERT INTO timeline_events(expedient_id,event_type,title,description,user_id,unit_id) VALUES($1,'nota',$2,$3,$4,$5)`,

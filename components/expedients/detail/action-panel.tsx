@@ -384,7 +384,6 @@ function ActionDialog({
         onDone={() => { onClose(); router.refresh(); }}
         endpoint="nota"
         dialogTitle={expedient.pendingNextStatus === "nota_cobertura" ? "Criar nota de cobertura" : "Criar nota"}
-        requireStamp={false}
         submitLabel={expedient.pendingNextStatus === "nota_cobertura" ? "Registar nota de cobertura" : "Registar nota"}
       />
     );
