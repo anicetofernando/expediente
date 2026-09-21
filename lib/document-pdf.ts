@@ -57,6 +57,12 @@ export interface PdfDocumentInput {
   /** Departamento/unidade de quem emite este documento em concreto (mostrado
    * no cabecalho, por baixo do logotipo). */
   issuingUnit?: string;
+  issuingParentUnit?: string | null;
+  /** Unidade destinataria deste documento em concreto. Para o documento
+   * principal vem do destinatario escolhido pelo remetente; para notas vem do
+   * destinatario escolhido pela Secretaria/fluxo. */
+  recipientUnit?: string | null;
+  recipientParentUnit?: string | null;
   /** Numero de referencia proprio deste documento (nota/despacho), diferente
    * do protocolo do expediente. So' notas e despachos tem numeracao propria. */
   documentNumber?: string | null;
@@ -96,6 +102,20 @@ function decisionAttribution(note: NonNullable<PdfDocumentInput["decisionNote"]>
 function decisionNoteMarkup(note: NonNullable<PdfDocumentInput["decisionNote"]>, className: string, position?: PdfFreePosition) {
   const style = position ? ` style="left:${position.x}%;top:${position.y}%;width:${position.width}%;height:${position.height}%;"` : "";
   return `<section class="${className}"${style}><p>${escapeHtml(note.texto).replace(/\r?\n/g, "<br>")}</p><span>${decisionAttribution(note)}</span></section>`;
+}
+
+function uniqueDisplayLines(values: Array<string | null | undefined>) {
+  const seen = new Set<string>();
+  const lines: string[] = [];
+  for (const value of values) {
+    const clean = value?.trim();
+    if (!clean) continue;
+    const key = clean.toLocaleLowerCase("pt-PT");
+    if (seen.has(key)) continue;
+    seen.add(key);
+    lines.push(clean);
+  }
+  return lines;
 }
 
 async function browserExecutable() {
@@ -158,7 +178,14 @@ async function printableHtml(input: PdfDocumentInput, body: string) {
   const textBanner = headerLogo
     ? ""
     : `<strong class="institutional-name">${escapeHtml(input.template?.cabecalho ?? input.institutionName ?? "CFM — Portos e Caminhos de Ferro de Moçambique").replace(/\r?\n/g, "<br>")}</strong>`;
-  const issuingUnitLine = input.issuingUnit ? `<div class="issuing-unit">${escapeHtml(input.issuingUnit)}</div>` : "";
+  const issuingLines = uniqueDisplayLines([input.issuingParentUnit, input.issuingUnit]);
+  const issuingUnitBlock = issuingLines.length
+    ? `<div class="issuing-unit">${issuingLines.map((line) => `<span>${escapeHtml(line)}</span>`).join("")}</div>`
+    : "";
+  const recipientLines = uniqueDisplayLines([input.recipientUnit, input.recipientParentUnit]);
+  const routingPanel = recipientLines.length
+    ? `<div class="routing-panel"><div class="routing-recipient"><span class="recipient-label">EXMO. SENHOR:</span>${recipientLines.map((line, index) => `<span class="${index === 0 ? "recipient-name" : "recipient-parent"}">${escapeHtml(line)}</span>`).join("")}</div><div class="routing-dispatch">Despacho</div></div>`
+    : "";
   // Nota/despacho tem numeracao propria (N/Refª) e refere-se sempre ao
   // expediente original -- essa referencia nunca pode ser editada nem apagada
   // por quem escreve, por isso fica fixa aqui no cabecalho, nunca no corpo.
@@ -180,9 +207,9 @@ async function printableHtml(input: PdfDocumentInput, body: string) {
     ? decisionNoteMarkup(input.decisionNote, "free-position-text", input.decisionNote.posicaoLivre)
     : "";
   return `<!doctype html><html lang="pt"><head><meta charset="utf-8"><title>${escapeHtml(input.name)}</title><style>
-    @page{size:A4;margin:20mm 19mm 22mm}*{box-sizing:border-box}html,body{margin:0;padding:0;color:#1f2937;font-family:Arial,Helvetica,sans-serif;font-size:11.5pt;line-height:1.55}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}.brand-logo{display:block;object-fit:contain}.header-logo{width:100%;max-width:170mm;height:auto;margin:0 auto 4mm}.footer-logo{max-height:14mm;max-width:38mm;margin:0 auto 2mm}.institutional-header{margin:0 0 8mm;padding:0 0 4mm;border-bottom:2px solid #173f70}.institutional-name{display:block;text-align:center;color:#102f56;font-size:10pt;letter-spacing:.09em;text-transform:uppercase;margin-bottom:6mm}.issuing-unit{text-align:center;color:#354052;font-size:9.5pt;font-weight:700;text-transform:uppercase;margin-bottom:5mm}.ref-line{display:flex;justify-content:space-between;gap:6mm;margin-bottom:2mm;font-size:10pt;color:#1f2937}.related-expedient{margin-bottom:2mm;font-size:9pt;color:#354052}.subject-line{font-size:11pt}.subject-line strong{text-decoration:underline}.content{overflow-wrap:anywhere;margin-top:6mm}.content img{display:block;max-width:100%;height:auto;margin:0 auto}.content table{max-width:100%;border-collapse:collapse}.content td,.content th{padding:2mm;border:1px solid #cbd5e1}.decision-note{margin-top:12mm;padding:4mm 5mm;border:1px solid #cad1dc;border-left:3px solid #173f70;break-inside:avoid;page-break-inside:avoid}.decision-note p{margin:0 0 2mm;font-style:italic;white-space:pre-wrap;overflow-wrap:anywhere}.decision-note span{display:block;font-size:9pt;font-weight:700;color:#354052}.template-footer{margin-top:14mm;padding-top:4mm;border-top:1px solid #cad1dc;color:#687386;font-size:8pt;text-align:center;break-inside:avoid}.document-validations{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:8mm 12mm;margin-top:18mm;padding-top:8mm;break-inside:avoid;page-break-inside:avoid}.stamp{display:flex;min-width:58mm;max-width:78mm;transform:rotate(-2deg);flex-direction:column;gap:1mm;border:2px solid #173f70;padding:3mm 5mm;color:#173f70;text-align:center;text-transform:uppercase}.stamp strong{font-size:10pt}.stamp span{font-size:8pt}.stamp small{font-size:6.5pt;text-transform:none}.signature{display:flex;min-width:64mm;flex-direction:column;border-top:1px solid #354052;padding-top:3mm;text-align:center}.signature-mark{margin-bottom:2mm;color:#177047;font-size:7pt;font-weight:700;text-transform:uppercase}.signature strong{font-size:9pt}.signature span,.signature small{font-size:7pt;color:#596579}.free-position{position:fixed;object-fit:contain;pointer-events:none}.watermark{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%) rotate(-32deg);font-size:64pt;font-weight:800;letter-spacing:.15em;color:rgba(23,63,112,0.14);text-transform:uppercase;white-space:nowrap;pointer-events:none;z-index:0}
+    @page{size:A4;margin:20mm 19mm 22mm}*{box-sizing:border-box}html,body{margin:0;padding:0;color:#1f2937;font-family:Arial,Helvetica,sans-serif;font-size:11.5pt;line-height:1.55}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}.brand-logo{display:block;object-fit:contain}.header-logo{width:100%;max-width:170mm;height:auto;margin:0 auto 3mm}.footer-logo{max-height:14mm;max-width:38mm;margin:0 auto 2mm}.institutional-header{margin:0 0 8mm;padding:0}.institutional-name{display:block;text-align:center;color:#102f56;font-size:10pt;letter-spacing:0;text-transform:uppercase;margin-bottom:5mm}.issuing-unit{text-align:center;color:#198754;font-size:10pt;font-weight:700;text-transform:uppercase;margin:0 0 4mm;line-height:1.25}.issuing-unit span{display:block}.routing-panel{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,.95fr);min-height:22mm;border:1.3px solid #1f2937;margin-bottom:2.5mm}.routing-recipient{border-right:1.3px solid #1f2937;padding:3mm 4mm;line-height:1.25}.recipient-label{display:block;font-weight:700;text-transform:uppercase}.recipient-name{display:block;margin-top:2mm;font-weight:700;text-transform:uppercase}.recipient-parent{display:block;margin-top:1mm;font-size:9.5pt;text-transform:uppercase}.routing-dispatch{display:flex;align-items:flex-start;justify-content:center;padding:3mm 4mm;font-weight:700;text-decoration:underline}.ref-line{display:flex;justify-content:space-between;gap:6mm;margin-bottom:2mm;font-size:10pt;color:#1f2937}.related-expedient{margin-bottom:2mm;font-size:9pt;color:#354052}.subject-line{font-size:11pt}.subject-line strong{text-decoration:underline}.content{overflow-wrap:anywhere;margin-top:6mm}.content img{display:block;max-width:100%;height:auto;margin:0 auto}.content table{max-width:100%;border-collapse:collapse}.content td,.content th{padding:2mm;border:1px solid #cbd5e1}.decision-note{margin-top:12mm;padding:4mm 5mm;border:1px solid #cad1dc;border-left:3px solid #173f70;break-inside:avoid;page-break-inside:avoid}.decision-note p{margin:0 0 2mm;font-style:italic;white-space:pre-wrap;overflow-wrap:anywhere}.decision-note span{display:block;font-size:9pt;font-weight:700;color:#354052}.template-footer{margin-top:14mm;padding-top:4mm;border-top:1px solid #cad1dc;color:#687386;font-size:8pt;text-align:center;break-inside:avoid}.document-validations{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:8mm 12mm;margin-top:18mm;padding-top:8mm;break-inside:avoid;page-break-inside:avoid}.stamp{display:flex;min-width:58mm;max-width:78mm;transform:rotate(-2deg);flex-direction:column;gap:1mm;border:2px solid #173f70;padding:3mm 5mm;color:#173f70;text-align:center;text-transform:uppercase}.stamp strong{font-size:10pt}.stamp span{font-size:8pt}.stamp small{font-size:6.5pt;text-transform:none}.signature{display:flex;min-width:64mm;flex-direction:column;border-top:1px solid #354052;padding-top:3mm;text-align:center}.signature-mark{margin-bottom:2mm;color:#177047;font-size:7pt;font-weight:700;text-transform:uppercase}.signature strong{font-size:9pt}.signature span,.signature small{font-size:7pt;color:#596579}.free-position{position:fixed;object-fit:contain;pointer-events:none}.watermark{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%) rotate(-32deg);font-size:64pt;font-weight:800;letter-spacing:0;color:rgba(23,63,112,0.14);text-transform:uppercase;white-space:nowrap;pointer-events:none;z-index:0}
     .decision-note{padding:0;border:0;border-left:0}.free-position-text{position:fixed;overflow:hidden;pointer-events:none;color:#1f2937;font-size:9pt;line-height:1.25}.free-position-text p{margin:0 0 1.5mm;font-style:italic;white-space:pre-wrap;overflow-wrap:anywhere}.free-position-text span{display:block;font-size:7.5pt;font-weight:700;color:#354052}
-  </style></head><body>${input.watermark ? `<div class="watermark">${escapeHtml(input.watermark)}</div>` : ""}<header class="institutional-header">${headerLogo}${textBanner}${issuingUnitLine}${refLine}<div class="subject-line"><strong>Assunto:</strong> ${escapeHtml(input.subject)}</div></header><main class="content">${body}${inlineDecisionNoteHtml}</main><footer class="template-footer">${footerLogo}${footerText}</footer>${freeDecisionNoteHtml}${await decorations(input)}</body></html>`;
+  </style></head><body>${input.watermark ? `<div class="watermark">${escapeHtml(input.watermark)}</div>` : ""}<header class="institutional-header">${headerLogo}${textBanner}${issuingUnitBlock}${routingPanel}${refLine}<div class="subject-line"><strong>Assunto:</strong> ${escapeHtml(input.subject)}</div></header><main class="content">${body}${inlineDecisionNoteHtml}</main><footer class="template-footer">${footerLogo}${footerText}</footer>${freeDecisionNoteHtml}${await decorations(input)}</body></html>`;
 }
 
 async function renderHtmlPdfServerless(html: string) {
@@ -378,7 +405,7 @@ async function bodyFromInput(input: PdfDocumentInput) {
 export async function createDocumentPdf(input: PdfDocumentInput) {
   const key = createHash("sha256")
     .update(input.contentHtml ?? input.sourceFile ?? "")
-    .update(JSON.stringify({ protocol: input.protocol, stamps: input.stamps, signatures: input.signatures, template: input.template, institutionName: input.institutionName, watermark: input.watermark, decisionNote: input.decisionNote }))
+    .update(JSON.stringify({ protocol: input.protocol, stamps: input.stamps, signatures: input.signatures, template: input.template, institutionName: input.institutionName, watermark: input.watermark, issuingUnit: input.issuingUnit, issuingParentUnit: input.issuingParentUnit, recipientUnit: input.recipientUnit, recipientParentUnit: input.recipientParentUnit, documentNumber: input.documentNumber, documentKind: input.documentKind, decisionNote: input.decisionNote }))
     .digest("hex");
   const cached = outputCache.get(key);
   if (cached) return cached;

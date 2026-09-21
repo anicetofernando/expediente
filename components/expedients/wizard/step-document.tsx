@@ -8,12 +8,22 @@ import { useCatalogs } from "@/lib/catalogs";
 import type { StepProps } from "./types";
 import { LetterEditor } from "@/components/documents/letter-editor";
 
+function stripRecipientFromInitialContent(text: string) {
+  return text.replace(/^\s*Exmo\.?\s*Senhor[:,]?\s*/i, "").trimStart();
+}
+
 export function StepDocument({ state, update }: StepProps) {
-  const { documentTemplates } = useCatalogs();
+  const { documentTemplates, organizationalUnits } = useCatalogs();
 
   if (state.origemDocumento === "sistema") {
     const template = documentTemplates.find((t) => t.id === state.modeloId);
+    const originUnit = organizationalUnits.find((unit) => unit.id === state.unidadeOrigem);
+    const originParent = organizationalUnits.find((unit) => unit.id === originUnit?.parentId);
+    const recipientUnit = organizationalUnits.find((unit) => unit.id === state.destinatario);
+    const recipientParent = organizationalUnits.find((unit) => unit.id === recipientUnit?.parentId);
     const initialHtml = (text: string) => text
+      .replace(/^\s*Exmo\.?\s*Senhor[:,]?\s*/i, "")
+      .trimStart()
       .split(/\r?\n/)
       .map((line) => `<p>${line.replace(/[&<>]/g, (value) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[value] ?? value) || "<br>"}</p>`)
       .join("");
@@ -23,7 +33,7 @@ export function StepDocument({ state, update }: StepProps) {
           <Label required>Modelo de documento</Label>
           <Select value={state.modeloId} onValueChange={(v) => {
             const next = documentTemplates.find((item) => item.id === v);
-            update({ modeloId: v, ...(!state.conteudo && next?.conteudoInicial ? { conteudo: initialHtml(next.conteudoInicial) } : {}) });
+            update({ modeloId: v, ...(!state.conteudo && next?.conteudoInicial ? { conteudo: initialHtml(stripRecipientFromInitialContent(next.conteudoInicial)) } : {}) });
           }}>
             <SelectTrigger><SelectValue placeholder="Seleccione um modelo" /></SelectTrigger>
             <SelectContent>
@@ -36,7 +46,20 @@ export function StepDocument({ state, update }: StepProps) {
 
           <div className="mt-3.5">
             <Label required>Conteúdo da carta</Label>
-            <LetterEditor value={state.conteudo} onChange={(conteudo) => update({ conteudo })} title={template?.nome} template={template} />
+            <LetterEditor
+              value={state.conteudo}
+              onChange={(conteudo) => update({ conteudo })}
+              title={template?.nome}
+              template={template}
+              header={{
+                issuingUnit: originUnit?.nome,
+                issuingParentUnit: originParent?.nome,
+                recipientUnit: recipientUnit?.nome,
+                recipientParentUnit: recipientParent?.nome,
+                reference: "gerada no protocolo",
+                subject: state.assunto,
+              }}
+            />
           </div>
         </section>
 
@@ -45,8 +68,23 @@ export function StepDocument({ state, update }: StepProps) {
           <div className="h-[78vh] min-h-[720px] max-h-[920px] overflow-y-auto border border-graphite-300 bg-graphite-50 p-3">
             <div className="mx-auto min-h-[680px] max-w-[520px] overflow-hidden border border-graphite-200 bg-white px-9 py-10 text-2xs [overflow-wrap:anywhere]">
               {template?.logotipo && template.logotipoPosicao === "cabecalho" && <img src={template.logotipo} alt="Logótipo" className="mx-auto mb-3 max-h-16 max-w-36 object-contain" />}
-              <p className="whitespace-pre-line text-center text-[11px] font-semibold uppercase tracking-wide text-navy-800">{template?.cabecalho ?? "CFM — Portos e Caminhos de Ferro de Moçambique"}</p>
-              <p className="mt-1 text-center text-2xs text-graphite-400">{template?.nome ?? "Modelo de documento"}</p>
+              <div className="text-center text-[10px] font-semibold uppercase leading-tight text-success-700">
+                {originParent && <p>{originParent.nome}</p>}
+                <p>{originUnit?.nome ?? "Unidade emitente"}</p>
+              </div>
+              <div className="mt-3 grid min-h-20 grid-cols-2 border border-graphite-700 text-[10px] leading-tight text-graphite-900">
+                <div className="border-r border-graphite-700 p-2 text-left">
+                  <p className="font-semibold uppercase">EXMO. SENHOR:</p>
+                  <p className="mt-2 font-semibold uppercase">{recipientUnit?.nome ?? "Destinatario automatico"}</p>
+                  {recipientParent && <p className="mt-1 uppercase">{recipientParent.nome}</p>}
+                </div>
+                <div className="p-2 text-center font-semibold underline">Despacho</div>
+              </div>
+              <div className="mt-2 flex justify-between gap-3 text-[10px] text-graphite-700">
+                <span>N/Ref.: gerada no protocolo</span>
+                <span>Data: actual</span>
+              </div>
+              <p className="mt-1 text-[10px] text-graphite-900"><strong className="underline">Assunto:</strong> {state.assunto || "Assunto do expediente"}</p>
               {state.conteudo ? <div className="mt-6 text-[11px] leading-relaxed text-graphite-700 [overflow-wrap:anywhere]" dangerouslySetInnerHTML={{ __html: state.conteudo }} /> : <div className="mt-6 text-[11px] text-graphite-400">O conteúdo do documento será apresentado nesta área.</div>}
               <div className="mt-10 border-t border-graphite-200 pt-3 text-center text-[9px] text-graphite-500">
                 {template?.logotipo && template.logotipoPosicao === "rodape" && <img src={template.logotipo} alt="Logótipo" className="mx-auto mb-2 max-h-12 max-w-28 object-contain" />}

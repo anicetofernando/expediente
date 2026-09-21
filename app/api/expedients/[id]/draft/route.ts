@@ -150,29 +150,29 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
         const signatureEntry = signatureMetadataJson(resolved.signature, session.user, input.posicaoAssinatura);
         if (main) {
           await client.query(
-            `UPDATE documents SET name=$2,source='sistema',mime_type='text/html',size_bytes=$3,page_count=1,storage_path=NULL,content_html=$4,confidentiality=$5,stamp_id=$7,signature_requested=true,template_metadata=$6::jsonb,stamped=true,signed=true,stamp_metadata=$8::jsonb,signature_metadata=$9::jsonb,stamps_metadata=$10::jsonb,signatures_metadata=$11::jsonb WHERE id=$1`,
+            `UPDATE documents SET name=$2,source='sistema',mime_type='text/html',size_bytes=$3,page_count=1,storage_path=NULL,content_html=$4,confidentiality=$5,stamp_id=$7,signature_requested=true,template_metadata=$6::jsonb,stamped=true,signed=true,stamp_metadata=$8::jsonb,signature_metadata=$9::jsonb,stamps_metadata=$10::jsonb,signatures_metadata=$11::jsonb,created_for_unit_id=$12 WHERE id=$1`,
             [main.id,`${input.assunto.trim()}.html`,Buffer.byteLength(cleanHtml,"utf8"),cleanHtml,input.confidencialidade,template ? JSON.stringify(template) : null,
-              resolved.stamp.id,JSON.stringify(stampEntry),JSON.stringify(signatureEntry),JSON.stringify([stampEntry]),JSON.stringify([signatureEntry])],
+              resolved.stamp.id,JSON.stringify(stampEntry),JSON.stringify(signatureEntry),JSON.stringify([stampEntry]),JSON.stringify([signatureEntry]),input.destinatario],
           );
         } else {
           const inserted = await client.query<{ id: string }>(
-            `INSERT INTO documents(expedient_id,name,document_kind,source,mime_type,size_bytes,page_count,content_html,confidentiality,created_by,template_metadata,stamp_id,stamped,signed,stamp_metadata,signature_metadata,stamps_metadata,signatures_metadata)
-             VALUES($1,$2,'principal','sistema','text/html',$3,1,$4,$5,$6,$7::jsonb,$8,true,true,$9::jsonb,$10::jsonb,$11::jsonb,$12::jsonb) RETURNING id`,
+            `INSERT INTO documents(expedient_id,name,document_kind,source,mime_type,size_bytes,page_count,content_html,confidentiality,created_by,template_metadata,stamp_id,stamped,signed,stamp_metadata,signature_metadata,stamps_metadata,signatures_metadata,created_for_unit_id)
+             VALUES($1,$2,'principal','sistema','text/html',$3,1,$4,$5,$6,$7::jsonb,$8,true,true,$9::jsonb,$10::jsonb,$11::jsonb,$12::jsonb,$13) RETURNING id`,
             [params.id,`${input.assunto.trim()}.html`,Buffer.byteLength(cleanHtml,"utf8"),cleanHtml,input.confidencialidade,session.user.id,template ? JSON.stringify(template) : null,
-              resolved.stamp.id,JSON.stringify(stampEntry),JSON.stringify(signatureEntry),JSON.stringify([stampEntry]),JSON.stringify([signatureEntry])],
+              resolved.stamp.id,JSON.stringify(stampEntry),JSON.stringify(signatureEntry),JSON.stringify([stampEntry]),JSON.stringify([signatureEntry]),input.destinatario],
           );
           documentId = inserted.rows[0].id;
         }
       } else if (mainFile) {
         const stored = await persistFile(params.id, mainFile);
         if (main) {
-          await client.query(`UPDATE documents SET name=$2,source='importado',mime_type=$3,size_bytes=$4,page_count=$5,storage_path=$6,content_html=NULL,confidentiality=$7,stamp_id=NULL,signature_requested=false,template_metadata=NULL,stamped=false,signed=false,stamp_metadata=NULL,signature_metadata=NULL,stamps_metadata='[]'::jsonb,signatures_metadata='[]'::jsonb WHERE id=$1`, [main.id,mainFile.name,stored.mime,mainFile.size,Math.max(1,input.numPaginas??1),stored.relative,input.confidencialidade]);
+          await client.query(`UPDATE documents SET name=$2,source='importado',mime_type=$3,size_bytes=$4,page_count=$5,storage_path=$6,content_html=NULL,confidentiality=$7,stamp_id=NULL,signature_requested=false,template_metadata=NULL,stamped=false,signed=false,stamp_metadata=NULL,signature_metadata=NULL,stamps_metadata='[]'::jsonb,signatures_metadata='[]'::jsonb,created_for_unit_id=$8 WHERE id=$1`, [main.id,mainFile.name,stored.mime,mainFile.size,Math.max(1,input.numPaginas??1),stored.relative,input.confidencialidade,input.destinatario]);
         } else {
-          const inserted = await client.query<{ id: string }>(`INSERT INTO documents(expedient_id,name,document_kind,source,mime_type,size_bytes,page_count,storage_path,confidentiality,created_by) VALUES($1,$2,'principal','importado',$3,$4,$5,$6,$7,$8) RETURNING id`, [params.id,mainFile.name,stored.mime,mainFile.size,Math.max(1,input.numPaginas??1),stored.relative,input.confidencialidade,session.user.id]);
+          const inserted = await client.query<{ id: string }>(`INSERT INTO documents(expedient_id,name,document_kind,source,mime_type,size_bytes,page_count,storage_path,confidentiality,created_by,created_for_unit_id) VALUES($1,$2,'principal','importado',$3,$4,$5,$6,$7,$8,$9) RETURNING id`, [params.id,mainFile.name,stored.mime,mainFile.size,Math.max(1,input.numPaginas??1),stored.relative,input.confidencialidade,session.user.id,input.destinatario]);
           documentId = inserted.rows[0].id;
         }
       } else if (main) {
-        await client.query("UPDATE documents SET confidentiality=$2 WHERE id=$1", [main.id,input.confidencialidade]);
+        await client.query("UPDATE documents SET confidentiality=$2,created_for_unit_id=$3 WHERE id=$1", [main.id,input.confidencialidade,input.destinatario]);
       }
 
       const keptIds = (input.anexos ?? []).map((item) => item.id).filter((id) => UUID_PATTERN.test(id));

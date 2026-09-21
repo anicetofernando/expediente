@@ -83,7 +83,7 @@ export const documentTemplates: DocumentTemplate[] = [
     rodape: "Correspondência institucional · Maputo, Moçambique",
     logotipo: CFM_LOGO_DATA_URI,
     logotipoPosicao: "cabecalho",
-    conteudoInicial: "Exmo. Senhor,\n\n\n\nSem mais de momento e ciente dos vossos bons oficios, subscrevemo-nos com elevada estima e consideracao de V. Excia.\n\nAtenciosamente,\n\n\n_________________________",
+    conteudoInicial: "Sem mais de momento e ciente dos vossos bons oficios, subscrevemo-nos com elevada estima e consideracao de V. Excia.\n\nAtenciosamente,\n\n\n_________________________",
   },
 ];
 

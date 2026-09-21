@@ -122,17 +122,17 @@ export async function POST(request: NextRequest) {
         const stampEntry = stampMetadataJson(resolved.stamp, session.user.nome, input.posicaoCarimbo);
         const signatureEntry = signatureMetadataJson(resolved.signature, session.user, input.posicaoAssinatura);
         const inserted = await client.query<{ id: string }>(
-          `INSERT INTO documents(expedient_id,name,document_kind,source,mime_type,size_bytes,page_count,content_html,confidentiality,created_by,template_metadata,stamp_id,stamped,signed,stamp_metadata,signature_metadata,stamps_metadata,signatures_metadata)
-           VALUES($1,$2,'principal','sistema','text/html',$3,1,$4,$5,$6,$7::jsonb,$8,true,true,$9::jsonb,$10::jsonb,$11::jsonb,$12::jsonb) RETURNING id`,
+          `INSERT INTO documents(expedient_id,name,document_kind,source,mime_type,size_bytes,page_count,content_html,confidentiality,created_by,template_metadata,stamp_id,stamped,signed,stamp_metadata,signature_metadata,stamps_metadata,signatures_metadata,created_for_unit_id)
+           VALUES($1,$2,'principal','sistema','text/html',$3,1,$4,$5,$6,$7::jsonb,$8,true,true,$9::jsonb,$10::jsonb,$11::jsonb,$12::jsonb,$13) RETURNING id`,
           [expedient.id,`${input.assunto.trim()}.html`,Buffer.byteLength(cleanHtml,"utf8"),cleanHtml,input.confidencialidade,session.user.id,template ? JSON.stringify(template) : null,
-            resolved.stamp.id,JSON.stringify(stampEntry),JSON.stringify(signatureEntry),JSON.stringify([stampEntry]),JSON.stringify([signatureEntry])],
+            resolved.stamp.id,JSON.stringify(stampEntry),JSON.stringify(signatureEntry),JSON.stringify([stampEntry]),JSON.stringify([signatureEntry]),input.destinatario],
         );
         documentId = inserted.rows[0].id;
       } else if (mainFile) {
         const stored = await persistFile(expedient.id, mainFile);
         const inserted = await client.query<{ id: string }>(
-          `INSERT INTO documents(expedient_id,name,document_kind,source,mime_type,size_bytes,page_count,storage_path,confidentiality,created_by) VALUES($1,$2,'principal','importado',$3,$4,$5,$6,$7,$8) RETURNING id`,
-          [expedient.id,mainFile.name,stored.mime,mainFile.size,Math.max(1,input.numPaginas ?? 1),stored.relative,input.confidencialidade,session.user.id],
+          `INSERT INTO documents(expedient_id,name,document_kind,source,mime_type,size_bytes,page_count,storage_path,confidentiality,created_by,created_for_unit_id) VALUES($1,$2,'principal','importado',$3,$4,$5,$6,$7,$8,$9) RETURNING id`,
+          [expedient.id,mainFile.name,stored.mime,mainFile.size,Math.max(1,input.numPaginas ?? 1),stored.relative,input.confidencialidade,session.user.id,input.destinatario],
         );
         documentId = inserted.rows[0].id;
       }

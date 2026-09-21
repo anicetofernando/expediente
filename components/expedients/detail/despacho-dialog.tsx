@@ -261,7 +261,17 @@ export function DespachoDialog({
               </div>
               <div>
                 <Label required>{isDespacho ? "Texto do despacho" : "Texto da nota"}</Label>
-                <LetterEditor value={conteudo} onChange={setConteudo} title={isDespacho ? "Despacho" : "Nota"} template={template} compact />
+                <LetterEditor
+                  value={conteudo}
+                  onChange={setConteudo}
+                  title={isDespacho ? "Despacho" : "Nota"}
+                  template={template}
+                  compact
+                  header={{
+                    subject: isDespacho ? "Despacho" : assunto,
+                    reference: "gerada no protocolo",
+                  }}
+                />
               </div>
               {needsAuthorization && !requireStamp && authorization.stamp && (
                 <label className="flex items-center gap-2 text-[13px] text-graphite-700">

@@ -238,9 +238,9 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
             id: string; name: string; source: string; mime_type: string | null; size_bytes: string | number; page_count: number;
             storage_path: string | null; content_html: string | null; confidentiality: string;
             stamps_metadata: Array<Record<string, unknown>> | null; signatures_metadata: Array<Record<string, unknown>> | null;
-            template_metadata: Record<string, unknown> | null;
+            template_metadata: Record<string, unknown> | null; created_for_unit_id: string | null;
           }>(
-            `SELECT id,name,source,mime_type,size_bytes,page_count,storage_path,content_html,confidentiality,stamps_metadata,signatures_metadata,template_metadata
+            `SELECT id,name,source,mime_type,size_bytes,page_count,storage_path,content_html,confidentiality,stamps_metadata,signatures_metadata,template_metadata,created_for_unit_id
                FROM documents WHERE expedient_id=$1 AND document_kind='principal' LIMIT 1 FOR UPDATE`,
             [exp.id],
           );
@@ -256,11 +256,11 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
             const protocolStamps = [...(doc.stamps_metadata ?? []), stampEntry];
             const protocolSignatures = [...(doc.signatures_metadata ?? []), signatureEntry];
             await client.query(
-              `INSERT INTO documents(expedient_id,name,document_kind,source,mime_type,size_bytes,page_count,storage_path,content_html,confidentiality,created_by,template_metadata,stamp_id,stamped,signed,stamp_metadata,signature_metadata,stamps_metadata,signatures_metadata)
-               VALUES($1,$2,'protocolo',$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb,$12,true,true,$13::jsonb,$14::jsonb,$15::jsonb,$16::jsonb)`,
+              `INSERT INTO documents(expedient_id,name,document_kind,source,mime_type,size_bytes,page_count,storage_path,content_html,confidentiality,created_by,template_metadata,stamp_id,stamped,signed,stamp_metadata,signature_metadata,stamps_metadata,signatures_metadata,created_for_unit_id)
+               VALUES($1,$2,'protocolo',$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb,$12,true,true,$13::jsonb,$14::jsonb,$15::jsonb,$16::jsonb,$17)`,
               [exp.id, `Protocolo - ${doc.name}`, doc.source, doc.mime_type, doc.size_bytes, doc.page_count, doc.storage_path, doc.content_html, doc.confidentiality,
                 session.user.id, doc.template_metadata ? JSON.stringify(doc.template_metadata) : null, stamp.id,
-                JSON.stringify(stampEntry), JSON.stringify(signatureEntry), JSON.stringify(protocolStamps), JSON.stringify(protocolSignatures)],
+                JSON.stringify(stampEntry), JSON.stringify(signatureEntry), JSON.stringify(protocolStamps), JSON.stringify(protocolSignatures), doc.created_for_unit_id ?? exp.recipient_unit_id],
             );
             if (stamp.imagemUrl && input.posicaoCarimbo) await rememberStampPosition(client, stamp.id, input.posicaoCarimbo);
             if (signature.imagemUrl && input.posicaoAssinatura) await rememberSignaturePosition(client, signature.id, input.posicaoAssinatura);

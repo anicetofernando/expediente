@@ -55,6 +55,19 @@ async function returnToRequesterIfPending(
   await client.query("UPDATE expedients SET status='encaminhado', responsible_user_id=$2 WHERE id=$1", [exp.id, requesterUserId]);
 }
 
+async function responseRecipientUnitId(
+  client: Parameters<Parameters<typeof transaction>[0]>[0],
+  exp: { id: string; status: string; origin_unit_id: string },
+) {
+  if (exp.status !== "aguardando_parecer" && exp.status !== "aguardando_esclarecimento") return exp.origin_unit_id;
+  const eventType = exp.status === "aguardando_parecer" ? "parecer" : "esclarecimento";
+  const requester = await client.query<{ unit_id: string | null }>(
+    "SELECT unit_id FROM timeline_events WHERE expedient_id=$1 AND event_type=$2 ORDER BY created_at DESC LIMIT 1",
+    [exp.id, eventType],
+  );
+  return requester.rows[0]?.unit_id ?? exp.origin_unit_id;
+}
+
 /**
  * Uma das formas de "Finalizar aprovação" (ou de rejeitar) e' criar aqui um
  * despacho formal (com carimbo e assinatura obrigatorios) -- assim que fica
@@ -167,6 +180,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       const documentNumber = respondingUnit.rows[0]
         ? await generateProtocolNumber(client, session.user.unidadeId, respondingUnit.rows[0].acronym, new Date().getFullYear())
         : null;
+      const recipientUnitId = await responseRecipientUnitId(client, exp);
       let sistemaHasFreePositionImages = false;
       if (input.modo === "sistema") {
         const clean = sanitizeDocumentHtml(input.conteudo ?? "");
@@ -177,19 +191,19 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         const signatureEntry = JSON.stringify(signatureMetadataJson(resolved.signature, session.user));
         const despachoLabel = input.intent === "rejeitar" ? "Despacho de Rejeição" : "Despacho";
         await client.query(
-          `INSERT INTO documents(id,expedient_id,name,document_kind,source,mime_type,size_bytes,page_count,content_html,confidentiality,created_by,stamp_id,stamped,signed,stamp_metadata,signature_metadata,stamps_metadata,signatures_metadata,template_metadata,document_number)
-           VALUES($1,$2,$3,'resposta','sistema','text/html',$4,1,$5,'interno',$6,$7,true,true,$8::jsonb,$9::jsonb,$10::jsonb,$11::jsonb,$12::jsonb,$13)`,
+          `INSERT INTO documents(id,expedient_id,name,document_kind,source,mime_type,size_bytes,page_count,content_html,confidentiality,created_by,stamp_id,stamped,signed,stamp_metadata,signature_metadata,stamps_metadata,signatures_metadata,template_metadata,document_number,created_for_unit_id)
+           VALUES($1,$2,$3,'resposta','sistema','text/html',$4,1,$5,'interno',$6,$7,true,true,$8::jsonb,$9::jsonb,$10::jsonb,$11::jsonb,$12::jsonb,$13,$14)`,
           [documentId, exp.id, `${despachoLabel} - ${exp.protocol}.html`, Buffer.byteLength(clean, "utf8"), clean, session.user.id, resolved.stamp.id,
-            stampEntry, signatureEntry, `[${stampEntry}]`, `[${signatureEntry}]`, template ? JSON.stringify(template) : null, documentNumber],
+            stampEntry, signatureEntry, `[${stampEntry}]`, `[${signatureEntry}]`, template ? JSON.stringify(template) : null, documentNumber, recipientUnitId],
         );
       } else if (file) {
         const bytes = Buffer.from(await file.arrayBuffer());
         const storedName = `${randomUUID()}-${cleanName(file.name)}`;
         const relative = await saveFile("documents", `${exp.id}/${storedName}`, bytes, file.type || undefined);
         await client.query(
-          `INSERT INTO documents(id,expedient_id,name,document_kind,source,mime_type,size_bytes,page_count,storage_path,confidentiality,created_by,document_number)
-           VALUES($1,$2,$3,'resposta','importado',$4,$5,1,$6,'interno',$7,$8)`,
-          [documentId, exp.id, file.name, file.type || "application/octet-stream", file.size, relative, session.user.id, documentNumber],
+          `INSERT INTO documents(id,expedient_id,name,document_kind,source,mime_type,size_bytes,page_count,storage_path,confidentiality,created_by,document_number,created_for_unit_id)
+           VALUES($1,$2,$3,'resposta','importado',$4,$5,1,$6,'interno',$7,$8,$9)`,
+          [documentId, exp.id, file.name, file.type || "application/octet-stream", file.size, relative, session.user.id, documentNumber, recipientUnitId],
         );
       }
       // So avanca o estado aqui quando este e o unico/ultimo passo -- se ainda falta

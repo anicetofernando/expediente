@@ -6,9 +6,40 @@ import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import type { DocumentTemplate } from "@/types";
 
-export function LetterEditor({ value, onChange, title = "Carta institucional", template, compact = false }: { value: string; onChange: (html: string) => void; title?: string; template?: DocumentTemplate; compact?: boolean }) {
+interface LetterEditorHeader {
+  issuingUnit?: string;
+  issuingParentUnit?: string;
+  recipientUnit?: string;
+  recipientParentUnit?: string;
+  reference?: string;
+  subject?: string;
+}
+
+function uniqueLines(values: Array<string | undefined>) {
+  const seen = new Set<string>();
+  return values.filter((value): value is string => {
+    const clean = value?.trim();
+    if (!clean) return false;
+    const key = clean.toLocaleLowerCase("pt-PT");
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function escapeMarkup(value: string) {
+  return value.replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character] ?? character);
+}
+
+export function LetterEditor({ value, onChange, title = "Carta institucional", template, compact = false, header }: { value: string; onChange: (html: string) => void; title?: string; template?: DocumentTemplate; compact?: boolean; header?: LetterEditorHeader }) {
   const editorRef = React.useRef<HTMLDivElement>(null);
   const { toast } = useToast();
+  const issuingLines = uniqueLines([header?.issuingParentUnit, header?.issuingUnit]);
+  const displayedIssuingLines = issuingLines.length ? issuingLines : [template?.cabecalho ?? "Unidade emitente"];
+  const recipientLines = uniqueLines([header?.recipientUnit, header?.recipientParentUnit]);
+  const displayedRecipientLines = recipientLines.length ? recipientLines : ["Destinatario automatico"];
+  const reference = header?.reference?.trim() || "gerada no protocolo";
+  const subject = header?.subject?.trim() || title;
 
   React.useEffect(() => {
     const editor = editorRef.current;
@@ -36,9 +67,10 @@ export function LetterEditor({ value, onChange, title = "Carta institucional", t
       return;
     }
     const logoHeader = template?.logotipo && template.logotipoPosicao === "cabecalho" ? `<img src="${template.logotipo}" style="display:block;width:100%;max-width:170mm;margin:0 auto 4mm">` : "";
-    const textHeader = logoHeader ? "" : (template?.cabecalho ?? "CFM — Portos e Caminhos de Ferro de Moçambique");
     const logoFooter = template?.logotipo && template.logotipoPosicao === "rodape" ? `<img src="${template.logotipo}" style="display:block;max-height:14mm;max-width:35mm;margin:0 auto 3mm">` : "";
-    popup.document.write(`<!doctype html><html><head><title>${title}</title><style>@page{size:A4;margin:20mm}*{box-sizing:border-box}body{font:12pt Arial;line-height:1.5;overflow-wrap:anywhere}header{text-align:center;border-bottom:1px solid #ccd3dc;padding-bottom:5mm;margin-bottom:10mm}footer{text-align:center;border-top:1px solid #ccd3dc;padding-top:4mm;margin-top:12mm;color:#667085;font-size:9pt}</style></head><body><header>${logoHeader}${textHeader}</header>${editorRef.current?.innerHTML ?? ""}<footer>${logoFooter}${template?.rodape ?? "Correspondência institucional"}</footer></body></html>`);
+    const issuerHtml = displayedIssuingLines.map((line) => `<span>${escapeMarkup(line)}</span>`).join("");
+    const recipientHtml = displayedRecipientLines.map((line, index) => `<span class="${index === 0 ? "recipient-name" : "recipient-parent"}">${escapeMarkup(line)}</span>`).join("");
+    popup.document.write(`<!doctype html><html><head><title>${title}</title><style>@page{size:A4;margin:20mm}*{box-sizing:border-box}body{font:12pt Arial;line-height:1.5;overflow-wrap:anywhere}header{margin-bottom:10mm}.issuer{text-align:center;color:#198754;font-size:10pt;font-weight:700;text-transform:uppercase;line-height:1.25;margin-bottom:4mm}.issuer span{display:block}.routing{display:grid;grid-template-columns:1.05fr .95fr;min-height:22mm;border:1.3px solid #1f2937;margin-bottom:2.5mm}.routing-left{border-right:1.3px solid #1f2937;padding:3mm 4mm;line-height:1.25}.routing-label{display:block;font-weight:700;text-transform:uppercase}.recipient-name{display:block;margin-top:2mm;font-weight:700;text-transform:uppercase}.recipient-parent{display:block;margin-top:1mm;font-size:9.5pt;text-transform:uppercase}.routing-right{display:flex;justify-content:center;padding:3mm 4mm;font-weight:700;text-decoration:underline}.ref-line{display:flex;justify-content:space-between;gap:6mm;font-size:10pt}.subject{font-size:11pt}.subject strong{text-decoration:underline}footer{text-align:center;border-top:1px solid #ccd3dc;padding-top:4mm;margin-top:12mm;color:#667085;font-size:9pt}</style></head><body><header>${logoHeader}<div class="issuer">${issuerHtml}</div><div class="routing"><div class="routing-left"><span class="routing-label">EXMO. SENHOR:</span>${recipientHtml}</div><div class="routing-right">Despacho</div></div><div class="ref-line"><span>N/Ref.: ${escapeMarkup(reference)}</span><span>Data: actual</span></div><div class="subject"><strong>Assunto:</strong> ${escapeMarkup(subject)}</div></header>${editorRef.current?.innerHTML ?? ""}<footer>${logoFooter}${template?.rodape ?? "Correspondencia institucional"}</footer></body></html>`);
     popup.document.close();
     // document.write numa popup ja aberta nem sempre dispara onload de forma
     // fiavel entre browsers -- um pequeno atraso garante que o conteudo ja
@@ -86,12 +118,29 @@ export function LetterEditor({ value, onChange, title = "Carta institucional", t
       </div>
       <div className={cn("overflow-auto p-4 sm:p-7", compact ? "h-[62vh] min-h-[520px] max-h-[720px]" : "h-[78vh] min-h-[720px] max-h-[920px]")}>
         <div className={cn("mx-auto w-full max-w-[794px] bg-white px-[9%] py-[8%] shadow-card", compact ? "min-h-[720px]" : "min-h-[1123px]")}>
-          <div className="mb-8 border-b border-graphite-200 pb-4 text-center">
+          <div className="mb-8 text-graphite-900">
             {template?.logotipo && template.logotipoPosicao === "cabecalho" ? (
               <img src={template.logotipo} alt="Logótipo" className="mx-auto w-full max-w-[520px] object-contain" />
             ) : (
-              <p className="whitespace-pre-line text-[11px] font-bold uppercase tracking-[0.12em] text-cfm-900">{template?.cabecalho ?? "CFM — Portos e Caminhos de Ferro de Moçambique"}</p>
+              <p className="whitespace-pre-line text-center text-[11px] font-bold uppercase text-cfm-900">{template?.cabecalho ?? "CFM - Portos e Caminhos de Ferro de Mocambique"}</p>
             )}
+            <div className="mt-3 text-center text-[11px] font-semibold uppercase leading-tight text-success-700">
+              {displayedIssuingLines.map((line) => <p key={line}>{line}</p>)}
+            </div>
+            <div className="mt-4 grid min-h-24 grid-cols-[1.05fr_.95fr] border border-graphite-700 text-[11px] leading-tight">
+              <div className="border-r border-graphite-700 p-3 text-left">
+                <p className="font-semibold uppercase">EXMO. SENHOR:</p>
+                {displayedRecipientLines.map((line, index) => (
+                  <p key={line} className={cn(index === 0 ? "mt-3 font-semibold" : "mt-1", "uppercase")}>{line}</p>
+                ))}
+              </div>
+              <div className="p-3 text-center font-semibold underline">Despacho</div>
+            </div>
+            <div className="mt-3 flex justify-between gap-4 text-[11px] text-graphite-700">
+              <span>N/Ref.: {reference}</span>
+              <span>Data: actual</span>
+            </div>
+            <p className="mt-1 text-[11px]"><strong className="underline">Assunto:</strong> {subject}</p>
           </div>
           <div
             ref={editorRef}
