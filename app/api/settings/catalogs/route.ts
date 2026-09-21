@@ -14,6 +14,40 @@ interface UnitInput {
   estado?: string;
 }
 
+async function liveUnits() {
+  const result = await query<{
+    id: string;
+    name: string;
+    acronym: string;
+    code: string;
+    unit_type: UnitInput["tipo"];
+    parent_id: string | null;
+    email: string | null;
+    phone: string | null;
+    extension_number: string | null;
+    active: boolean;
+  }>(
+    `SELECT id,name,acronym,code,unit_type,parent_id,email,phone,extension_number,active
+       FROM organizational_units
+      WHERE active=true
+      ORDER BY code`,
+  );
+  return result.rows.map((unit) => ({
+    id: unit.id,
+    nome: unit.name,
+    sigla: unit.acronym,
+    codigo: unit.code,
+    tipo: unit.unit_type,
+    parentId: unit.parent_id,
+    contactos: {
+      email: unit.email ?? undefined,
+      telefone: unit.phone ?? undefined,
+      ramal: unit.extension_number ?? undefined,
+    },
+    estado: unit.active ? "activo" : "inactivo",
+  }));
+}
+
 function unitsFrom(value: unknown): UnitInput[] {
   if (!value || typeof value !== "object") return [];
   const units = (value as { organizationalUnits?: unknown }).organizationalUnits;
@@ -28,10 +62,17 @@ function unitsFrom(value: unknown): UnitInput[] {
 export async function GET() {
   const session = await getCurrentSession();
   if (!session) return NextResponse.json({ error: "Nao autenticado." }, { status: 401 });
-  const result = await query<{ setting_value: unknown }>(
+  const [result, organizationalUnits] = await Promise.all([
+    query<{ setting_value: unknown }>(
     "SELECT setting_value FROM system_settings WHERE setting_key='catalogs'",
-  );
-  return NextResponse.json({ catalogs: result.rows[0]?.setting_value ?? null });
+    ),
+    liveUnits(),
+  ]);
+  const saved = result.rows[0]?.setting_value;
+  const catalogs = saved && typeof saved === "object" && !Array.isArray(saved)
+    ? { ...saved, organizationalUnits }
+    : { organizationalUnits };
+  return NextResponse.json({ catalogs });
 }
 
 export async function PUT(request: Request) {

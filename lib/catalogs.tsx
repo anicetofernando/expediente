@@ -68,17 +68,14 @@ interface CatalogsSnapshot {
   stamps: Stamp[];
 }
 
-let cachedCatalogs: Partial<CatalogsSnapshot> | null | undefined;
 let catalogsRequest: Promise<Partial<CatalogsSnapshot> | null> | undefined;
 
 function loadCatalogs() {
-  if (cachedCatalogs !== undefined) return Promise.resolve(cachedCatalogs);
   if (!catalogsRequest) {
     catalogsRequest = fetch("/api/settings/catalogs", { cache: "no-store" })
       .then(async (response) => {
         if (!response.ok) throw new Error("Nao foi possivel carregar os catalogos.");
         const result = await response.json() as { catalogs: Partial<CatalogsSnapshot> | null };
-        cachedCatalogs = result.catalogs;
         return result.catalogs;
       })
       .finally(() => { catalogsRequest = undefined; });
@@ -160,7 +157,6 @@ export function CatalogsProvider({ children }: { children: React.ReactNode }) {
         .then((response) => {
           if (!response.ok) return;
           persistedSnapshot.current = serialized;
-          cachedCatalogs = snapshot;
         });
     }, 500);
     return () => window.clearTimeout(timer);
