@@ -17,6 +17,7 @@ import {
 import { PageHeader } from "@/components/shared/page-header";
 import { Stepper } from "@/components/shared/stepper";
 import { Button } from "@/components/ui/button";
+import { Alert } from "@/components/ui/alert";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { CatalogsProvider, useCatalogs } from "@/lib/catalogs";
@@ -32,6 +33,13 @@ import { StepDocument } from "@/components/expedients/wizard/step-document";
 import { StepAttachments } from "@/components/expedients/wizard/step-attachments";
 import { StepStampSignature } from "@/components/expedients/wizard/step-stamp-signature";
 import { StepReview } from "@/components/expedients/wizard/step-review";
+import {
+  buildExpedientDraftKey,
+  deleteLocalExpedientDraft,
+  readLocalExpedientDraft,
+  writeLocalExpedientDraft,
+  type LocalExpedientDraft,
+} from "@/components/expedients/wizard/local-draft";
 import { addDaysToDate, isValidFutureOrTodayDate, todayInMaputo } from "@/lib/date-only";
 
 const STEPS = [
@@ -71,6 +79,43 @@ function canProceed(step: number, state: WizardState) {
   }
 }
 
+function textFromHtml(html: string) {
+  return html.replace(/<[^>]*>/g, "").replace(/&nbsp;/g, " ").trim();
+}
+
+function hasMeaningfulDraft(state: WizardState) {
+  return Boolean(
+    state.tipo ||
+    state.destinatario ||
+    state.assunto.trim() ||
+    state.origemDocumento ||
+    state.modeloId ||
+    textFromHtml(state.conteudo) ||
+    state.ficheiroNome ||
+    state.ficheiro ||
+    state.anexos.length > 0 ||
+    state.posicaoCarimbo ||
+    state.posicaoAssinatura,
+  );
+}
+
+function clampWizardStep(step: number) {
+  if (!Number.isFinite(step)) return 0;
+  return Math.min(5, Math.max(0, Math.trunc(step)));
+}
+
+function formatDraftTimestamp(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return new Intl.DateTimeFormat("pt-MZ", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+}
+
 function WizardProgress({
   current,
   onStepChange,
@@ -103,10 +148,19 @@ function NovoExpedienteContent() {
   const [saving, setSaving] = React.useState(false);
   const [draftLoading, setDraftLoading] = React.useState(Boolean(draftId));
   const [effectiveDraftId, setEffectiveDraftId] = React.useState(draftId);
+  const [remoteDraftLoaded, setRemoteDraftLoaded] = React.useState(!draftId);
+  const [localDraftReady, setLocalDraftReady] = React.useState(false);
+  const [localDraftRestored, setLocalDraftRestored] = React.useState<LocalExpedientDraft | null>(null);
+  const [localSaveStatus, setLocalSaveStatus] = React.useState<"idle" | "saving" | "saved" | "error">("idle");
   const [defaultDeadlineDays, setDefaultDeadlineDays] = React.useState<number | null>(null);
   const [workflows, setWorkflows] = React.useState<Array<{ id: string; estado: string; etapas: { prazoDias: number }[] }>>([]);
   const autoFilledPrazo = React.useRef<string | null>(null);
   const defaultsApplied = React.useRef(false);
+  const stateRef = React.useRef(state);
+  const stepRef = React.useRef(step);
+  const effectiveDraftIdRef = React.useRef(effectiveDraftId);
+  const submittedRef = React.useRef(submitted);
+  const localDraftKey = React.useMemo(() => buildExpedientDraftKey(user.id, draftId), [draftId, user.id]);
 
   const createInitialState = React.useCallback((): WizardState => {
     const priority =
@@ -124,6 +178,22 @@ function NovoExpedienteContent() {
       confidencialidade: (confidentiality?.code ?? "") as Confidentiality | "",
     };
   }, [confidentialities, priorities, user.nome, user.unidadeId]);
+
+  React.useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
+
+  React.useEffect(() => {
+    stepRef.current = step;
+  }, [step]);
+
+  React.useEffect(() => {
+    effectiveDraftIdRef.current = effectiveDraftId;
+  }, [effectiveDraftId]);
+
+  React.useEffect(() => {
+    submittedRef.current = submitted;
+  }, [submitted]);
 
   React.useEffect(() => {
     if (defaultsApplied.current) return;
@@ -177,9 +247,13 @@ function NovoExpedienteContent() {
   }, [draftId, state.tipo, documentTypes, workflows, defaultDeadlineDays]);
 
   React.useEffect(() => {
-    if (!draftId) return;
+    if (!draftId) {
+      setRemoteDraftLoaded(true);
+      return;
+    }
     let cancelled = false;
     setDraftLoading(true);
+    setRemoteDraftLoaded(false);
     void fetch(`/api/expedients/${draftId}/draft`, { cache: "no-store" })
       .then(async (response) => {
         const result = await response.json();
@@ -190,12 +264,125 @@ function NovoExpedienteContent() {
         toast({ title: "Rascunho indisponivel", description: error instanceof Error ? error.message : "Erro inesperado.", variant: "destructive" });
         router.replace("/expedientes/caixa-saida");
       })
-      .finally(() => { if (!cancelled) setDraftLoading(false); });
+      .finally(() => {
+        if (!cancelled) {
+          setDraftLoading(false);
+          setRemoteDraftLoaded(true);
+        }
+      });
     return () => { cancelled = true; };
   }, [draftId, router, toast]);
 
+  const buildCurrentLocalDraft = React.useCallback((): LocalExpedientDraft | null => {
+    const currentState = stateRef.current;
+    if (!hasMeaningfulDraft(currentState)) return null;
+    return {
+      key: localDraftKey,
+      version: 1,
+      userId: user.id,
+      draftId,
+      effectiveDraftId: effectiveDraftIdRef.current,
+      step: stepRef.current,
+      updatedAt: new Date().toISOString(),
+      state: currentState,
+    };
+  }, [draftId, localDraftKey, user.id]);
+
+  const saveCurrentLocalDraft = React.useCallback(async ({ silent = false }: { silent?: boolean } = {}) => {
+    if (submittedRef.current) return;
+    try {
+      const draft = buildCurrentLocalDraft();
+      if (!draft) {
+        await deleteLocalExpedientDraft(localDraftKey);
+        if (!silent) setLocalSaveStatus("idle");
+        return;
+      }
+      if (!silent) setLocalSaveStatus("saving");
+      await writeLocalExpedientDraft(draft);
+      if (!silent) setLocalSaveStatus("saved");
+    } catch {
+      if (!silent) setLocalSaveStatus("error");
+    }
+  }, [buildCurrentLocalDraft, localDraftKey]);
+
+  const clearLocalDraft = React.useCallback(async () => {
+    try {
+      await deleteLocalExpedientDraft(localDraftKey);
+    } finally {
+      setLocalDraftRestored(null);
+      setLocalSaveStatus("idle");
+    }
+  }, [localDraftKey]);
+
+  React.useEffect(() => {
+    if (!remoteDraftLoaded || submitted) return;
+    let cancelled = false;
+    setLocalDraftReady(false);
+    void readLocalExpedientDraft(localDraftKey)
+      .then((draft) => {
+        if (cancelled) return;
+        if (draft && hasMeaningfulDraft(draft.state)) {
+          setState({ ...initialWizardState, ...draft.state });
+          setStep(clampWizardStep(draft.step));
+          setEffectiveDraftId(draft.effectiveDraftId || draftId);
+          setLocalDraftRestored(draft);
+          setLocalSaveStatus("saved");
+          toast({
+            title: "Rascunho local recuperado",
+            description: `Última edição: ${formatDraftTimestamp(draft.updatedAt) || "há pouco"}.`,
+            variant: "success",
+          });
+          return;
+        }
+        setLocalDraftRestored(null);
+        setLocalSaveStatus("idle");
+      })
+      .catch(() => {
+        if (!cancelled) setLocalSaveStatus("error");
+      })
+      .finally(() => {
+        if (!cancelled) setLocalDraftReady(true);
+      });
+    return () => { cancelled = true; };
+  }, [draftId, localDraftKey, remoteDraftLoaded, submitted, toast]);
+
+  React.useEffect(() => {
+    if (!localDraftReady || draftLoading || submitted) return;
+    const timer = window.setTimeout(() => {
+      void saveCurrentLocalDraft();
+    }, 600);
+    return () => window.clearTimeout(timer);
+  }, [draftLoading, effectiveDraftId, localDraftReady, saveCurrentLocalDraft, state, step, submitted]);
+
+  React.useEffect(() => {
+    if (!localDraftReady) return;
+    const persistSilently = () => {
+      void saveCurrentLocalDraft({ silent: true });
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "hidden") persistSilently();
+    };
+    window.addEventListener("pagehide", persistSilently);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      window.removeEventListener("pagehide", persistSilently);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [localDraftReady, saveCurrentLocalDraft]);
+
   function update(patch: Partial<WizardState>) {
     setState((previous) => ({ ...previous, ...patch }));
+  }
+
+  async function discardRecoveredLocalDraft() {
+    await clearLocalDraft();
+    if (draftId) {
+      window.location.reload();
+      return;
+    }
+    setState(createInitialState());
+    setEffectiveDraftId("");
+    setStep(0);
   }
 
   async function persist(rascunho: boolean) {
@@ -210,6 +397,7 @@ function NovoExpedienteContent() {
       const result = await response.json();
       if (!response.ok) throw new Error(result.error ?? "Não foi possível guardar o expediente.");
       if (!effectiveDraftId) setEffectiveDraftId(result.id);
+      await clearLocalDraft();
       toast({ title: rascunho ? "Rascunho guardado" : "Expediente submetido", variant: "success" });
       setSubmitted({ id: result.id, protocolo: result.protocolo, rascunho });
       setStep(6);
@@ -241,6 +429,15 @@ function NovoExpedienteContent() {
       return null;
     }
   }
+
+  const localDraftStatusText =
+    localSaveStatus === "saving"
+      ? "A guardar rascunho local..."
+      : localSaveStatus === "saved"
+        ? "Rascunho local guardado"
+        : localSaveStatus === "error"
+          ? "Rascunho local não guardado"
+          : "";
 
   if (draftLoading) {
     return <div className="flex min-h-[520px] items-center justify-center text-sm text-graphite-500">A abrir o rascunho…</div>;
@@ -321,7 +518,21 @@ function NovoExpedienteContent() {
         }
       />
 
-      <div className="mx-auto flex w-full max-w-[1600px] flex-1 px-3 py-3 sm:px-4 lg:px-5 lg:py-4 2xl:px-6">
+      <div className="mx-auto flex w-full max-w-[1600px] flex-1 flex-col gap-3 px-3 py-3 sm:px-4 lg:px-5 lg:py-4 2xl:px-6">
+        {localDraftRestored && (
+          <Alert
+            variant="success"
+            title="Rascunho local recuperado"
+            action={
+              <Button type="button" variant="secondary" size="sm" onClick={discardRecoveredLocalDraft}>
+                Descartar
+              </Button>
+            }
+          >
+            O formulário voltou à última edição guardada neste navegador
+            {formatDraftTimestamp(localDraftRestored.updatedAt) ? ` em ${formatDraftTimestamp(localDraftRestored.updatedAt)}.` : "."}
+          </Alert>
+        )}
         <section className="flex min-h-[520px] w-full flex-col border border-graphite-300 bg-white">
           <WizardProgress current={step} onStepChange={setStep} />
 
@@ -335,14 +546,19 @@ function NovoExpedienteContent() {
           </div>
 
           <footer className="sticky bottom-0 z-10 flex flex-col-reverse gap-2 border-t border-graphite-200 bg-white/95 px-5 py-3 backdrop-blur-sm sm:flex-row sm:items-center sm:justify-between lg:px-8">
-            <Button
-              variant="secondary"
-              disabled={step === 0}
-              onClick={() => setStep((current) => Math.max(0, current - 1))}
-            >
-              <ArrowLeft className="size-3.5" />
-              Anterior
-            </Button>
+            <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-3">
+              <Button
+                variant="secondary"
+                disabled={step === 0}
+                onClick={() => setStep((current) => Math.max(0, current - 1))}
+              >
+                <ArrowLeft className="size-3.5" />
+                Anterior
+              </Button>
+              {localDraftStatusText && (
+                <span className="text-xs text-graphite-500">{localDraftStatusText}</span>
+              )}
+            </div>
 
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
               {effectiveDraftId && step < 5 && (
@@ -380,10 +596,13 @@ function NovoExpedienteContent() {
         open={cancelOpen}
         onOpenChange={setCancelOpen}
         title="Cancelar novo expediente"
-        description="Os dados não guardados serão perdidos."
+        description="A edição actual e o rascunho local desta página serão descartados."
         confirmLabel="Cancelar expediente"
         destructive
-        onConfirm={() => router.push(draftId ? `/expedientes/${draftId}` : "/expedientes")}
+        onConfirm={async () => {
+          await clearLocalDraft();
+          router.push(draftId ? `/expedientes/${draftId}` : "/expedientes");
+        }}
       />
     </div>
   );
