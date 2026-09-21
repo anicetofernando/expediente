@@ -1,7 +1,24 @@
 "use client";
 
 import * as React from "react";
-import { AlignCenter, AlignJustify, AlignLeft, AlignRight, Bold, Italic, List, ListOrdered, Printer, Redo2, Underline, Undo2 } from "lucide-react";
+import {
+  AlignCenter,
+  AlignJustify,
+  AlignLeft,
+  AlignRight,
+  Bold,
+  IndentDecrease,
+  IndentIncrease,
+  Italic,
+  List,
+  ListOrdered,
+  ListTree,
+  Printer,
+  Redo2,
+  Table2,
+  Underline,
+  Undo2,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import type { DocumentTemplate } from "@/types";
@@ -33,7 +50,10 @@ function escapeMarkup(value: string) {
 
 export function LetterEditor({ value, onChange, title = "Carta institucional", template, compact = false, header }: { value: string; onChange: (html: string) => void; title?: string; template?: DocumentTemplate; compact?: boolean; header?: LetterEditorHeader }) {
   const editorRef = React.useRef<HTMLDivElement>(null);
+  const selectionRef = React.useRef<Range | null>(null);
   const { toast } = useToast();
+  const [tableRows, setTableRows] = React.useState(3);
+  const [tableColumns, setTableColumns] = React.useState(3);
   const issuingLines = uniqueLines([header?.issuingParentUnit, header?.issuingUnit]);
   const displayedIssuingLines = issuingLines.length ? issuingLines : [template?.cabecalho ?? "Unidade emitente"];
   const recipientLines = uniqueLines([header?.recipientUnit, header?.recipientParentUnit]);
@@ -50,10 +70,74 @@ export function LetterEditor({ value, onChange, title = "Carta institucional", t
     onChange(editorRef.current?.innerHTML ?? "");
   }
 
-  function command(name: string, argument?: string) {
+  function saveSelection() {
+    const editor = editorRef.current;
+    const selection = window.getSelection();
+    if (!editor || !selection || selection.rangeCount === 0) return;
+    const range = selection.getRangeAt(0);
+    if (editor.contains(range.commonAncestorContainer)) selectionRef.current = range.cloneRange();
+  }
+
+  function restoreSelection() {
+    const selection = window.getSelection();
     editorRef.current?.focus();
+    if (!selection || !selectionRef.current) return;
+    selection.removeAllRanges();
+    selection.addRange(selectionRef.current);
+  }
+
+  function command(name: string, argument?: string) {
+    restoreSelection();
     document.execCommand(name, false, argument);
     emit();
+    saveSelection();
+  }
+
+  function findClosestList(node: Node | null) {
+    const editor = editorRef.current;
+    let current = node?.nodeType === Node.ELEMENT_NODE ? node as Element : node?.parentElement ?? null;
+    while (current && current !== editor) {
+      if (current.tagName === "OL" || current.tagName === "UL") return current as HTMLOListElement | HTMLUListElement;
+      current = current.parentElement;
+    }
+    return null;
+  }
+
+  function applyList(type: "decimal" | "lower-alpha" | "disc") {
+    const ordered = type !== "disc";
+    command(ordered ? "insertOrderedList" : "insertUnorderedList");
+    const selection = window.getSelection();
+    const list = findClosestList(selection?.anchorNode ?? null);
+    if (list) {
+      list.style.listStyleType = type;
+      list.style.paddingLeft = "1.5rem";
+    }
+    emit();
+  }
+
+  function insertHtml(html: string) {
+    restoreSelection();
+    const inserted = document.execCommand("insertHTML", false, html);
+    if (!inserted) {
+      const selection = window.getSelection();
+      if (selection && selection.rangeCount > 0) {
+        const range = selection.getRangeAt(0);
+        const templateElement = document.createElement("template");
+        templateElement.innerHTML = html;
+        range.deleteContents();
+        range.insertNode(templateElement.content);
+      }
+    }
+    emit();
+    saveSelection();
+  }
+
+  function insertTable() {
+    const rows = Math.min(12, Math.max(1, tableRows || 1));
+    const columns = Math.min(8, Math.max(1, tableColumns || 1));
+    const cells = Array.from({ length: columns }, () => `<td style="border:1px solid #cbd5e1;padding:6px 8px;min-width:90px"><br></td>`).join("");
+    const body = Array.from({ length: rows }, () => `<tr>${cells}</tr>`).join("");
+    insertHtml(`<table style="width:100%;border-collapse:collapse;margin:12px 0"><tbody>${body}</tbody></table><p><br></p>`);
   }
 
   function print() {
@@ -70,7 +154,7 @@ export function LetterEditor({ value, onChange, title = "Carta institucional", t
     const logoFooter = template?.logotipo && template.logotipoPosicao === "rodape" ? `<img src="${template.logotipo}" style="display:block;max-height:14mm;max-width:35mm;margin:0 auto 3mm">` : "";
     const issuerHtml = displayedIssuingLines.map((line) => `<span>${escapeMarkup(line)}</span>`).join("");
     const recipientHtml = displayedRecipientLines.map((line, index) => `<span class="${index === 0 ? "recipient-name" : "recipient-parent"}">${escapeMarkup(line)}</span>`).join("");
-    popup.document.write(`<!doctype html><html><head><title>${title}</title><style>@page{size:A4;margin:20mm}*{box-sizing:border-box}body{font:12pt Arial;line-height:1.5;overflow-wrap:anywhere}header{margin-bottom:10mm}.issuer{text-align:center;color:#198754;font-size:10pt;font-weight:700;text-transform:uppercase;line-height:1.25;margin-bottom:4mm}.issuer span{display:block}.routing{display:grid;grid-template-columns:1.05fr .95fr;min-height:22mm;border:1.3px solid #1f2937;margin-bottom:2.5mm}.routing-left{border-right:1.3px solid #1f2937;padding:3mm 4mm;line-height:1.25}.routing-label{display:block;font-weight:700;text-transform:uppercase}.recipient-name{display:block;margin-top:2mm;font-weight:700;text-transform:uppercase}.recipient-parent{display:block;margin-top:1mm;font-size:9.5pt;text-transform:uppercase}.routing-right{display:flex;justify-content:center;padding:3mm 4mm;font-weight:700;text-decoration:underline}.ref-line{display:flex;justify-content:space-between;gap:6mm;font-size:10pt}.subject{font-size:11pt}.subject strong{text-decoration:underline}footer{text-align:center;border-top:1px solid #ccd3dc;padding-top:4mm;margin-top:12mm;color:#667085;font-size:9pt}</style></head><body><header>${logoHeader}<div class="issuer">${issuerHtml}</div><div class="routing"><div class="routing-left"><span class="routing-label">EXMO. SENHOR:</span>${recipientHtml}</div><div class="routing-right">Despacho</div></div><div class="ref-line"><span>N/Ref.: ${escapeMarkup(reference)}</span><span>Data: actual</span></div><div class="subject"><strong>Assunto:</strong> ${escapeMarkup(subject)}</div></header>${editorRef.current?.innerHTML ?? ""}<footer>${logoFooter}${template?.rodape ?? "Correspondencia institucional"}</footer></body></html>`);
+    popup.document.write(`<!doctype html><html><head><title>${title}</title><style>@page{size:A4;margin:20mm}*{box-sizing:border-box}body{font:12pt Arial;line-height:1.5;overflow-wrap:anywhere}header{margin-bottom:10mm}.issuer{text-align:center;color:#198754;font-size:10pt;font-weight:700;text-transform:uppercase;line-height:1.25;margin-bottom:4mm}.issuer span{display:block}.routing{display:grid;grid-template-columns:1.05fr .95fr;min-height:22mm;border:1.3px solid #1f2937;margin-bottom:2.5mm}.routing-left{border-right:1.3px solid #1f2937;padding:3mm 4mm;line-height:1.25}.routing-label{display:block;font-weight:700;text-transform:uppercase}.recipient-name{display:block;margin-top:2mm;font-weight:700;text-transform:uppercase}.recipient-parent{display:block;margin-top:1mm;font-size:9.5pt;text-transform:uppercase}.routing-right{display:flex;justify-content:center;padding:3mm 4mm;font-weight:700;text-decoration:underline}.ref-line{display:flex;justify-content:space-between;gap:6mm;font-size:10pt}.subject{font-size:11pt}.subject strong{text-decoration:underline}ol,ul{padding-left:7mm}table{width:100%;border-collapse:collapse;margin:4mm 0}td,th{border:1px solid #cbd5e1;padding:2mm;vertical-align:top}footer{text-align:center;border-top:1px solid #ccd3dc;padding-top:4mm;margin-top:12mm;color:#667085;font-size:9pt}</style></head><body><header>${logoHeader}<div class="issuer">${issuerHtml}</div><div class="routing"><div class="routing-left"><span class="routing-label">EXMO. SENHOR:</span>${recipientHtml}</div><div class="routing-right">Despacho</div></div><div class="ref-line"><span>N/Ref.: ${escapeMarkup(reference)}</span><span>Data: actual</span></div><div class="subject"><strong>Assunto:</strong> ${escapeMarkup(subject)}</div></header>${editorRef.current?.innerHTML ?? ""}<footer>${logoFooter}${template?.rodape ?? "Correspondencia institucional"}</footer></body></html>`);
     popup.document.close();
     // document.write numa popup ja aberta nem sempre dispara onload de forma
     // fiavel entre browsers -- um pequeno atraso garante que o conteudo ja
@@ -91,7 +175,6 @@ export function LetterEditor({ value, onChange, title = "Carta institucional", t
     ["Negrito", "bold", Bold], ["Itálico", "italic", Italic], ["Sublinhado", "underline", Underline],
     ["Alinhar à esquerda", "justifyLeft", AlignLeft], ["Centrar", "justifyCenter", AlignCenter],
     ["Alinhar à direita", "justifyRight", AlignRight], ["Justificar", "justifyFull", AlignJustify],
-    ["Lista com pontos", "insertUnorderedList", List], ["Lista numerada", "insertOrderedList", ListOrdered],
   ] as const;
 
   return (
@@ -110,7 +193,17 @@ export function LetterEditor({ value, onChange, title = "Carta institucional", t
         {tools.map(([label, name, Icon]) => (
           <button key={name} type="button" title={label} aria-label={label} onMouseDown={(event) => event.preventDefault()} onClick={() => command(name)} className="flex size-7 items-center justify-center border border-transparent text-graphite-600 hover:border-graphite-300 hover:bg-graphite-50"><Icon className="size-3.5" /></button>
         ))}
+        <button type="button" title="Marcadores" aria-label="Lista com marcadores" onMouseDown={(event) => event.preventDefault()} onClick={() => applyList("disc")} className="flex size-7 items-center justify-center border border-transparent text-graphite-600 hover:border-graphite-300 hover:bg-graphite-50"><List className="size-3.5" /></button>
+        <button type="button" title="Numeração" aria-label="Lista numerada" onMouseDown={(event) => event.preventDefault()} onClick={() => applyList("decimal")} className="flex size-7 items-center justify-center border border-transparent text-graphite-600 hover:border-graphite-300 hover:bg-graphite-50"><ListOrdered className="size-3.5" /></button>
+        <button type="button" title="Alíneas" aria-label="Lista por alíneas" onMouseDown={(event) => event.preventDefault()} onClick={() => applyList("lower-alpha")} className="flex size-7 items-center justify-center border border-transparent text-graphite-600 hover:border-graphite-300 hover:bg-graphite-50"><ListTree className="size-3.5" /></button>
+        <button type="button" title="Diminuir recuo" aria-label="Diminuir recuo" onMouseDown={(event) => event.preventDefault()} onClick={() => command("outdent")} className="flex size-7 items-center justify-center border border-transparent text-graphite-600 hover:border-graphite-300 hover:bg-graphite-50"><IndentDecrease className="size-3.5" /></button>
+        <button type="button" title="Aumentar recuo" aria-label="Aumentar recuo" onMouseDown={(event) => event.preventDefault()} onClick={() => command("indent")} className="flex size-7 items-center justify-center border border-transparent text-graphite-600 hover:border-graphite-300 hover:bg-graphite-50"><IndentIncrease className="size-3.5" /></button>
         <label className="ml-1 flex h-7 items-center gap-1 border border-graphite-300 px-1.5 text-2xs text-graphite-500">Cor <input type="color" defaultValue="#1f2937" onChange={(event) => command("foreColor", event.target.value)} className="size-5 border-0 bg-transparent p-0" /></label>
+        <span className="mx-1 h-5 w-px bg-graphite-250" />
+        <input aria-label="Linhas da tabela" title="Linhas" type="number" min={1} max={12} value={tableRows} onChange={(event) => { const next = Number(event.target.value); setTableRows(Number.isFinite(next) ? next : 1); }} className="h-7 w-12 border border-graphite-300 bg-white px-1 text-center text-xs text-graphite-700" />
+        <span className="text-xs text-graphite-400">x</span>
+        <input aria-label="Colunas da tabela" title="Colunas" type="number" min={1} max={8} value={tableColumns} onChange={(event) => { const next = Number(event.target.value); setTableColumns(Number.isFinite(next) ? next : 1); }} className="h-7 w-12 border border-graphite-300 bg-white px-1 text-center text-xs text-graphite-700" />
+        <button type="button" title="Inserir tabela" aria-label="Inserir tabela" onMouseDown={(event) => event.preventDefault()} onClick={insertTable} className="flex size-7 items-center justify-center border border-transparent text-graphite-600 hover:border-graphite-300 hover:bg-graphite-50"><Table2 className="size-3.5" /></button>
         <span className="mx-1 h-5 w-px bg-graphite-250" />
         <button type="button" title="Desfazer" onMouseDown={(e) => e.preventDefault()} onClick={() => command("undo")} className="flex size-7 items-center justify-center text-graphite-600 hover:bg-graphite-50"><Undo2 className="size-3.5" /></button>
         <button type="button" title="Refazer" onMouseDown={(e) => e.preventDefault()} onClick={() => command("redo")} className="flex size-7 items-center justify-center text-graphite-600 hover:bg-graphite-50"><Redo2 className="size-3.5" /></button>
@@ -152,6 +245,9 @@ export function LetterEditor({ value, onChange, title = "Carta institucional", t
             data-placeholder="Escreva a carta aqui…"
             onInput={emit}
             onBlur={emit}
+            onFocus={saveSelection}
+            onKeyUp={saveSelection}
+            onMouseUp={saveSelection}
             className={cn("letter-editor min-h-[820px] text-[13px] leading-6 text-graphite-800 outline-none", "empty:before:pointer-events-none empty:before:text-graphite-350 empty:before:content-[attr(data-placeholder)]")}
           />
           <div className="mt-8 border-t border-graphite-200 pt-4 text-center text-2xs text-graphite-500">

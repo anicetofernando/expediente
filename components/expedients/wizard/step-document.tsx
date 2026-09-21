@@ -46,8 +46,8 @@ export function StepDocument({ state, update }: StepProps) {
     const recipientUnit = organizationalUnits.find((unit) => unit.id === state.destinatario);
     const recipientParent = organizationalUnits.find((unit) => unit.id === recipientUnit?.parentId);
     return (
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-12">
-        <section className="lg:col-span-7">
+      <div className="space-y-5">
+        <section className="w-full">
           <Label required>Modelo de documento</Label>
           <Select value={state.modeloId} onValueChange={(v) => {
             const next = documentTemplates.find((item) => item.id === v);
@@ -81,36 +81,6 @@ export function StepDocument({ state, update }: StepProps) {
           </div>
         </section>
 
-        <section className="lg:col-span-5 lg:sticky lg:top-4 lg:self-start">
-          <Label>Pré-visualização</Label>
-          <div className="h-[78vh] min-h-[720px] max-h-[920px] overflow-y-auto border border-graphite-300 bg-graphite-50 p-3">
-            <div className="mx-auto min-h-[680px] max-w-[520px] overflow-hidden border border-graphite-200 bg-white px-9 py-10 text-2xs [overflow-wrap:anywhere]">
-              {template?.logotipo && template.logotipoPosicao === "cabecalho" && <img src={template.logotipo} alt="Logótipo" className="mx-auto mb-3 max-h-16 max-w-36 object-contain" />}
-              <div className="text-center text-[10px] font-semibold uppercase leading-tight text-success-700">
-                {originParent && <p>{originParent.nome}</p>}
-                <p>{originUnit?.nome ?? "Unidade emitente"}</p>
-              </div>
-              <div className="mt-3 grid min-h-20 grid-cols-2 border border-graphite-700 text-[10px] leading-tight text-graphite-900">
-                <div className="border-r border-graphite-700 p-2 text-left">
-                  <p className="font-semibold uppercase">EXMO. SENHOR:</p>
-                  <p className="mt-2 font-semibold uppercase">{recipientUnit?.nome ?? "Destinatario automatico"}</p>
-                  {recipientParent && <p className="mt-1 uppercase">{recipientParent.nome}</p>}
-                </div>
-                <div className="p-2 text-center font-semibold underline">Despacho</div>
-              </div>
-              <div className="mt-2 flex justify-between gap-3 text-[10px] text-graphite-700">
-                <span>N/Ref.: gerada no protocolo</span>
-                <span>Data: actual</span>
-              </div>
-              <p className="mt-1 text-[10px] text-graphite-900"><strong className="underline">Assunto:</strong> {state.assunto || "Assunto do expediente"}</p>
-              {state.conteudo ? <div className="mt-6 text-[11px] leading-relaxed text-graphite-700 [overflow-wrap:anywhere]" dangerouslySetInnerHTML={{ __html: state.conteudo }} /> : <div className="mt-6 text-[11px] text-graphite-400">O conteúdo do documento será apresentado nesta área.</div>}
-              <div className="mt-10 border-t border-graphite-200 pt-3 text-center text-[9px] text-graphite-500">
-                {template?.logotipo && template.logotipoPosicao === "rodape" && <img src={template.logotipo} alt="Logótipo" className="mx-auto mb-2 max-h-12 max-w-28 object-contain" />}
-                <p className="whitespace-pre-line">{template?.rodape ?? "Correspondência institucional"}</p>
-              </div>
-            </div>
-          </div>
-        </section>
       </div>
     );
   }
