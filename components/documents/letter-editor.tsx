@@ -13,9 +13,13 @@ import {
   List,
   ListOrdered,
   ListTree,
+  Plus,
   Printer,
   Redo2,
+  Rows3,
   Table2,
+  Columns3,
+  Trash2,
   Underline,
   Undo2,
 } from "lucide-react";
@@ -48,12 +52,15 @@ function escapeMarkup(value: string) {
   return value.replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character] ?? character);
 }
 
+const tableCellStyle = "border:1px solid #cbd5e1;padding:6px 8px;min-width:90px";
+
 export function LetterEditor({ value, onChange, title = "Carta institucional", template, compact = false, header }: { value: string; onChange: (html: string) => void; title?: string; template?: DocumentTemplate; compact?: boolean; header?: LetterEditorHeader }) {
   const editorRef = React.useRef<HTMLDivElement>(null);
   const selectionRef = React.useRef<Range | null>(null);
   const { toast } = useToast();
   const [tableRows, setTableRows] = React.useState(3);
   const [tableColumns, setTableColumns] = React.useState(3);
+  const [tableActive, setTableActive] = React.useState(false);
   const issuingLines = uniqueLines([header?.issuingParentUnit, header?.issuingUnit]);
   const displayedIssuingLines = issuingLines.length ? issuingLines : [template?.cabecalho ?? "Unidade emitente"];
   const recipientLines = uniqueLines([header?.recipientUnit, header?.recipientParentUnit]);
@@ -73,9 +80,17 @@ export function LetterEditor({ value, onChange, title = "Carta institucional", t
   function saveSelection() {
     const editor = editorRef.current;
     const selection = window.getSelection();
-    if (!editor || !selection || selection.rangeCount === 0) return;
+    if (!editor || !selection || selection.rangeCount === 0) {
+      setTableActive(false);
+      return;
+    }
     const range = selection.getRangeAt(0);
-    if (editor.contains(range.commonAncestorContainer)) selectionRef.current = range.cloneRange();
+    if (editor.contains(range.commonAncestorContainer)) {
+      selectionRef.current = range.cloneRange();
+      setTableActive(Boolean(getTableContext(range.commonAncestorContainer)));
+      return;
+    }
+    setTableActive(false);
   }
 
   function restoreSelection() {
@@ -91,6 +106,135 @@ export function LetterEditor({ value, onChange, title = "Carta institucional", t
     document.execCommand(name, false, argument);
     emit();
     saveSelection();
+  }
+
+  function closestElement<T extends Element>(node: Node | null, predicate: (element: Element) => element is T) {
+    const editor = editorRef.current;
+    let current = node?.nodeType === Node.ELEMENT_NODE ? node as Element : node?.parentElement ?? null;
+    while (current && current !== editor) {
+      if (predicate(current)) return current;
+      current = current.parentElement;
+    }
+    return null;
+  }
+
+  function getTableContext(node?: Node | null) {
+    const selection = window.getSelection();
+    const target = node ?? selection?.anchorNode ?? selectionRef.current?.commonAncestorContainer ?? null;
+    const cell = closestElement<HTMLTableCellElement>(
+      target,
+      (element): element is HTMLTableCellElement => element instanceof HTMLTableCellElement,
+    );
+    const row = cell?.parentElement instanceof HTMLTableRowElement ? cell.parentElement : null;
+    const table = closestElement<HTMLTableElement>(
+      cell,
+      (element): element is HTMLTableElement => element instanceof HTMLTableElement,
+    );
+    if (!cell || !row || !table) return null;
+    return { cell, row, table };
+  }
+
+  function emptyCell(reference?: HTMLTableCellElement) {
+    const cell = document.createElement(reference?.tagName.toLowerCase() === "th" ? "th" : "td") as HTMLTableCellElement;
+    cell.setAttribute("style", reference?.getAttribute("style") || tableCellStyle);
+    cell.innerHTML = "<br>";
+    return cell;
+  }
+
+  function focusCell(cell: HTMLTableCellElement | null | undefined) {
+    if (!cell) return;
+    const range = document.createRange();
+    range.selectNodeContents(cell);
+    range.collapse(false);
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+    selectionRef.current = range.cloneRange();
+    setTableActive(true);
+  }
+
+  function runTableAction(action: (context: NonNullable<ReturnType<typeof getTableContext>>) => HTMLTableCellElement | null | undefined) {
+    restoreSelection();
+    const context = getTableContext();
+    if (!context) {
+      setTableActive(false);
+      return;
+    }
+    const nextCell = action(context);
+    emit();
+    focusCell(nextCell);
+    saveSelection();
+  }
+
+  function addTableRowAfter() {
+    runTableAction(({ row, cell }) => {
+      const nextRow = row.cloneNode(false) as HTMLTableRowElement;
+      const cells = row.cells.length ? Array.from(row.cells) : [undefined];
+      cells.forEach((cell) => nextRow.appendChild(emptyCell(cell)));
+      row.after(nextRow);
+      return nextRow.cells[cell.cellIndex] ?? nextRow.cells[0];
+    });
+  }
+
+  function addTableColumnAfter() {
+    runTableAction(({ table, row, cell }) => {
+      const columnIndex = cell.cellIndex;
+      let focusTarget: HTMLTableCellElement | null = null;
+      Array.from(table.rows).forEach((currentRow) => {
+        const reference = currentRow.cells[Math.min(columnIndex, currentRow.cells.length - 1)] ?? cell;
+        const nextCell = emptyCell(reference);
+        if (currentRow.cells[columnIndex]) currentRow.cells[columnIndex].after(nextCell);
+        else currentRow.appendChild(nextCell);
+        if (currentRow === row) focusTarget = nextCell;
+      });
+      return focusTarget;
+    });
+  }
+
+  function deleteTableRow() {
+    runTableAction(({ table, row }) => {
+      if (table.rows.length <= 1) {
+        const previous = table.previousElementSibling;
+        const next = table.nextElementSibling;
+        table.remove();
+        if (previous instanceof HTMLElement) previous.focus();
+        if (next instanceof HTMLElement) next.focus();
+        setTableActive(false);
+        return null;
+      }
+      const nextRow = row.nextElementSibling instanceof HTMLTableRowElement ? row.nextElementSibling : row.previousElementSibling;
+      const nextCell = nextRow instanceof HTMLTableRowElement ? nextRow.cells[0] : null;
+      row.remove();
+      return nextCell;
+    });
+  }
+
+  function deleteTableColumn() {
+    runTableAction(({ table, row, cell }) => {
+      const columnIndex = cell.cellIndex;
+      const maxColumns = Math.max(0, ...Array.from(table.rows).map((currentRow) => currentRow.cells.length));
+      if (maxColumns <= 1) {
+        table.remove();
+        setTableActive(false);
+        return null;
+      }
+      let focusTarget: HTMLTableCellElement | null = null;
+      Array.from(table.rows).forEach((currentRow) => {
+        const removable = currentRow.cells[columnIndex];
+        const candidate = currentRow.cells[columnIndex + 1] ?? currentRow.cells[columnIndex - 1] ?? null;
+        if (currentRow === row) focusTarget = candidate;
+        removable?.remove();
+      });
+      return focusTarget;
+    });
+  }
+
+  function deleteTable() {
+    runTableAction(({ table }) => {
+      table.remove();
+      setTableActive(false);
+      return null;
+    });
   }
 
   function findClosestList(node: Node | null) {
@@ -135,7 +279,7 @@ export function LetterEditor({ value, onChange, title = "Carta institucional", t
   function insertTable() {
     const rows = Math.min(12, Math.max(1, tableRows || 1));
     const columns = Math.min(8, Math.max(1, tableColumns || 1));
-    const cells = Array.from({ length: columns }, () => `<td style="border:1px solid #cbd5e1;padding:6px 8px;min-width:90px"><br></td>`).join("");
+    const cells = Array.from({ length: columns }, () => `<td style="${tableCellStyle}"><br></td>`).join("");
     const body = Array.from({ length: rows }, () => `<tr>${cells}</tr>`).join("");
     insertHtml(`<table style="width:100%;border-collapse:collapse;margin:12px 0"><tbody>${body}</tbody></table><p><br></p>`);
   }
@@ -204,6 +348,11 @@ export function LetterEditor({ value, onChange, title = "Carta institucional", t
         <span className="text-xs text-graphite-400">x</span>
         <input aria-label="Colunas da tabela" title="Colunas" type="number" min={1} max={8} value={tableColumns} onChange={(event) => { const next = Number(event.target.value); setTableColumns(Number.isFinite(next) ? next : 1); }} className="h-7 w-12 border border-graphite-300 bg-white px-1 text-center text-xs text-graphite-700" />
         <button type="button" title="Inserir tabela" aria-label="Inserir tabela" onMouseDown={(event) => event.preventDefault()} onClick={insertTable} className="flex size-7 items-center justify-center border border-transparent text-graphite-600 hover:border-graphite-300 hover:bg-graphite-50"><Table2 className="size-3.5" /></button>
+        <button type="button" disabled={!tableActive} title={tableActive ? "Adicionar linha abaixo" : "Clique numa celula da tabela"} aria-label="Adicionar linha abaixo" onMouseDown={(event) => event.preventDefault()} onClick={addTableRowAfter} className={cn("relative flex size-7 items-center justify-center border border-transparent text-graphite-600 hover:border-graphite-300 hover:bg-graphite-50 disabled:cursor-not-allowed disabled:opacity-35", !tableActive && "hover:border-transparent hover:bg-transparent")}><Rows3 className="size-3.5" /><Plus className="absolute bottom-1 right-1 size-2.5" /></button>
+        <button type="button" disabled={!tableActive} title={tableActive ? "Adicionar coluna a direita" : "Clique numa celula da tabela"} aria-label="Adicionar coluna a direita" onMouseDown={(event) => event.preventDefault()} onClick={addTableColumnAfter} className={cn("relative flex size-7 items-center justify-center border border-transparent text-graphite-600 hover:border-graphite-300 hover:bg-graphite-50 disabled:cursor-not-allowed disabled:opacity-35", !tableActive && "hover:border-transparent hover:bg-transparent")}><Columns3 className="size-3.5" /><Plus className="absolute bottom-1 right-1 size-2.5" /></button>
+        <button type="button" disabled={!tableActive} title={tableActive ? "Eliminar linha" : "Clique numa celula da tabela"} aria-label="Eliminar linha" onMouseDown={(event) => event.preventDefault()} onClick={deleteTableRow} className={cn("relative flex size-7 items-center justify-center border border-transparent text-graphite-600 hover:border-graphite-300 hover:bg-graphite-50 disabled:cursor-not-allowed disabled:opacity-35", !tableActive && "hover:border-transparent hover:bg-transparent")}><Rows3 className="size-3.5" /><Trash2 className="absolute bottom-1 right-1 size-2.5" /></button>
+        <button type="button" disabled={!tableActive} title={tableActive ? "Eliminar coluna" : "Clique numa celula da tabela"} aria-label="Eliminar coluna" onMouseDown={(event) => event.preventDefault()} onClick={deleteTableColumn} className={cn("relative flex size-7 items-center justify-center border border-transparent text-graphite-600 hover:border-graphite-300 hover:bg-graphite-50 disabled:cursor-not-allowed disabled:opacity-35", !tableActive && "hover:border-transparent hover:bg-transparent")}><Columns3 className="size-3.5" /><Trash2 className="absolute bottom-1 right-1 size-2.5" /></button>
+        <button type="button" disabled={!tableActive} title={tableActive ? "Eliminar tabela" : "Clique numa celula da tabela"} aria-label="Eliminar tabela" onMouseDown={(event) => event.preventDefault()} onClick={deleteTable} className={cn("relative flex size-7 items-center justify-center border border-transparent text-crimson-700 hover:border-crimson-200 hover:bg-crimson-50 disabled:cursor-not-allowed disabled:opacity-35", !tableActive && "text-graphite-600 hover:border-transparent hover:bg-transparent")}><Table2 className="size-3.5" /><Trash2 className="absolute bottom-1 right-1 size-2.5" /></button>
         <span className="mx-1 h-5 w-px bg-graphite-250" />
         <button type="button" title="Desfazer" onMouseDown={(e) => e.preventDefault()} onClick={() => command("undo")} className="flex size-7 items-center justify-center text-graphite-600 hover:bg-graphite-50"><Undo2 className="size-3.5" /></button>
         <button type="button" title="Refazer" onMouseDown={(e) => e.preventDefault()} onClick={() => command("redo")} className="flex size-7 items-center justify-center text-graphite-600 hover:bg-graphite-50"><Redo2 className="size-3.5" /></button>
