@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogBody } from "@/components/ui/dialog";
 import { EmptyState } from "@/components/ui/empty-state";
 import { formatDate } from "@/lib/utils";
+import { DocumentTemplatePreview } from "@/components/documents/document-template-preview";
 
 export function TemplateGallery({ templates }: { templates: DocumentTemplate[] }) {
   const [preview, setPreview] = React.useState<DocumentTemplate | null>(null);
@@ -57,14 +58,7 @@ export function TemplateGallery({ templates }: { templates: DocumentTemplate[] }
             <DialogDescription>{preview?.categoria} · {preview?.camposCount} campos · versão actualizada em {preview && formatDate(preview.actualizadoEm)}</DialogDescription>
           </DialogHeader>
           <DialogBody>
-            <div className="flex justify-center bg-graphite-50 p-6">
-              <div className="flex aspect-[210/297] w-full max-w-sm flex-col items-center justify-center gap-2 border border-graphite-300 bg-white p-8 text-center shadow-card">
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-navy-800">CFM — Portos e Caminhos de Ferro de Moçambique</p>
-                <div className="mt-6 h-px w-16 bg-graphite-200" />
-                <p className="mt-6 text-sm font-semibold text-graphite-800">{preview?.nome}</p>
-                <p className="text-2xs text-graphite-400">Modelo institucional · {preview?.categoria}</p>
-              </div>
-            </div>
+            <DocumentTemplatePreview template={preview} />
           </DialogBody>
         </DialogContent>
       </Dialog>

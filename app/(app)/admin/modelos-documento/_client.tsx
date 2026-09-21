@@ -53,6 +53,7 @@ import {
 } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
 import { formatDate } from "@/lib/utils";
+import { DocumentTemplatePreview } from "@/components/documents/document-template-preview";
 
 const CATEGORIES = [
   "Correspondência",
@@ -526,31 +527,7 @@ function ModelosDocumentoContent() {
             </DialogDescription>
           </DialogHeader>
           <DialogBody>
-            <div className="flex justify-center rounded-lg bg-graphite-50 p-6">
-              <div className="flex aspect-[210/297] w-full max-w-xs flex-col border border-graphite-300 bg-white p-8 shadow-card">
-                {preview?.logotipo && preview.logotipoPosicao === "cabecalho" && <img src={preview.logotipo} alt="Logótipo do modelo" className="mx-auto mb-2 max-h-12 max-w-28 object-contain" />}
-                <p className="whitespace-pre-line text-center text-[10px] font-semibold uppercase tracking-wide text-navy-800">
-                  {preview?.cabecalho ?? "CFM — Portos e Caminhos de Ferro de Moçambique"}
-                </p>
-                <div className="my-5 h-px bg-graphite-200" />
-                <p className="text-center text-sm font-semibold text-graphite-900">
-                  {preview?.nome}
-                </p>
-                <div className="mt-8 space-y-3">
-                  {[80, 100, 88, 95, 72].map((width, index) => (
-                    <div
-                      key={index}
-                      className="h-2 rounded bg-graphite-100"
-                      style={{ width: `${width}%` }}
-                    />
-                  ))}
-                </div>
-                <div className="mt-auto border-t border-graphite-200 pt-3 text-center text-[8px] text-graphite-500">
-                  {preview?.logotipo && preview.logotipoPosicao === "rodape" && <img src={preview.logotipo} alt="Logótipo do modelo" className="mx-auto mb-1 max-h-9 max-w-24 object-contain" />}
-                  <p className="whitespace-pre-line">{preview?.rodape ?? "Correspondência institucional"}</p>
-                </div>
-              </div>
-            </div>
+            <DocumentTemplatePreview template={preview} />
           </DialogBody>
         </DialogContent>
       </Dialog>
