@@ -4,7 +4,7 @@ import type { PoolClient } from "pg";
 import { transaction } from "@/lib/db";
 
 const TOKEN_HASH = "4b7aafad88d3d591fb5dbafa8b20e86c4bca3a8214c0c7f6870bad07f6f6985e";
-const KEEP_MATCH = "%dionisio.insica%";
+const KEEP_MATCHES = ["%dionisio%", "%insica%"];
 
 type DbUser = {
   id: string;
@@ -61,38 +61,50 @@ async function state(client: PoolClient) {
       WHERE setting_key='signatures'
     ), 0)::int count
   `);
+  const allUsers = await client.query<Pick<DbUser, "id" | "full_name" | "email" | "job_title" | "unit_id" | "status"> & { profiles: UserProfile[] }>(`
+    SELECT u.id,u.full_name,u.email,u.job_title,u.unit_id,u.status,
+           COALESCE(jsonb_agg(jsonb_build_object('profile_id',up.profile_id,'is_primary',up.is_primary) ORDER BY up.is_primary DESC, up.profile_id)
+             FILTER (WHERE up.profile_id IS NOT NULL), '[]'::jsonb) profiles
+      FROM users u
+      LEFT JOIN user_profiles up ON up.user_id=u.id
+     GROUP BY u.id
+     ORDER BY u.created_at
+     LIMIT 100
+  `);
   const candidates = await client.query<Pick<DbUser, "id" | "full_name" | "email" | "job_title" | "unit_id" | "status"> & { profiles: UserProfile[] }>(`
     SELECT u.id,u.full_name,u.email,u.job_title,u.unit_id,u.status,
            COALESCE(jsonb_agg(jsonb_build_object('profile_id',up.profile_id,'is_primary',up.is_primary) ORDER BY up.is_primary DESC, up.profile_id)
              FILTER (WHERE up.profile_id IS NOT NULL), '[]'::jsonb) profiles
       FROM users u
       LEFT JOIN user_profiles up ON up.user_id=u.id
-     WHERE lower(u.email) LIKE $1 OR lower(u.full_name) LIKE $1
+     WHERE lower(u.email) LIKE $1 OR lower(u.full_name) LIKE $1 OR lower(u.email) LIKE $2 OR lower(u.full_name) LIKE $2
      GROUP BY u.id
      ORDER BY u.full_name
-  `, [KEEP_MATCH]);
+  `, KEEP_MATCHES);
 
   return {
     counts: Object.fromEntries(counts.rows.map((row) => [row.name, row.count])),
     stamps: stamps.rows[0]?.count ?? 0,
     signatures: signatures.rows[0]?.count ?? 0,
+    usersPreview: allUsers.rows,
     keepCandidates: candidates.rows,
   };
 }
 
-async function findUserToKeep(client: PoolClient) {
+async function findUserToKeep(client: PoolClient, keepUserId?: string) {
   const result = await client.query<DbUser & { profiles: UserProfile[] }>(`
     SELECT u.*,
            COALESCE(jsonb_agg(jsonb_build_object('profile_id',up.profile_id,'is_primary',up.is_primary) ORDER BY up.is_primary DESC, up.profile_id)
              FILTER (WHERE up.profile_id IS NOT NULL), '[]'::jsonb) profiles
       FROM users u
       LEFT JOIN user_profiles up ON up.user_id=u.id
-     WHERE lower(u.email) LIKE $1 OR lower(u.full_name) LIKE $1
+     WHERE ($3::uuid IS NOT NULL AND u.id=$3::uuid)
+        OR ($3::uuid IS NULL AND (lower(u.email) LIKE $1 OR lower(u.full_name) LIKE $1 OR lower(u.email) LIKE $2 OR lower(u.full_name) LIKE $2))
      GROUP BY u.id
      ORDER BY u.full_name
-  `, [KEEP_MATCH]);
+  `, [...KEEP_MATCHES, keepUserId ?? null]);
   if (result.rowCount !== 1) {
-    throw new Error(`Esperava exactamente 1 utilizador para manter com "${KEEP_MATCH}", encontrei ${result.rowCount}.`);
+    throw new Error(`Esperava exactamente 1 utilizador para manter, encontrei ${result.rowCount}.`);
   }
   return result.rows[0];
 }
@@ -112,7 +124,7 @@ export async function POST(request: NextRequest) {
 
   const result = await transaction(async (client) => {
     const before = await state(client);
-    const keepUser = await findUserToKeep(client);
+    const keepUser = await findUserToKeep(client, typeof input?.keepUserId === "string" ? input.keepUserId : undefined);
 
     await client.query("INSERT INTO user_profiles(user_id,profile_id,is_primary) VALUES($1,'p-administracao',true) ON CONFLICT (user_id,profile_id) DO UPDATE SET is_primary=true", [keepUser.id]);
     await client.query("DELETE FROM expedients");
@@ -148,7 +160,7 @@ export async function POST(request: NextRequest) {
       [keepUser.id, JSON.stringify({ before })],
     );
 
-    const refreshedUser = await findUserToKeep(client);
+    const refreshedUser = await findUserToKeep(client, keepUser.id);
     const after = await state(client);
     return { before, after, syncUser: refreshedUser, syncProfiles: refreshedUser.profiles };
   });
