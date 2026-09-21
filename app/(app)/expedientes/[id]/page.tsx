@@ -34,6 +34,8 @@ export default async function ExpedientDetailPage({ params }: { params: { id: st
   // trabalha sempre a partir do expediente original (e' ela que prepara a
   // nota, precisa de ver o conteudo original, nao a sua propria nota).
   const nonAttachments = expedient.documentos.filter((d) => d.tipo !== "anexo");
+  const originalPrincipal = expedient.documentos.find((d) => d.tipo === "principal");
+  const latestNote = expedient.documentos.filter((d) => d.tipo === "nota").at(-1);
   const principal = session.perfilNavegacao === "secretaria"
     ? expedient.documentos.find((d) => d.tipo === "principal") ?? nonAttachments[0] ?? expedient.documentos[0]
     : nonAttachments.at(-1) ?? expedient.documentos[0];
@@ -183,6 +185,7 @@ export default async function ExpedientDetailPage({ params }: { params: { id: st
                   pendingNextStatus: expedient.pendingNextStatus,
                 }}
                 principalPdfUrl={principal?.pdfUrl}
+                approvalPdfUrls={{ nota: latestNote?.pdfUrl, expediente: originalPrincipal?.pdfUrl }}
               />
             </CardContent>
           </Card>

@@ -98,7 +98,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
   const session = await getCurrentSession();
   if (!session) return NextResponse.json({ error: "Nao autenticado." }, { status: 401 });
 
-  let input: { action?: string; note?: string; target?: string; posicaoCarimbo?: FreePosition; posicaoAssinatura?: FreePosition; alvo?: string };
+  let input: { action?: string; note?: string; target?: string; posicaoCarimbo?: FreePosition; posicaoAssinatura?: FreePosition; posicaoNota?: FreePosition; alvo?: string };
   try {
     input = await request.json();
   } catch {
@@ -512,6 +512,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
           const decisionNote = JSON.stringify({
             texto: input.note!.trim(), autor: session.user.nome, cargo: session.user.cargo || undefined,
             data: todayInMaputo(),
+            posicaoLivre: input.posicaoNota,
           });
           await client.query(
             `UPDATE documents
@@ -581,6 +582,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
           const decisionNote = JSON.stringify({
             texto: input.note!.trim(), autor: session.user.nome, cargo: session.user.cargo || undefined,
             data: todayInMaputo(),
+            posicaoLivre: input.posicaoNota,
           });
           await client.query(
             `UPDATE documents SET stamped=$2,signed=$3,stamp_id=COALESCE($4,stamp_id),stamp_metadata=COALESCE($5::jsonb,stamp_metadata),signature_metadata=COALESCE($6::jsonb,signature_metadata),stamps_metadata=$7::jsonb,signatures_metadata=$8::jsonb,decision_note=$9::jsonb WHERE id=$1`,

@@ -8,18 +8,85 @@ import { Button } from "@/components/ui/button";
 
 const STAMP_DEFAULT: FreePosition = { x: 10, y: 76, width: 28, height: 14 };
 const SIGNATURE_DEFAULT: FreePosition = { x: 62, y: 78, width: 28, height: 14 };
+const NOTE_DEFAULT: FreePosition = { x: 36, y: 66, width: 38, height: 11 };
 const MIN_SIZE = 6;
 const MAX_SIZE = 60;
 const MAX_PREVIEW_WIDTH = 680;
 const MAX_PREVIEW_HEIGHT = 720;
+const PDFJS_LOADER_URL = "/pdfjs-loader.mjs";
+const PDFJS_WORKER_URL = "/pdf.worker.min.mjs";
+
+type PdfViewport = { width: number; height: number };
+type PdfPageProxy = {
+  getViewport: (options: { scale: number }) => PdfViewport;
+  render: (options: {
+    canvas: HTMLCanvasElement;
+    canvasContext: CanvasRenderingContext2D;
+    viewport: PdfViewport;
+    transform?: [number, number, number, number, number, number];
+  }) => { promise: Promise<void> };
+};
+type PdfDocumentProxy = {
+  numPages: number;
+  getPage: (pageNumber: number) => Promise<PdfPageProxy>;
+};
+type PdfJsRuntime = {
+  GlobalWorkerOptions: { workerSrc: string };
+  getDocument: (source: { data: ArrayBuffer }) => { promise: Promise<PdfDocumentProxy> };
+};
+
+declare global {
+  interface Window {
+    __cfmPdfJs?: PdfJsRuntime;
+    __cfmPdfJsLoading?: Promise<PdfJsRuntime>;
+  }
+}
+
+function loadPdfJsRuntime() {
+  if (window.__cfmPdfJs) return Promise.resolve(window.__cfmPdfJs);
+  if (window.__cfmPdfJsLoading) return window.__cfmPdfJsLoading;
+
+  window.__cfmPdfJsLoading = new Promise<PdfJsRuntime>((resolve, reject) => {
+    const finish = () => {
+      if (!window.__cfmPdfJs) {
+        reject(new Error("PDF.js runtime unavailable."));
+        return;
+      }
+      window.__cfmPdfJs.GlobalWorkerOptions.workerSrc = PDFJS_WORKER_URL;
+      resolve(window.__cfmPdfJs);
+    };
+    const fail = () => reject(new Error("Could not load PDF.js runtime."));
+    const existing = document.querySelector<HTMLScriptElement>(`script[src="${PDFJS_LOADER_URL}"]`);
+    if (existing) {
+      existing.addEventListener("load", finish, { once: true });
+      existing.addEventListener("error", fail, { once: true });
+      return;
+    }
+    const script = document.createElement("script");
+    script.type = "module";
+    script.src = PDFJS_LOADER_URL;
+    script.async = true;
+    script.addEventListener("load", finish, { once: true });
+    script.addEventListener("error", fail, { once: true });
+    document.head.appendChild(script);
+  }).catch((error) => {
+    window.__cfmPdfJsLoading = undefined;
+    throw error;
+  });
+
+  return window.__cfmPdfJsLoading;
+}
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }
 
 interface PositionableItem {
+  kind?: "image" | "text";
   imageUrl: string;
   label: string;
+  text?: string;
+  attribution?: string;
   initialPosition?: FreePosition;
 }
 
@@ -40,8 +107,7 @@ function PdfPagePreview({ pdfUrl, onReady }: { pdfUrl: string; onReady: (canvas:
     const slowTimer = setTimeout(() => { if (!cancelled) setSlow(true); }, 4000);
     (async () => {
       try {
-        const pdfjs = await import("pdfjs-dist");
-        pdfjs.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
+        const pdfjs = await loadPdfJsRuntime();
         const response = await fetch(pdfUrl);
         if (!response.ok) throw new Error("Nao foi possivel carregar o documento.");
         const bytes = await response.arrayBuffer();
@@ -147,8 +213,15 @@ function PositionableOverlay({
       className="absolute cursor-move touch-none select-none border-2 border-dashed bg-white/70"
       style={{ left: `${position.x}%`, top: `${position.y}%`, width: `${position.width}%`, height: `${position.height}%`, borderColor: accent }}
     >
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={item.imageUrl} alt={item.label} className="h-full w-full object-contain" draggable={false} />
+      {item.kind === "text" ? (
+        <div className="flex h-full w-full flex-col justify-start overflow-hidden p-1 text-left leading-tight text-graphite-900">
+          <span className="whitespace-pre-wrap text-[11px] italic">{item.text}</span>
+          {item.attribution && <span className="mt-1 truncate text-[8px] font-semibold">{item.attribution}</span>}
+        </div>
+      ) : (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={item.imageUrl} alt={item.label} className="h-full w-full object-contain" draggable={false} />
+      )}
       <span className="pointer-events-none absolute -top-2.5 -right-2.5 flex size-5 items-center justify-center rounded-full text-white" style={{ backgroundColor: accent }}>
         <Move className="size-3" />
       </span>
@@ -173,6 +246,7 @@ export function StampPositionPicker({
   pdfUrl,
   stamp,
   signature,
+  note,
   onConfirm,
 }: {
   open: boolean;
@@ -180,17 +254,20 @@ export function StampPositionPicker({
   pdfUrl: string;
   stamp?: PositionableItem;
   signature?: PositionableItem;
-  onConfirm: (result: { posicaoCarimbo?: FreePosition; posicaoAssinatura?: FreePosition }) => void;
+  note?: Omit<PositionableItem, "imageUrl"> & { imageUrl?: string };
+  onConfirm: (result: { posicaoCarimbo?: FreePosition; posicaoAssinatura?: FreePosition; posicaoNota?: FreePosition }) => void;
 }) {
   const containerRef = React.useRef<HTMLDivElement>(null);
   const [stampPosition, setStampPosition] = React.useState<FreePosition>(stamp?.initialPosition ?? STAMP_DEFAULT);
   const [signaturePosition, setSignaturePosition] = React.useState<FreePosition>(signature?.initialPosition ?? SIGNATURE_DEFAULT);
+  const [notePosition, setNotePosition] = React.useState<FreePosition>(note?.initialPosition ?? NOTE_DEFAULT);
   const [previewReady, setPreviewReady] = React.useState(false);
 
   React.useEffect(() => {
     if (!open) return;
     setStampPosition(stamp?.initialPosition ?? STAMP_DEFAULT);
     setSignaturePosition(signature?.initialPosition ?? SIGNATURE_DEFAULT);
+    setNotePosition(note?.initialPosition ?? NOTE_DEFAULT);
     setPreviewReady(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, pdfUrl]);
@@ -199,7 +276,7 @@ export function StampPositionPicker({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent size="xl" className="max-h-[94vh]">
         <DialogHeader>
-          <DialogTitle>Posicionar carimbo e assinatura</DialogTitle>
+          <DialogTitle>Posicionar elementos</DialogTitle>
           <DialogDescription>Arraste cada elemento para o local exacto onde deve ficar, e use o ponto no canto inferior direito para ajustar o tamanho.</DialogDescription>
         </DialogHeader>
         <DialogBody className="flex flex-1 flex-col items-center">
@@ -211,6 +288,15 @@ export function StampPositionPicker({
             {previewReady && signature && (
               <PositionableOverlay containerRef={containerRef} item={signature} position={signaturePosition} onChange={setSignaturePosition} accent="#177047" />
             )}
+            {previewReady && note && (
+              <PositionableOverlay
+                containerRef={containerRef}
+                item={{ imageUrl: "", kind: "text", label: note.label, text: note.text, attribution: note.attribution }}
+                position={notePosition}
+                onChange={setNotePosition}
+                accent="#5b3b91"
+              />
+            )}
           </div>
           <p className="mt-2 shrink-0 text-center text-2xs text-graphite-500">
             Mostra a última página do documento, à escala exacta. A posição de cada elemento fica guardada para as próximas vezes.
@@ -218,7 +304,7 @@ export function StampPositionPicker({
         </DialogBody>
         <DialogFooter>
           <Button variant="secondary" onClick={() => onOpenChange(false)}>Cancelar</Button>
-          <Button disabled={!previewReady} onClick={() => onConfirm({ posicaoCarimbo: stamp ? stampPosition : undefined, posicaoAssinatura: signature ? signaturePosition : undefined })}>
+          <Button disabled={!previewReady} onClick={() => onConfirm({ posicaoCarimbo: stamp ? stampPosition : undefined, posicaoAssinatura: signature ? signaturePosition : undefined, posicaoNota: note ? notePosition : undefined })}>
             Aplicar aqui
           </Button>
         </DialogFooter>

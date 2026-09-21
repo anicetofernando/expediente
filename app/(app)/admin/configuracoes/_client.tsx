@@ -127,6 +127,10 @@ function ConfiguracoesContent() {
   const [resetConfirmText, setResetConfirmText] = React.useState("");
   const [resetting, setResetting] = React.useState(false);
   const RESET_PHRASE = "ELIMINAR TUDO";
+  const [resetUsersOpen, setResetUsersOpen] = React.useState(false);
+  const [resetUsersConfirmText, setResetUsersConfirmText] = React.useState("");
+  const [resettingUsers, setResettingUsers] = React.useState(false);
+  const RESET_USERS_PHRASE = "ELIMINAR UTILIZADORES";
 
   React.useEffect(() => { if (settingsReady) setSettings(storedSettings); }, [settingsReady, storedSettings]);
 
@@ -151,6 +155,30 @@ function ConfiguracoesContent() {
       toast({ title: "Não foi possível zerar os expedientes", description: error instanceof Error ? error.message : undefined, variant: "destructive" });
     } finally {
       setResetting(false);
+    }
+  }
+
+  async function resetUsers() {
+    setResettingUsers(true);
+    try {
+      const response = await fetch("/api/admin/reset-users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirmacao: resetUsersConfirmText }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error ?? "Não foi possível eliminar os utilizadores.");
+      toast({
+        title: "Dados eliminados",
+        description: `${result.utilizadores} utilizador(es), ${result.expedientes} expediente(s), ${result.carimbos} carimbo(s) e ${result.assinaturas} assinatura(s) eliminados. A sua conta foi mantida.`,
+        variant: "success",
+      });
+      setResetUsersOpen(false);
+      setResetUsersConfirmText("");
+    } catch (error) {
+      toast({ title: "Não foi possível eliminar os utilizadores", description: error instanceof Error ? error.message : undefined, variant: "destructive" });
+    } finally {
+      setResettingUsers(false);
     }
   }
 
@@ -734,6 +762,30 @@ function ConfiguracoesContent() {
                 </Button>
               </CardContent>
             </Card>
+
+            <Card className="mt-5 border-crimson-200">
+              <CardHeader>
+                <div>
+                  <CardTitle className="flex items-center gap-2 text-crimson-700"><AlertTriangle className="size-4" /> Eliminar utilizadores, carimbos e assinaturas</CardTitle>
+                  <CardDescription>
+                    Elimina permanentemente todos os utilizadores excepto a sua própria conta. Como isso arrasta consigo
+                    tudo o que lhes pertence, também elimina todos os expedientes, documentos, comentários, histórico de
+                    tramitação, notificações, delegações e fechos de livro, reinicia a numeração de protocolos e remove
+                    todos os carimbos e assinaturas. Perfis, estrutura organizacional, modelos de documento e restantes
+                    configurações não são afectados. O registo de auditoria mantém-se.
+                  </CardDescription>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <Alert variant="destructive" title="Esta acção é irreversível">
+                  Não existe forma de recuperar os utilizadores, carimbos, assinaturas nem os dados ligados a eles depois de eliminados. Use
+                  apenas para limpar todas as contas de teste antes de começar a utilização com dados reais.
+                </Alert>
+                <Button variant="destructive" className="mt-4" onClick={() => setResetUsersOpen(true)}>
+                  <Trash2 className="size-4" /> Eliminar utilizadores, carimbos e assinaturas
+                </Button>
+              </CardContent>
+            </Card>
           </TabsContent>
         </Tabs>
 
@@ -755,6 +807,30 @@ function ConfiguracoesContent() {
             <DialogFooter>
               <Button variant="secondary" onClick={() => setResetOpen(false)}>Cancelar</Button>
               <Button variant="destructive" disabled={resetConfirmText !== RESET_PHRASE || resetting} loading={resetting} onClick={resetExpedients}>
+                Eliminar tudo
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={resetUsersOpen} onOpenChange={(open) => { setResetUsersOpen(open); if (!open) setResetUsersConfirmText(""); }}>
+          <DialogContent size="sm">
+            <DialogHeader>
+              <DialogTitle>Eliminar utilizadores, carimbos e assinaturas</DialogTitle>
+              <DialogDescription>Esta acção não pode ser desfeita.</DialogDescription>
+            </DialogHeader>
+            <DialogBody className="space-y-3.5">
+              <p className="text-[13px] leading-relaxed text-graphite-700">
+                Para confirmar, escreva <strong>{RESET_USERS_PHRASE}</strong> no campo abaixo.
+              </p>
+              <div>
+                <Label htmlFor="reset-users-confirm">Confirmação</Label>
+                <Input id="reset-users-confirm" value={resetUsersConfirmText} onChange={(event) => setResetUsersConfirmText(event.target.value)} placeholder={RESET_USERS_PHRASE} autoComplete="off" />
+              </div>
+            </DialogBody>
+            <DialogFooter>
+              <Button variant="secondary" onClick={() => setResetUsersOpen(false)}>Cancelar</Button>
+              <Button variant="destructive" disabled={resetUsersConfirmText !== RESET_USERS_PHRASE || resettingUsers} loading={resettingUsers} onClick={resetUsers}>
                 Eliminar tudo
               </Button>
             </DialogFooter>

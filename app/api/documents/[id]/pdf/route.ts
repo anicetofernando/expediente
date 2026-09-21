@@ -3,7 +3,7 @@ import { getCurrentSession } from "@/lib/auth";
 import { query } from "@/lib/db";
 import { loadFile } from "@/lib/file-storage";
 import { createDocumentPdf, type PdfSignatureMetadata, type PdfStampMetadata } from "@/lib/document-pdf";
-import type { DocumentTemplate } from "@/types";
+import type { DocumentTemplate, FreePosition } from "@/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -13,7 +13,7 @@ interface DocumentAccessRow {
   name:string; mime_type:string|null; storage_path:string|null; content_html:string|null; document_kind:string;
   stamps_metadata:PdfStampMetadata[]; signatures_metadata:PdfSignatureMetadata[];
   template_metadata:Partial<DocumentTemplate>|null; document_number:string|null; own_subject:string|null; issuing_unit_name:string|null;
-  decision_note:{ texto: string; autor: string; cargo?: string; data?: string }|null;
+  decision_note:{ texto: string; autor: string; cargo?: string; data?: string; posicaoLivre?: FreePosition }|null;
   protocol:string; subject:string; status:string; created_by:string; origin_unit_id:string; recipient_unit_id:string; responsible_user_id:string|null;
 }
 

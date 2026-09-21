@@ -55,6 +55,7 @@ const ACTION_ICONS: Record<string, React.ComponentType<{ className?: string }>> 
 };
 
 type ActionExpedient = Pick<Expedient, "id" | "estado" | "protocolo" | "assunto" | "exigeCarimbo" | "exigeAssinatura" | "responsavelActualId" | "destinatario" | "destinatarioId" | "destinatarioTipo" | "confidencialidade" | "pendingNextStatus">;
+type ApprovalPdfUrls = { nota?: string; expediente?: string };
 
 const PROFILE_ACTIONS: Record<string, Set<string>> = {
   remetente: new Set(["confirmar", "resposta"]),
@@ -66,7 +67,7 @@ const PROFILE_ACTIONS: Record<string, Set<string>> = {
   administracao: new Set(Object.values(ACTIONS_BY_STATUS).flat().map((action) => action.key)),
 };
 
-export function ActionPanel({ expedient, principalPdfUrl }: { expedient: ActionExpedient; principalPdfUrl?: string }) {
+export function ActionPanel({ expedient, principalPdfUrl, approvalPdfUrls }: { expedient: ActionExpedient; principalPdfUrl?: string; approvalPdfUrls?: ApprovalPdfUrls }) {
   const { toast } = useToast();
   const { perfilNavegacao, profile, user } = useSession();
   const router = useRouter();
@@ -96,12 +97,12 @@ export function ActionPanel({ expedient, principalPdfUrl }: { expedient: ActionE
         : action);
   const [activeAction, setActiveAction] = React.useState<ActionDef | null>(null);
 
-  async function complete(action: ActionDef, message: string, target?: string, posicaoCarimbo?: FreePosition, posicaoAssinatura?: FreePosition, alvo?: string) {
+  async function complete(action: ActionDef, message: string, target?: string, posicaoCarimbo?: FreePosition, posicaoAssinatura?: FreePosition, alvo?: string, posicaoNota?: FreePosition) {
     try {
       const response = await fetch(`/api/expedients/${expedient.id}/actions`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ action: action.key, note: message, target, posicaoCarimbo, posicaoAssinatura, alvo }),
+        body: JSON.stringify({ action: action.key, note: message, target, posicaoCarimbo, posicaoAssinatura, alvo, posicaoNota }),
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error ?? "Não foi possível registar a acção.");
@@ -173,9 +174,10 @@ export function ActionPanel({ expedient, principalPdfUrl }: { expedient: ActionE
           action={activeAction}
           expedient={expedient}
           principalPdfUrl={principalPdfUrl}
+          approvalPdfUrls={approvalPdfUrls}
           onClose={() => setActiveAction(null)}
-          onComplete={(msg, target, posicaoCarimbo, posicaoAssinatura, actionKeyOverride, alvo) =>
-            complete(actionKeyOverride ? { ...activeAction, key: actionKeyOverride } : activeAction, msg, target, posicaoCarimbo, posicaoAssinatura, alvo)}
+          onComplete={(msg, target, posicaoCarimbo, posicaoAssinatura, actionKeyOverride, alvo, posicaoNota) =>
+            complete(actionKeyOverride ? { ...activeAction, key: actionKeyOverride } : activeAction, msg, target, posicaoCarimbo, posicaoAssinatura, alvo, posicaoNota)}
         />
       )}
     </div>
@@ -186,14 +188,16 @@ function ActionDialog({
   action,
   expedient,
   principalPdfUrl,
+  approvalPdfUrls,
   onClose,
   onComplete,
 }: {
   action: ActionDef;
   expedient: ActionExpedient;
   principalPdfUrl?: string;
+  approvalPdfUrls?: ApprovalPdfUrls;
   onClose: () => void;
-  onComplete: (message: string, target?: string, posicaoCarimbo?: FreePosition, posicaoAssinatura?: FreePosition, actionKeyOverride?: string, alvo?: string) => void;
+  onComplete: (message: string, target?: string, posicaoCarimbo?: FreePosition, posicaoAssinatura?: FreePosition, actionKeyOverride?: string, alvo?: string, posicaoNota?: FreePosition) => void;
 }) {
   const { organizationalUnits } = useCatalogs();
   const { perfilNavegacao } = useSession();
@@ -246,8 +250,9 @@ function ActionDialog({
     return (
       <AprovarDialog
         expedient={expedient}
+        approvalPdfUrls={approvalPdfUrls}
         onClose={onClose}
-        onFinalizar={(alvo, texto) => onComplete(texto, undefined, undefined, undefined, "aprovar", alvo)}
+        onFinalizar={(alvo, texto, posicoes) => onComplete(texto, undefined, posicoes?.posicaoCarimbo, posicoes?.posicaoAssinatura, "aprovar", alvo, posicoes?.posicaoNota)}
         onCobertura={() => onComplete("Nota de cobertura pedida.", undefined, undefined, undefined, "aprovar_nota")}
         onDespacho={() => setAprovarDespacho(true)}
       />
@@ -543,20 +548,60 @@ function ReceiveForwardDialog({
 
 function AprovarDialog({
   expedient,
+  approvalPdfUrls,
   onClose,
   onFinalizar,
   onCobertura,
   onDespacho,
 }: {
   expedient: ActionExpedient;
+  approvalPdfUrls?: ApprovalPdfUrls;
   onClose: () => void;
-  onFinalizar: (alvo: "nota" | "expediente", texto: string) => void;
+  onFinalizar: (alvo: "nota" | "expediente", texto: string, posicoes?: { posicaoCarimbo?: FreePosition; posicaoAssinatura?: FreePosition; posicaoNota?: FreePosition }) => void;
   onCobertura: () => void;
   onDespacho: () => void;
 }) {
+  const { user } = useSession();
   const [modo, setModo] = React.useState<"finalizar" | "cobertura" | null>(null);
   const [alvo, setAlvo] = React.useState<"nota" | "expediente" | "despacho">("nota");
   const [texto, setTexto] = React.useState("");
+  const [authorization, setAuthorization] = React.useState<{ stamp: StampDefinition | null; signature: Signature | null; loading: boolean }>({ stamp: null, signature: null, loading: false });
+  const [positioning, setPositioning] = React.useState(false);
+
+  const selectedPdfUrl = alvo === "nota" ? approvalPdfUrls?.nota : approvalPdfUrls?.expediente;
+  const checksAuthorization = modo === "finalizar" && alvo !== "despacho";
+  const readyToApprove = !checksAuthorization || (!authorization.loading && Boolean(authorization.stamp && authorization.signature));
+  const canPositionDecision = checksAuthorization && Boolean(selectedPdfUrl);
+
+  React.useEffect(() => {
+    if (!checksAuthorization) return;
+    let cancelled = false;
+    setAuthorization((current) => ({ ...current, loading: true }));
+    void fetch("/api/document-authorizations", { cache: "no-store" })
+      .then((response) => response.json())
+      .then((data) => { if (!cancelled) setAuthorization({ stamp: data.stamp ?? null, signature: data.signature ?? null, loading: false }); })
+      .catch(() => { if (!cancelled) setAuthorization({ stamp: null, signature: null, loading: false }); });
+    return () => { cancelled = true; };
+  }, [checksAuthorization]);
+
+  React.useEffect(() => {
+    setPositioning(false);
+  }, [alvo, texto]);
+
+  if (positioning && selectedPdfUrl) {
+    const attribution = [user.nome, user.cargo].filter(Boolean).join(" - ");
+    return (
+      <StampPositionPicker
+        open
+        onOpenChange={(v) => !v && setPositioning(false)}
+        pdfUrl={selectedPdfUrl}
+        stamp={authorization.stamp?.imagemUrl ? { imageUrl: authorization.stamp.imagemUrl, label: authorization.stamp.nome, initialPosition: authorization.stamp.posicaoLivre } : undefined}
+        signature={authorization.signature?.imagemUrl ? { imageUrl: authorization.signature.imagemUrl, label: authorization.signature.proprietario, initialPosition: authorization.signature.posicaoLivre } : undefined}
+        note={{ kind: "text", label: "Texto da decisao", text: texto.trim(), attribution }}
+        onConfirm={(result) => onFinalizar(alvo as "nota" | "expediente", texto.trim(), result)}
+      />
+    );
+  }
 
   return (
     <Dialog open onOpenChange={(v) => !v && onClose()}>
@@ -620,18 +665,29 @@ function AprovarDialog({
               <p className="mt-1 text-2xs text-graphite-400">Este texto fica visível dentro do documento, junto ao carimbo e à assinatura.</p>
             </div>
           )}
+          {checksAuthorization && authorization.loading && (
+            <p className="text-[13px] text-graphite-500">A verificar o carimbo e a assinatura...</p>
+          )}
+          {checksAuthorization && !authorization.loading && !readyToApprove && (
+            <p className="border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-relaxed text-amber-800">
+              {!authorization.stamp && "A sua unidade ainda nao tem um carimbo activo. "}
+              {!authorization.signature && "Nao tem uma assinatura individual configurada. "}
+              Configure antes de aprovar directamente.
+            </p>
+          )}
         </DialogBody>
         <DialogFooter>
           <Button variant="secondary" onClick={onClose}>Cancelar</Button>
           <Button
-            disabled={!modo || (modo === "finalizar" && alvo !== "despacho" && !texto.trim())}
+            disabled={!modo || (modo === "finalizar" && alvo !== "despacho" && (!texto.trim() || !readyToApprove))}
             onClick={() => {
               if (modo === "cobertura") return onCobertura();
               if (alvo === "despacho") return onDespacho();
+              if (canPositionDecision) return setPositioning(true);
               return onFinalizar(alvo, texto.trim());
             }}
           >
-            {modo === "cobertura" ? "Emitir nota de cobertura" : alvo === "despacho" ? "Continuar" : "Aprovar"}
+            {modo === "cobertura" ? "Emitir nota de cobertura" : alvo === "despacho" ? "Continuar" : canPositionDecision ? "Posicionar e aprovar" : "Aprovar"}
           </Button>
         </DialogFooter>
       </DialogContent>
