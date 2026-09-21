@@ -201,11 +201,12 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
           // esse mesmo servico. Se escolheu apenas o departamento/direccao, a
           // Secretaria so pode escolher entre os servicos daquele departamento.
           const originalTarget = await client.query<{ unit_type: string }>(
-            "SELECT unit_type FROM organizational_units WHERE id=$1", [exp.recipient_unit_id],
+            "SELECT unit_type FROM organizational_units WHERE id=$1 AND active=true", [exp.recipient_unit_id],
           );
+          if (!originalTarget.rows[0]) throw new Error("A unidade destinataria original ja nao esta activa.");
           if (originalTarget.rows[0]?.unit_type === "direccao") {
             const validChild = await client.query<{ id: string }>(
-              "SELECT id FROM organizational_units WHERE id=$1 AND parent_id=$2", [input.target, exp.recipient_unit_id],
+              "SELECT id FROM organizational_units WHERE id=$1 AND parent_id=$2 AND active=true", [input.target, exp.recipient_unit_id],
             );
             if (input.target !== exp.recipient_unit_id && !validChild.rows[0]) {
               throw new Error("So pode encaminhar para um servico do departamento indicado pelo remetente.");
@@ -280,6 +281,8 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 
       if (action === "encaminhar" || action === "parecer") {
         if (!input.target) throw new Error("Seleccione a unidade destinataria.");
+        const targetUnit = await client.query<{ id: string }>("SELECT id FROM organizational_units WHERE id=$1 AND active=true", [input.target]);
+        if (!targetUnit.rows[0]) throw new Error("Seleccione uma unidade destinataria activa.");
         // So' se chega aqui a partir de "nota_cobertura" (nota de cobertura ja'
         // emitida) -- o salto passa sempre primeiro pela Secretaria da unidade
         // destino, que protocola e prepara a proxima nota antes de chegar a

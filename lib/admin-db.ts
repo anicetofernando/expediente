@@ -18,7 +18,7 @@ export async function listProfiles():Promise<Profile[]> {
 }
 
 export async function listUnits():Promise<OrganizationalUnit[]> {
-  const result=await query<{id:string;name:string;acronym:string;code:string;unit_type:OrganizationalUnit["tipo"];parent_id:string|null;email:string|null;phone:string|null;extension_number:string|null;active:boolean}>("SELECT * FROM organizational_units ORDER BY code");
+  const result=await query<{id:string;name:string;acronym:string;code:string;unit_type:OrganizationalUnit["tipo"];parent_id:string|null;email:string|null;phone:string|null;extension_number:string|null;active:boolean}>("SELECT * FROM organizational_units WHERE active=true ORDER BY code");
   return result.rows.map((row)=>({id:row.id,nome:row.name,sigla:row.acronym,codigo:row.code,tipo:row.unit_type,parentId:row.parent_id,responsavelId:"",contactos:{email:row.email??undefined,telefone:row.phone??undefined,ramal:row.extension_number??undefined},estado:row.active?"activo":"inactivo"}));
 }
 

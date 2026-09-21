@@ -45,6 +45,12 @@ export async function PUT(request: Request) {
   const units = unitsFrom(catalogs);
 
   await transaction(async (client) => {
+    if (units.length > 0) {
+      await client.query(
+        "UPDATE organizational_units SET active=false WHERE NOT (id=ANY($1::text[]))",
+        [units.map((unit) => unit.id)],
+      );
+    }
     for (const unit of units) {
       await client.query(
         `INSERT INTO organizational_units(id,name,acronym,code,unit_type,parent_id,email,phone,extension_number,active)

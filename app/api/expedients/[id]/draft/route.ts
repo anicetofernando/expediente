@@ -8,7 +8,8 @@ import { sanitizeDocumentHtml } from "@/lib/sanitize-html";
 import type { Confidentiality, Priority } from "@/types";
 import { dateValueInMaputo, isValidFutureOrTodayDate } from "@/lib/date-only";
 import { templateSnapshot } from "@/lib/document-configuration";
-import { resolveSecretaryId } from "@/lib/routing";
+import { configuredDocumentTypes, resolveSecretaryId, targetResponsible } from "@/lib/routing";
+import { generateProtocolNumber } from "@/lib/numbering";
 import { saveFile } from "@/lib/file-storage";
 import { hasPermission } from "@/lib/permissions";
 import { resolveMandatoryStampSignatureByUnitId, signatureMetadataJson, stampMetadataJson } from "@/lib/stamping";
@@ -112,6 +113,12 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
       if (!current) throw new Error("Rascunho nao encontrado.");
       if (!['rascunho', 'devolvido'].includes(current.status) || (current.created_by !== session.user.id && session.perfilNavegacao !== "administracao")) throw new Error("Este rascunho ja nao pode ser editado.");
       input.unidadeOrigem = current.origin_unit_id;
+      const originUnit = await client.query<{ acronym: string }>("SELECT acronym FROM organizational_units WHERE id=$1 AND active=true", [input.unidadeOrigem]);
+      if (!originUnit.rows[0]) throw new Error("Unidade de origem invalida.");
+      const recipientUnit = await client.query<{ id: string }>("SELECT id FROM organizational_units WHERE id=$1 AND active=true", [input.destinatario]);
+      if (!recipientUnit.rows[0]) throw new Error("Seleccione uma unidade destinataria activa.");
+      const documentType = (await configuredDocumentTypes(client)).find((item) => item.id === input.tipo && item.activo);
+      if (!documentType) throw new Error("Seleccione um tipo de expediente activo.");
       const main = (await client.query<{id:string;source:string;storage_path:string|null}>(
         "SELECT id,source,storage_path FROM documents WHERE expedient_id=$1 AND document_kind='principal' LIMIT 1", [params.id],
       )).rows[0];
@@ -122,22 +129,31 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
       let protocol = current.protocol;
       let responsible: string | null = session.user.id;
       const submitting = input.rascunho !== true;
+      const isConfidencial = submitting && input.confidencialidade === "confidencial";
       if (submitting) {
-        const secretaryId = await resolveSecretaryId(client, input.destinatario);
-        if (!secretaryId) throw new Error("Nao existe utilizador activo da Secretaria.");
-        responsible = secretaryId;
-        if (protocol.startsWith("RASCUNHO-")) {
-          protocol = `SUBMISSAO-${current.id.slice(0,8).toUpperCase()}`;
+        if (isConfidencial) {
+          responsible = await targetResponsible(client, input.destinatario);
+          if (protocol.startsWith("RASCUNHO-") || protocol.startsWith("SUBMISSAO-")) {
+            protocol = await generateProtocolNumber(client, input.unidadeOrigem, originUnit.rows[0].acronym, new Date().getFullYear());
+          }
+        } else {
+          const secretaryId = await resolveSecretaryId(client, input.destinatario);
+          if (!secretaryId) throw new Error("Nao existe utilizador activo da Secretaria.");
+          responsible = secretaryId;
+          if (protocol.startsWith("RASCUNHO-")) {
+            protocol = `SUBMISSAO-${current.id.slice(0,8).toUpperCase()}`;
+          }
         }
       }
       // Enquanto se guarda uma pre-visualizacao (carimbo/assinatura) ou um rascunho
       // parcial, NAO se pode voltar a "rascunho" se ja estava "devolvido" -- isso
       // esconderia o processo da Secretaria (que so ve rascunhos que ela propria
       // tocou) ate a submissao final. So a submissao final (rascunho=false) avanca.
-      const nextStatus = submitting ? "submetido" : (current.status === "devolvido" ? "devolvido" : "rascunho");
-      const nextStep = submitting ? "Recepcao pela Secretaria" : (current.status === "devolvido" ? "Correccao em curso pelo remetente" : "Continuar a edicao");
+      const nextStatus = submitting ? (isConfidencial ? "encaminhado" : "submetido") : (current.status === "devolvido" ? "devolvido" : "rascunho");
+      const nextStep = submitting ? (isConfidencial ? "Analise directa pelo responsavel (confidencial)" : "Recepcao pela Secretaria") : (current.status === "devolvido" ? "Correccao em curso pelo remetente" : "Continuar a edicao");
+      const originSecretary = submitting && !isConfidencial ? responsible : null;
       await client.query(`UPDATE expedients SET protocol=$2,subject=$3,document_type=$4,status=$5,priority=$6,confidentiality=$7,sender_name=$8,origin_unit_id=$9,recipient_unit_id=$10,responsible_user_id=$11,origin_secretary_id=COALESCE(origin_secretary_id,$15),due_date=$12,next_step=$13,submitted_at=$14 WHERE id=$1`,
-        [params.id,protocol,input.assunto.trim(),input.tipo,nextStatus,input.prioridade,input.confidencialidade,input.remetente.trim(),input.unidadeOrigem,input.destinatario,responsible,input.prazo,nextStep,submitting?new Date().toISOString():null,submitting?responsible:null]);
+        [params.id,protocol,input.assunto.trim(),input.tipo,nextStatus,input.prioridade,input.confidencialidade,input.remetente.trim(),input.unidadeOrigem,input.destinatario,responsible,input.prazo,nextStep,submitting?new Date().toISOString():null,originSecretary]);
 
       let documentId: string | null = main?.id ?? null;
       if (input.origemDocumento === "apenas-processo") {
@@ -183,8 +199,20 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
         const file = attachmentFiles[index]; const metadata = newMetadata[index]; const stored = await persistFile(params.id,file);
         await client.query(`INSERT INTO documents(expedient_id,name,document_kind,source,mime_type,size_bytes,page_count,storage_path,confidentiality,created_by) VALUES($1,$2,'anexo','importado',$3,$4,1,$5,$6,$7)`, [params.id,file.name,stored.mime,file.size,stored.relative,metadata?.confidencialidade||input.confidencialidade,session.user.id]);
       }
-      await client.query(`INSERT INTO timeline_events(expedient_id,event_type,title,description,user_id,unit_id) VALUES($1,$2,$3,$4,$5,$6)`, [params.id,submitting?"submissao":"criacao",submitting?"Rascunho submetido":"Rascunho actualizado",submitting?"Enviado para recepcao e protocolo.":"Alteracoes guardadas para continuar mais tarde.",session.user.id,session.user.unidadeId]);
-      if (submitting) await client.query(`INSERT INTO notifications(user_id,notification_type,title,description,expedient_id,urgent) SELECT u.id,'tarefa','Novo expediente submetido',$2,$1,$3 FROM users u JOIN user_profiles up ON up.user_id=u.id JOIN profiles p ON p.id=up.profile_id WHERE p.slug='secretaria' AND u.status='activo'`, [params.id,`${protocol} aguarda recepcao.`,input.prioridade==="urgente"]);
+      await client.query(`INSERT INTO timeline_events(expedient_id,event_type,title,description,user_id,unit_id) VALUES($1,$2,$3,$4,$5,$6)`, [
+        params.id,
+        submitting ? "submissao" : "criacao",
+        submitting ? "Rascunho submetido" : "Rascunho actualizado",
+        submitting ? (isConfidencial ? "Confidencial -- enviado directamente ao responsavel, sem passar pela Secretaria." : "Enviado para recepcao e protocolo.") : "Alteracoes guardadas para continuar mais tarde.",
+        session.user.id,
+        session.user.unidadeId,
+      ]);
+      if (submitting && isConfidencial && responsible) {
+        await client.query(`INSERT INTO notifications(user_id,notification_type,title,description,expedient_id,urgent) VALUES($1,'tarefa','Novo expediente confidencial',$2,$3,$4)`,
+          [responsible,`${protocol} aguarda a sua analise directa.`,params.id,input.prioridade==="urgente"]);
+      } else if (submitting) {
+        await client.query(`INSERT INTO notifications(user_id,notification_type,title,description,expedient_id,urgent) SELECT u.id,'tarefa','Novo expediente submetido',$2,$1,$3 FROM users u JOIN user_profiles up ON up.user_id=u.id JOIN profiles p ON p.id=up.profile_id WHERE p.slug='secretaria' AND u.status='activo'`, [params.id,`${protocol} aguarda recepcao.`,input.prioridade==="urgente"]);
+      }
       return { id: params.id, protocol, draft: !submitting, documentId };
     });
     await audit({userId:session.user.id,action:updated.draft?"Rascunho actualizado":"Rascunho submetido",entityType:"Expediente",entityId:params.id,details:{protocol:updated.protocol}});

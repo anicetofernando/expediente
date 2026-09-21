@@ -18,6 +18,10 @@ export async function POST(request:NextRequest){
     if(!input.nome||!email||!input.cargo||!input.unidadeId||!input.perfilId) return NextResponse.json({error:"Preencha todos os campos obrigatorios."},{status:400});
     const passwordHash=await hashPassword("CFM@2026!");
     const user=await transaction(async(client)=>{
+      const unit=await client.query("SELECT 1 FROM organizational_units WHERE id=$1 AND active=true",[input.unidadeId]);
+      if(!unit.rows[0]) throw new Error("Seleccione uma unidade activa.");
+      const profile=await client.query("SELECT 1 FROM profiles WHERE id=$1 AND active=true",[input.perfilId]);
+      if(!profile.rows[0]) throw new Error("Seleccione um perfil activo.");
       const inserted=await client.query<{id:string}>(`INSERT INTO users(full_name,email,password_hash,job_title,unit_id,phone,avatar_color,status,must_change_password) VALUES($1,$2,$3,$4,$5,$6,'navy',$7,true) RETURNING id`,[input.nome.trim(),email,passwordHash,input.cargo.trim(),input.unidadeId,input.telefone?.trim()||null,input.estado||"activo"]);
       await client.query("INSERT INTO user_profiles(user_id,profile_id,is_primary) VALUES($1,$2,true)",[inserted.rows[0].id,input.perfilId]);return inserted.rows[0];
     });

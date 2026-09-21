@@ -7,7 +7,7 @@ import { sanitizeDocumentHtml } from "@/lib/sanitize-html";
 import type { Confidentiality, Priority } from "@/types";
 import { isValidFutureOrTodayDate } from "@/lib/date-only";
 import { templateSnapshot } from "@/lib/document-configuration";
-import { resolveSecretaryId, targetResponsible } from "@/lib/routing";
+import { configuredDocumentTypes, resolveSecretaryId, targetResponsible } from "@/lib/routing";
 import { generateProtocolNumber } from "@/lib/numbering";
 import { saveFile } from "@/lib/file-storage";
 import { hasPermission } from "@/lib/permissions";
@@ -84,6 +84,10 @@ export async function POST(request: NextRequest) {
     const created = await transaction(async (client) => {
       const unit = await client.query<{ acronym: string }>("SELECT acronym FROM organizational_units WHERE id=$1 AND active=true", [input.unidadeOrigem]);
       if (!unit.rows[0]) throw new Error("Unidade de origem invalida.");
+      const recipient = await client.query<{ id: string }>("SELECT id FROM organizational_units WHERE id=$1 AND active=true", [input.destinatario]);
+      if (!recipient.rows[0]) throw new Error("Seleccione uma unidade destinataria activa.");
+      const documentType = (await configuredDocumentTypes(client)).find((item) => item.id === input.tipo && item.activo);
+      if (!documentType) throw new Error("Seleccione um tipo de expediente activo.");
       const template = input.origemDocumento === "sistema" ? await templateSnapshot(client, input.modeloId) : null;
       if (input.origemDocumento === "sistema" && !template) throw new Error("Seleccione um modelo de documento activo.");
       const expedientId = randomUUID();

@@ -1,5 +1,6 @@
 "use client";
 
+import * as React from "react";
 import { UploadCloud, FileText, CheckCircle2, FolderOpen, RefreshCw } from "lucide-react";
 import { Label } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -12,8 +13,31 @@ function stripRecipientFromInitialContent(text: string) {
   return text.replace(/^\s*Exmo\.?\s*Senhor[:,]?\s*/i, "").trimStart();
 }
 
+function initialHtml(text: string) {
+  return text
+    .replace(/^\s*Exmo\.?\s*Senhor[:,]?\s*/i, "")
+    .trimStart()
+    .split(/\r?\n/)
+    .map((line) => `<p>${line.replace(/[&<>]/g, (value) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[value] ?? value) || "<br>"}</p>`)
+    .join("");
+}
+
 export function StepDocument({ state, update }: StepProps) {
   const { documentTemplates, organizationalUnits } = useCatalogs();
+  const activeTemplates = React.useMemo(
+    () => documentTemplates.filter((template) => template.estado === "activo"),
+    [documentTemplates],
+  );
+
+  React.useEffect(() => {
+    if (state.origemDocumento !== "sistema" || activeTemplates.length !== 1) return;
+    const selectedTemplate = activeTemplates[0];
+    if (state.modeloId === selectedTemplate.id) return;
+    update({
+      modeloId: selectedTemplate.id,
+      ...(!state.conteudo && selectedTemplate.conteudoInicial ? { conteudo: initialHtml(stripRecipientFromInitialContent(selectedTemplate.conteudoInicial)) } : {}),
+    });
+  }, [activeTemplates, state.conteudo, state.modeloId, state.origemDocumento, update]);
 
   if (state.origemDocumento === "sistema") {
     const template = documentTemplates.find((t) => t.id === state.modeloId);
@@ -21,12 +45,6 @@ export function StepDocument({ state, update }: StepProps) {
     const originParent = organizationalUnits.find((unit) => unit.id === originUnit?.parentId);
     const recipientUnit = organizationalUnits.find((unit) => unit.id === state.destinatario);
     const recipientParent = organizationalUnits.find((unit) => unit.id === recipientUnit?.parentId);
-    const initialHtml = (text: string) => text
-      .replace(/^\s*Exmo\.?\s*Senhor[:,]?\s*/i, "")
-      .trimStart()
-      .split(/\r?\n/)
-      .map((line) => `<p>${line.replace(/[&<>]/g, (value) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[value] ?? value) || "<br>"}</p>`)
-      .join("");
     return (
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-12">
         <section className="lg:col-span-7">
@@ -37,7 +55,7 @@ export function StepDocument({ state, update }: StepProps) {
           }}>
             <SelectTrigger><SelectValue placeholder="Seleccione um modelo" /></SelectTrigger>
             <SelectContent>
-              {documentTemplates.filter((t) => t.estado === "activo").map((t) => (
+              {activeTemplates.map((t) => (
                 <SelectItem key={t.id} value={t.id}>{t.nome}</SelectItem>
               ))}
             </SelectContent>

@@ -77,6 +77,8 @@ function ownersForUnit(unitId: string, byUnit: Map<string, string[]>, globalFall
 }
 
 export async function resolveSecretaryId(client: PoolClient, unitId: string) {
+  const activeUnit = await client.query("SELECT 1 FROM organizational_units WHERE id=$1 AND active=true", [unitId]);
+  if (activeUnit.rows.length === 0) return null;
   const assignments = await loadSecretaryAssignments(client);
   const byUnit = groupsByUnit(assignments);
   const globalFallbackGroup = assignments.length > 0 ? (byUnit.get(assignments[0].unit_id) ?? []) : [];
@@ -100,6 +102,8 @@ export async function secretaryOwnedUnitIds(client: QueryLike, secretaryUserId: 
 // atribuido: o "superior" dessa unidade (chefe/aprovador); na ausencia de um,
 // qualquer utilizador activo da unidade que nao seja da secretaria.
 export async function targetResponsible(client: QueryLike, unitId: string) {
+  const activeUnit = await client.query("SELECT 1 FROM organizational_units WHERE id=$1 AND active=true", [unitId]);
+  if (activeUnit.rows.length === 0) throw new Error("A unidade seleccionada nao esta activa.");
   // "Superior" nem sempre e' o slug literal do perfil -- um perfil
   // personalizado (ex.: "Chefe de Servico" criado em Admin > Perfis) tambem
   // conta, desde que o seu access_level seja "supervisao"/"direccao", exactamente

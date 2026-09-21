@@ -35,9 +35,10 @@ export function UserFormDialog({
   onSubmit: (values: UserFormValues) => void;
 }) {
   const [values, setValues] = React.useState<UserFormValues>(emptyValues());
-  const departamentos = units.filter((u) => u.tipo === "direccao");
+  const activeUnits = React.useMemo(() => units.filter((u) => u.estado === "activo"), [units]);
+  const departamentos = activeUnits.filter((u) => u.tipo === "direccao");
   const [departamentoId, setDepartamentoId] = React.useState("");
-  const servicos = units.filter((u) => u.parentId === departamentoId);
+  const servicos = activeUnits.filter((u) => u.parentId === departamentoId);
 
   React.useEffect(() => {
     if (!open) return;
@@ -51,13 +52,13 @@ export function UserFormDialog({
         estado: initialUser.estado,
         telefone: initialUser.telefone ?? "",
       });
-      const current = units.find((u) => u.id === initialUser.unidadeId);
+      const current = activeUnits.find((u) => u.id === initialUser.unidadeId);
       setDepartamentoId(current ? (current.tipo === "direccao" ? current.id : current.parentId ?? "") : "");
     } else {
       setValues(emptyValues());
       setDepartamentoId("");
     }
-  }, [open, mode, initialUser, units]);
+  }, [open, mode, initialUser, activeUnits]);
 
   function emptyValues(): UserFormValues {
     return { nome: "", email: "", cargo: "", unidadeId: "", perfilId: "", estado: "activo", telefone: "" };
