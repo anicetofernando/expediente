@@ -27,7 +27,7 @@ export function StepStampSignature({
     if (state.origemDocumento !== "sistema" || !state.unidadeOrigem) return;
     let cancelled = false;
     setAuthorization((current) => ({ ...current, loading: true }));
-    void fetch(`/api/document-authorizations?unidadeId=${state.unidadeOrigem}`, { cache: "no-store" })
+    void fetch(`/api/document-authorizations?unidadeId=${state.unidadeOrigem}&purpose=remetente`, { cache: "no-store" })
       .then((response) => response.json())
       .then((data) => { if (!cancelled) setAuthorization({ stamp: data.stamp ?? null, signature: data.signature ?? null, loading: false }); })
       .catch(() => { if (!cancelled) setAuthorization({ stamp: null, signature: null, loading: false }); });

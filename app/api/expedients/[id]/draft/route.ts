@@ -161,7 +161,7 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
         documentId = null;
       } else if (input.origemDocumento === "sistema") {
         // Obrigatorio, tal como na criacao: o remetente carimba e assina o original.
-        const resolved = await resolveMandatoryStampSignatureByUnitId(client, input.unidadeOrigem, session.user, session.perfilNavegacao);
+        const resolved = await resolveMandatoryStampSignatureByUnitId(client, input.unidadeOrigem, session.user, session.perfilNavegacao, "remetente");
         const stampEntry = stampMetadataJson(resolved.stamp, session.user.nome, input.posicaoCarimbo);
         const signatureEntry = signatureMetadataJson(resolved.signature, session.user, input.posicaoAssinatura);
         if (main) {

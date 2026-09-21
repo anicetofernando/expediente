@@ -1,6 +1,6 @@
 import type { PoolClient } from "pg";
 import type { FreePosition, Signature, Stamp, User } from "@/types";
-import { resolveUnitStamp, resolveUserSignature } from "@/lib/document-authorization";
+import { resolveUnitStamp, resolveUserSignature, type StampPurpose } from "@/lib/document-authorization";
 import { configuredSignatures, configuredStamps, rememberSignaturePosition, rememberStampPosition } from "@/lib/document-configuration";
 
 export interface StampSignatureResolution {
@@ -18,9 +18,10 @@ export async function resolveMandatoryStampSignature(
   user: Pick<User, "id" | "nome" | "email">,
   unitName: string,
   profile: string,
+  purpose?: StampPurpose,
 ): Promise<StampSignatureResolution> {
   const [stamps, signatures] = await Promise.all([configuredStamps(client), configuredSignatures(client)]);
-  const stamp = resolveUnitStamp(stamps, user, unitName, profile);
+  const stamp = resolveUnitStamp(stamps, user, unitName, profile, purpose);
   const signature = resolveUserSignature(signatures, user);
   if (!stamp) throw new Error("A sua unidade ainda nao tem um carimbo configurado. Contacte a administracao.");
   if (!signature) throw new Error("Nao tem uma assinatura configurada. Contacte a administracao.");
@@ -33,10 +34,11 @@ export async function resolveMandatoryStampSignatureByUnitId(
   unitId: string,
   user: Pick<User, "id" | "nome" | "email">,
   profile: string,
+  purpose: StampPurpose = "remetente",
 ): Promise<StampSignatureResolution> {
   const unit = await client.query<{ name: string }>("SELECT name FROM organizational_units WHERE id=$1 AND active=true", [unitId]);
   if (!unit.rows[0]) throw new Error("Unidade de origem invalida.");
-  return resolveMandatoryStampSignature(client, user, unit.rows[0].name, profile);
+  return resolveMandatoryStampSignature(client, user, unit.rows[0].name, profile, purpose);
 }
 
 /**
@@ -49,9 +51,10 @@ export async function resolveOptionalStampSignature(
   user: Pick<User, "id" | "nome" | "email">,
   unitName: string,
   profile: string,
+  purpose: StampPurpose = "secretaria",
 ): Promise<{ stamp: Stamp | null; signature: Signature }> {
   const [stamps, signatures] = await Promise.all([configuredStamps(client), configuredSignatures(client)]);
-  const stamp = resolveUnitStamp(stamps, user, unitName, profile);
+  const stamp = resolveUnitStamp(stamps, user, unitName, profile, purpose);
   const signature = resolveUserSignature(signatures, user);
   if (!signature) throw new Error("Nao tem uma assinatura configurada. Contacte a administracao.");
   return { stamp: stamp ?? null, signature };

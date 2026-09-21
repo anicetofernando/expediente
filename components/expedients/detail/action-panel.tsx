@@ -226,8 +226,9 @@ function ActionDialog({
     return (
       <RejeitarDialog
         expedient={expedient}
+        approvalPdfUrls={approvalPdfUrls}
         onClose={onClose}
-        onMarcar={(alvo, motivo) => onComplete(motivo, undefined, undefined, undefined, undefined, alvo)}
+        onMarcar={(alvo, motivo, posicoes) => onComplete(motivo, undefined, posicoes?.posicaoCarimbo, posicoes?.posicaoAssinatura, undefined, alvo, posicoes?.posicaoNota)}
         onDespacho={() => setRejeitarDespacho(true)}
       />
     );
@@ -454,7 +455,7 @@ function ReceiveForwardDialog({
 
   React.useEffect(() => {
     let cancelled = false;
-    void fetch("/api/document-authorizations", { cache: "no-store" })
+    void fetch("/api/document-authorizations?purpose=secretaria", { cache: "no-store" })
       .then((response) => response.json())
       .then((data) => { if (!cancelled) setAuthorization({ stamp: data.stamp ?? null, signature: data.signature ?? null, loading: false }); })
       .catch(() => { if (!cancelled) setAuthorization({ stamp: null, signature: null, loading: false }); });
@@ -577,7 +578,7 @@ function AprovarDialog({
     if (!checksAuthorization) return;
     let cancelled = false;
     setAuthorization((current) => ({ ...current, loading: true }));
-    void fetch("/api/document-authorizations", { cache: "no-store" })
+    void fetch("/api/document-authorizations?purpose=aprovacao", { cache: "no-store" })
       .then((response) => response.json())
       .then((data) => { if (!cancelled) setAuthorization({ stamp: data.stamp ?? null, signature: data.signature ?? null, loading: false }); })
       .catch(() => { if (!cancelled) setAuthorization({ stamp: null, signature: null, loading: false }); });
@@ -697,17 +698,56 @@ function AprovarDialog({
 
 function RejeitarDialog({
   expedient,
+  approvalPdfUrls,
   onClose,
   onMarcar,
   onDespacho,
 }: {
   expedient: ActionExpedient;
+  approvalPdfUrls?: ApprovalPdfUrls;
   onClose: () => void;
-  onMarcar: (alvo: "nota" | "expediente", motivo: string) => void;
+  onMarcar: (alvo: "nota" | "expediente", motivo: string, posicoes?: { posicaoCarimbo?: FreePosition; posicaoAssinatura?: FreePosition; posicaoNota?: FreePosition }) => void;
   onDespacho: () => void;
 }) {
+  const { user } = useSession();
   const [alvo, setAlvo] = React.useState<"nota" | "expediente" | "despacho">("expediente");
   const [motivo, setMotivo] = React.useState("");
+  const [authorization, setAuthorization] = React.useState<{ stamp: StampDefinition | null; signature: Signature | null; loading: boolean }>({ stamp: null, signature: null, loading: false });
+  const [positioning, setPositioning] = React.useState(false);
+  const selectedPdfUrl = alvo === "nota" ? approvalPdfUrls?.nota : approvalPdfUrls?.expediente;
+  const checksAuthorization = alvo !== "despacho";
+  const readyToReject = !checksAuthorization || (!authorization.loading && Boolean(authorization.stamp && authorization.signature));
+  const canPositionDecision = checksAuthorization && Boolean(selectedPdfUrl);
+
+  React.useEffect(() => {
+    if (!checksAuthorization) return;
+    let cancelled = false;
+    setAuthorization((current) => ({ ...current, loading: true }));
+    void fetch("/api/document-authorizations?purpose=aprovacao", { cache: "no-store" })
+      .then((response) => response.json())
+      .then((data) => { if (!cancelled) setAuthorization({ stamp: data.stamp ?? null, signature: data.signature ?? null, loading: false }); })
+      .catch(() => { if (!cancelled) setAuthorization({ stamp: null, signature: null, loading: false }); });
+    return () => { cancelled = true; };
+  }, [checksAuthorization]);
+
+  React.useEffect(() => {
+    setPositioning(false);
+  }, [alvo, motivo]);
+
+  if (positioning && selectedPdfUrl) {
+    const attribution = [user.nome, user.cargo].filter(Boolean).join(" - ");
+    return (
+      <StampPositionPicker
+        open
+        onOpenChange={(v) => !v && setPositioning(false)}
+        pdfUrl={selectedPdfUrl}
+        stamp={authorization.stamp?.imagemUrl ? { imageUrl: authorization.stamp.imagemUrl, label: authorization.stamp.nome, initialPosition: authorization.stamp.posicaoLivre } : undefined}
+        signature={authorization.signature?.imagemUrl ? { imageUrl: authorization.signature.imagemUrl, label: authorization.signature.proprietario, initialPosition: authorization.signature.posicaoLivre } : undefined}
+        note={{ kind: "text", label: "Motivo da rejeição", text: motivo.trim(), attribution }}
+        onConfirm={(result) => onMarcar(alvo as "nota" | "expediente", motivo.trim(), result)}
+      />
+    );
+  }
 
   return (
     <Dialog open onOpenChange={(v) => !v && onClose()}>
@@ -734,15 +774,29 @@ function RejeitarDialog({
               <Textarea rows={4} placeholder="Descreva o motivo da rejeição…" value={motivo} onChange={(event) => setMotivo(event.target.value)} />
             </div>
           )}
+          {checksAuthorization && authorization.loading && (
+            <p className="text-[13px] text-graphite-500">A verificar o carimbo e a assinatura...</p>
+          )}
+          {checksAuthorization && !authorization.loading && !readyToReject && (
+            <p className="border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-relaxed text-amber-800">
+              {!authorization.stamp && "A sua unidade ainda nao tem um carimbo activo. "}
+              {!authorization.signature && "Nao tem uma assinatura individual configurada. "}
+              Configure antes de rejeitar directamente.
+            </p>
+          )}
         </DialogBody>
         <DialogFooter>
           <Button variant="secondary" onClick={onClose}>Cancelar</Button>
           <Button
             variant="destructive"
-            disabled={alvo !== "despacho" && !motivo.trim()}
-            onClick={() => (alvo === "despacho" ? onDespacho() : onMarcar(alvo, motivo))}
+            disabled={alvo !== "despacho" && (!motivo.trim() || !readyToReject)}
+            onClick={() => {
+              if (alvo === "despacho") return onDespacho();
+              if (canPositionDecision) return setPositioning(true);
+              return onMarcar(alvo, motivo.trim());
+            }}
           >
-            {alvo === "despacho" ? "Continuar" : "Rejeitar"}
+            {alvo === "despacho" ? "Continuar" : canPositionDecision ? "Posicionar e rejeitar" : "Rejeitar"}
           </Button>
         </DialogFooter>
       </DialogContent>

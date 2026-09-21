@@ -157,7 +157,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       if (input.documentId) {
         const doc = await client.query<{ id: string }>("SELECT id FROM documents WHERE id=$1 AND expedient_id=$2 AND document_kind='resposta'", [input.documentId, exp.id]);
         if (!doc.rows[0]) throw new Error("Despacho nao encontrado.");
-        const resolved = await resolveMandatoryStampSignature(client, session.user, session.unitName, session.perfilNavegacao);
+        const resolved = await resolveMandatoryStampSignature(client, session.user, session.unitName, session.perfilNavegacao, "despacho");
         const stampEntry = JSON.stringify(stampMetadataJson(resolved.stamp, session.user.nome, input.posicaoCarimbo));
         const signatureEntry = JSON.stringify(signatureMetadataJson(resolved.signature, session.user, input.posicaoAssinatura));
         await client.query(
@@ -185,7 +185,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       if (input.modo === "sistema") {
         const clean = sanitizeDocumentHtml(input.conteudo ?? "");
         const template = await templateSnapshot(client, input.modeloId);
-        const resolved = await resolveMandatoryStampSignature(client, session.user, session.unitName, session.perfilNavegacao);
+        const resolved = await resolveMandatoryStampSignature(client, session.user, session.unitName, session.perfilNavegacao, "despacho");
         sistemaHasFreePositionImages = Boolean(resolved.stamp.imagemUrl || resolved.signature.imagemUrl);
         const stampEntry = JSON.stringify(stampMetadataJson(resolved.stamp, session.user.nome));
         const signatureEntry = JSON.stringify(signatureMetadataJson(resolved.signature, session.user));

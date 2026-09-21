@@ -248,7 +248,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
           if (principal.rows[0]) {
             const doc = principal.rows[0];
             const [stamps, signatures] = await Promise.all([configuredStamps(client), configuredSignatures(client)]);
-            const stamp = resolveUnitStamp(stamps, session.user, session.unitName, session.perfilNavegacao);
+            const stamp = resolveUnitStamp(stamps, session.user, session.unitName, session.perfilNavegacao, "secretaria");
             if (!stamp) throw new Error("A Secretaria ainda nao tem um carimbo institucional activo. Configure-o em Administracao > Carimbos.");
             const signature = resolveUserSignature(signatures, session.user);
             if (!signature) throw new Error("Nao tem uma assinatura individual activa. Configure-a em Administracao > Assinaturas.");
@@ -324,7 +324,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
               );
             }
             const stamps = await configuredStamps(client);
-            const stamp = resolveUnitStamp(stamps, session.user, session.unitName, session.perfilNavegacao);
+            const stamp = resolveUnitStamp(stamps, session.user, session.unitName, session.perfilNavegacao, "aprovacao");
             const stampEntries = latestNota.rows[0].stamps_metadata ?? [];
             if (stamp && !stampEntries.some((entry) => entry.id === stamp.id)) {
               const entry = stampMetadataJson(stamp, session.user.nome, stamp.posicaoLivre);
@@ -401,7 +401,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
             );
           }
           const stamps = await configuredStamps(client);
-          const stamp = resolveUnitStamp(stamps, session.user, session.unitName, session.perfilNavegacao);
+          const stamp = resolveUnitStamp(stamps, session.user, session.unitName, session.perfilNavegacao, "aprovacao");
           const stampEntries = latestNota.rows[0].stamps_metadata ?? [];
           if (stamp && !stampEntries.some((entry) => entry.id === stamp.id)) {
             const entry = stampMetadataJson(stamp, session.user.nome, stamp.posicaoLivre);
@@ -484,14 +484,12 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
           // conseguir sempre aprovar, sem restricoes por tipo de documento.
           {
             const stamps = await configuredStamps(client);
-            const stamp = resolveUnitStamp(stamps, session.user, session.unitName, session.perfilNavegacao);
+            const stamp = resolveUnitStamp(stamps, session.user, session.unitName, session.perfilNavegacao, "aprovacao");
             if (!stamp) throw new Error("A sua unidade ainda nao tem um carimbo activo. Configure-o em Administracao > Carimbos.");
             stampId = stamp.id;
-            if (!stampEntries.some((entry) => entry.id === stamp.id)) {
-              latestStamp = stampMetadataJson(stamp, session.user.nome, input.posicaoCarimbo ?? stamp.posicaoLivre);
-              stampEntries.push(latestStamp);
-              if (stamp.imagemUrl && input.posicaoCarimbo) await rememberStampPosition(client, stamp.id, input.posicaoCarimbo);
-            }
+            latestStamp = stampMetadataJson(stamp, session.user.nome, input.posicaoCarimbo ?? stamp.posicaoLivre);
+            stampEntries.push(latestStamp);
+            if (stamp.imagemUrl && input.posicaoCarimbo) await rememberStampPosition(client, stamp.id, input.posicaoCarimbo);
           }
 
           {
@@ -502,11 +500,9 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
             if (signature.validadeInicio > today || signature.validadeFim < today) {
               throw new Error("A sua assinatura individual esta fora do periodo de validade.");
             }
-            if (!signatureEntries.some((entry) => entry.id === signature.id)) {
-              latestSignature = signatureMetadataJson(signature, session.user, input.posicaoAssinatura ?? signature.posicaoLivre);
-              signatureEntries.push(latestSignature);
-              if (signature.imagemUrl && input.posicaoAssinatura) await rememberSignaturePosition(client, signature.id, input.posicaoAssinatura);
-            }
+            latestSignature = signatureMetadataJson(signature, session.user, input.posicaoAssinatura ?? signature.posicaoLivre);
+            signatureEntries.push(latestSignature);
+            if (signature.imagemUrl && input.posicaoAssinatura) await rememberSignaturePosition(client, signature.id, input.posicaoAssinatura);
           }
 
           // O texto de aprovacao escrito pelo proprio chefe/director ("Autorizo",
@@ -562,22 +558,20 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
           let stampId: string | null = null;
           {
             const stamps = await configuredStamps(client);
-            const stamp = resolveUnitStamp(stamps, session.user, session.unitName, session.perfilNavegacao);
+            const stamp = resolveUnitStamp(stamps, session.user, session.unitName, session.perfilNavegacao, "aprovacao");
             if (!stamp) throw new Error("A sua unidade ainda nao tem um carimbo activo. Configure-o em Administracao > Carimbos.");
             stampId = stamp.id;
-            if (!stampEntries.some((entry) => entry.id === stamp.id)) {
-              latestStamp = stampMetadataJson(stamp, session.user.nome, input.posicaoCarimbo);
-              stampEntries.push(latestStamp);
-            }
+            latestStamp = stampMetadataJson(stamp, session.user.nome, input.posicaoCarimbo ?? stamp.posicaoLivre);
+            stampEntries.push(latestStamp);
+            if (stamp.imagemUrl && input.posicaoCarimbo) await rememberStampPosition(client, stamp.id, input.posicaoCarimbo);
           }
           {
             const signatures = await configuredSignatures(client);
             const signature = resolveUserSignature(signatures, session.user);
             if (!signature) throw new Error("Nao tem uma assinatura individual activa. Configure-a em Administracao > Assinaturas.");
-            if (!signatureEntries.some((entry) => entry.id === signature.id)) {
-              latestSignature = signatureMetadataJson(signature, session.user, input.posicaoAssinatura);
-              signatureEntries.push(latestSignature);
-            }
+            latestSignature = signatureMetadataJson(signature, session.user, input.posicaoAssinatura ?? signature.posicaoLivre);
+            signatureEntries.push(latestSignature);
+            if (signature.imagemUrl && input.posicaoAssinatura) await rememberSignaturePosition(client, signature.id, input.posicaoAssinatura);
           }
           // O motivo da rejeicao, escrito pelo proprio chefe/director, fica
           // visivel dentro do documento, junto ao carimbo/assinatura -- tal como

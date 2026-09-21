@@ -114,7 +114,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       if (input.documentId) {
         const doc = await client.query<{ id: string }>("SELECT id FROM documents WHERE id=$1 AND expedient_id=$2 AND document_kind='nota'", [input.documentId, exp.id]);
         if (!doc.rows[0]) throw new Error("Nota nao encontrada.");
-        const resolved = await resolveOptionalStampSignature(client, session.user, session.unitName, session.perfilNavegacao);
+        const resolved = await resolveOptionalStampSignature(client, session.user, session.unitName, session.perfilNavegacao, "secretaria");
         if (!input.incluirCarimbo) resolved.stamp = null;
         const signatureEntry = JSON.stringify(signatureMetadataJson(resolved.signature, session.user, input.posicaoAssinatura));
         const stampEntry = resolved.stamp ? JSON.stringify(stampMetadataJson(resolved.stamp, session.user.nome, input.posicaoCarimbo)) : null;
@@ -144,7 +144,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         let stampEntry: string | null = null;
         let signatureEntry: string | null = null;
         if (!isCobertura) {
-          const resolved = await resolveOptionalStampSignature(client, session.user, session.unitName, session.perfilNavegacao);
+          const resolved = await resolveOptionalStampSignature(client, session.user, session.unitName, session.perfilNavegacao, "secretaria");
           if (!input.incluirCarimbo) resolved.stamp = null;
           sistemaHasFreePositionImages = Boolean(resolved.stamp?.imagemUrl || resolved.signature.imagemUrl);
           signatureEntry = JSON.stringify(signatureMetadataJson(resolved.signature, session.user));

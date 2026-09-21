@@ -3,7 +3,7 @@ import { getCurrentSession } from "@/lib/auth";
 import { query } from "@/lib/db";
 import { stamps as defaultStamps } from "@/data/stamps";
 import { signatures as defaultSignatures } from "@/data/signatures";
-import { resolveUnitStamp, resolveUserSignature } from "@/lib/document-authorization";
+import { resolveUnitStamp, resolveUserSignature, type StampPurpose } from "@/lib/document-authorization";
 import type { Signature, Stamp } from "@/types";
 
 /**
@@ -16,6 +16,8 @@ export async function GET(request: NextRequest) {
   const session = await getCurrentSession();
   if (!session) return NextResponse.json({ error: "Nao autenticado." }, { status: 401 });
   const unidadeId = request.nextUrl.searchParams.get("unidadeId");
+  const purposeParam = request.nextUrl.searchParams.get("purpose");
+  const purpose = stampPurposeFromParam(purposeParam) ?? (unidadeId ? "remetente" : undefined);
   let unitName = session.unitName;
   if (unidadeId) {
     const unit = await query<{ name: string }>("SELECT name FROM organizational_units WHERE id=$1 AND active=true", [unidadeId]);
@@ -29,7 +31,12 @@ export async function GET(request: NextRequest) {
   const catalogs = values.catalogs && typeof values.catalogs === "object" && !Array.isArray(values.catalogs) ? values.catalogs as { stamps?: unknown } : {};
   const stamps = Array.isArray(catalogs.stamps) ? catalogs.stamps as Stamp[] : defaultStamps;
   const signatures = Array.isArray(values.signatures) ? values.signatures as Signature[] : defaultSignatures;
-  const stamp = resolveUnitStamp(stamps, session.user, unitName, session.perfilNavegacao);
+  const stamp = resolveUnitStamp(stamps, session.user, unitName, session.perfilNavegacao, purpose);
   const signature = resolveUserSignature(signatures, session.user);
   return NextResponse.json({ stamp: stamp ?? null, signature: signature ?? null });
+}
+
+function stampPurposeFromParam(value: string | null): StampPurpose | undefined {
+  if (value === "remetente" || value === "secretaria" || value === "aprovacao" || value === "despacho" || value === "geral") return value;
+  return undefined;
 }

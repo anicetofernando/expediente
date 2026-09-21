@@ -118,12 +118,12 @@ export function DespachoDialog({
     // ha nada a verificar aqui, ela pode sempre escrever.
     if (!needsAuthorization) return;
     let cancelled = false;
-    void fetch("/api/document-authorizations", { cache: "no-store" })
+    void fetch(`/api/document-authorizations?purpose=${isDespacho ? "aprovacao" : "secretaria"}`, { cache: "no-store" })
       .then((response) => response.json())
       .then((data) => { if (!cancelled) setAuthorization({ stamp: data.stamp ?? null, signature: data.signature ?? null, loading: false }); })
       .catch(() => { if (!cancelled) setAuthorization({ stamp: null, signature: null, loading: false }); });
     return () => { cancelled = true; };
-  }, [needsAuthorization]);
+  }, [isDespacho, needsAuthorization]);
 
   const template = documentTemplates.find((item) => item.id === modeloId);
   const activeTemplates = documentTemplates.filter((item) => item.estado === "activo");
