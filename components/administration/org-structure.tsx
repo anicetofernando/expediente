@@ -70,6 +70,14 @@ const UNIT_TYPE_ICON: Record<
   unidade: GitBranch,
 };
 
+const UNIT_TYPE_RANK: Record<OrganizationalUnit["tipo"], number> = {
+  direccao: 1,
+  departamento: 2,
+  seccao: 3,
+  sector: 4,
+  unidade: 5,
+};
+
 function typeVariant(
   tipo: OrganizationalUnit["tipo"]
 ): "navy" | "info" | "amber" | "success" | "neutral" {
@@ -85,6 +93,13 @@ function typeVariant(
     case "unidade":
       return "neutral";
   }
+}
+
+function canBeParentFor(
+  parent: OrganizationalUnit,
+  childType: OrganizationalUnit["tipo"]
+) {
+  return UNIT_TYPE_RANK[parent.tipo] < UNIT_TYPE_RANK[childType];
 }
 
 function normalise(value: string) {
@@ -346,21 +361,24 @@ function valuesFromUnit(unit: OrganizationalUnit): UnitFormValues {
   };
 }
 
-function computeAutoCode(tipo: OrganizationalUnit["tipo"], parentId: string, units: OrganizationalUnit[]): string {
-  if (tipo === "direccao") {
+function computeAutoCode(parentId: string, units: OrganizationalUnit[]): string {
+  const parent = units.find((item) => item.id === parentId);
+
+  if (!parent) {
     const topLevel = units
-      .filter((item) => !item.codigo.includes("."))
-      .map((item) => Number.parseInt(item.codigo, 10))
+      .filter((item) => !item.parentId)
+      .map((item) => Number.parseInt(item.codigo.split(".")[0] ?? "", 10))
       .filter((value) => !Number.isNaN(value));
     const next = (topLevel.length ? Math.max(...topLevel) : 0) + 1;
     return String(next).padStart(2, "0");
   }
-  const parent = units.find((item) => item.id === parentId);
-  if (!parent) return "";
-  const prefix = `${parent.codigo}.`;
+
   const siblingNumbers = units
-    .filter((item) => item.codigo.startsWith(prefix))
-    .map((item) => Number.parseInt(item.codigo.slice(prefix.length), 10))
+    .filter((item) => item.parentId === parent.id)
+    .map((item) => {
+      const segments = item.codigo.split(".");
+      return Number.parseInt(segments[segments.length - 1] ?? "", 10);
+    })
     .filter((value) => !Number.isNaN(value));
   const next = (siblingNumbers.length ? Math.max(...siblingNumbers) : 0) + 1;
   return `${parent.codigo}.${next}`;
@@ -401,10 +419,10 @@ function UnitDetailsDrawer({
 
   React.useEffect(() => {
     if (!isCreating || !values) return;
-    const autoCode = computeAutoCode(values.tipo, values.parentId === "sem-parent" ? "" : values.parentId, units);
+    const autoCode = computeAutoCode(values.parentId === "sem-parent" ? "" : values.parentId, units);
     if (autoCode !== values.codigo) setValues((current) => (current ? { ...current, codigo: autoCode } : current));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isCreating, values?.tipo, values?.parentId, units]);
+  }, [isCreating, values?.parentId, units]);
 
   if (!unit || !values) return null;
   const currentUnit = unit;
@@ -420,9 +438,23 @@ function UnitDetailsDrawer({
   const members = users.filter((user) => user.unidadeId === unit.id);
   const childUnits = units.filter((item) => item.parentId === unit.id);
   const descendantIds = getDescendantIds(unit.id, units);
-  const possibleParents = units.filter(
-    (item) => item.id !== unit.id && !descendantIds.has(item.id)
-  );
+  const allowedParents = units
+    .filter(
+      (item) =>
+        item.id !== unit.id &&
+        !descendantIds.has(item.id) &&
+        item.estado === "activo" &&
+        canBeParentFor(item, values.tipo)
+    )
+    .sort((a, b) => a.codigo.localeCompare(b.codigo, "pt", { numeric: true }));
+  const selectedParent =
+    values.parentId !== "sem-parent"
+      ? units.find((item) => item.id === values.parentId)
+      : undefined;
+  const possibleParents =
+    selectedParent && !allowedParents.some((item) => item.id === selectedParent.id)
+      ? [selectedParent, ...allowedParents]
+      : allowedParents;
   const duplicateCode = units.some(
     (item) =>
       item.id !== unit.id &&
@@ -439,6 +471,28 @@ function UnitDetailsDrawer({
     value: UnitFormValues[K]
   ) {
     setValues((current) => (current ? { ...current, [field]: value } : current));
+  }
+
+  function setUnitType(tipo: OrganizationalUnit["tipo"]) {
+    setValues((current) => {
+      if (!current) return current;
+      const parent =
+        current.parentId !== "sem-parent"
+          ? units.find((item) => item.id === current.parentId)
+          : undefined;
+      const parentStillValid =
+        parent &&
+        parent.id !== currentUnit.id &&
+        !descendantIds.has(parent.id) &&
+        parent.estado === "activo" &&
+        canBeParentFor(parent, tipo);
+
+      return {
+        ...current,
+        tipo,
+        parentId: parentStillValid ? current.parentId : "sem-parent",
+      };
+    });
   }
 
   function cancelEditing() {
@@ -518,7 +572,7 @@ function UnitDetailsDrawer({
                 id="org-unit-code"
                 value={values.codigo}
                 onChange={(event) => setValue("codigo", event.target.value)}
-                placeholder="Ex.: 05.3"
+                placeholder="Ex.: 02 ou 02.1"
                 invalid={duplicateCode}
                 disabled={isCreating}
                 readOnly={isCreating}
@@ -534,7 +588,7 @@ function UnitDetailsDrawer({
               <Select
                 value={values.tipo}
                 onValueChange={(value) =>
-                  setValue("tipo", value as OrganizationalUnit["tipo"])
+                  setUnitType(value as OrganizationalUnit["tipo"])
                 }
               >
                 <SelectTrigger aria-label="Tipo de unidade">
@@ -599,7 +653,7 @@ function UnitDetailsDrawer({
                   </SelectContent>
                 </Select>
                 <FieldHint>
-                  Unidades subordinadas não podem ser seleccionadas para evitar ciclos.
+                  Sem unidade superior cria uma unidade principal; a lista mostra apenas níveis superiores válidos.
                 </FieldHint>
               </div>
             </div>

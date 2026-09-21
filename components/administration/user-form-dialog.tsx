@@ -6,6 +6,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useCatalogs } from "@/lib/catalogs";
 
 export interface UserFormValues {
   nome: string;
@@ -15,6 +16,43 @@ export interface UserFormValues {
   perfilId: string;
   estado: User["estado"];
   telefone?: string;
+}
+
+function sortUnits(a: OrganizationalUnit, b: OrganizationalUnit) {
+  return a.codigo.localeCompare(b.codigo, "pt", { numeric: true });
+}
+
+function getRootUnitId(unitId: string, unitsById: Map<string, OrganizationalUnit>) {
+  let current = unitsById.get(unitId);
+  let root = current;
+  const visited = new Set<string>();
+
+  while (current?.parentId && !visited.has(current.id)) {
+    visited.add(current.id);
+    const parent = unitsById.get(current.parentId);
+    if (!parent) break;
+    root = parent;
+    current = parent;
+  }
+
+  return root?.id ?? "";
+}
+
+function isDescendantOf(
+  unit: OrganizationalUnit,
+  rootId: string,
+  unitsById: Map<string, OrganizationalUnit>
+) {
+  let current: OrganizationalUnit | undefined = unit;
+  const visited = new Set<string>();
+
+  while (current?.parentId && !visited.has(current.id)) {
+    if (current.parentId === rootId) return true;
+    visited.add(current.id);
+    current = unitsById.get(current.parentId);
+  }
+
+  return false;
 }
 
 export function UserFormDialog({
@@ -34,11 +72,44 @@ export function UserFormDialog({
   profiles: Profile[];
   onSubmit: (values: UserFormValues) => void;
 }) {
+  const { positions } = useCatalogs();
   const [values, setValues] = React.useState<UserFormValues>(emptyValues());
-  const activeUnits = React.useMemo(() => units.filter((u) => u.estado === "activo"), [units]);
-  const departamentos = activeUnits.filter((u) => u.tipo === "direccao");
+  const activeUnits = React.useMemo(() => units.filter((u) => u.estado === "activo").sort(sortUnits), [units]);
+  const unitsById = React.useMemo(() => new Map(activeUnits.map((unit) => [unit.id, unit])), [activeUnits]);
+  const departamentos = React.useMemo(
+    () => activeUnits.filter((u) => !u.parentId || !unitsById.has(u.parentId)),
+    [activeUnits, unitsById]
+  );
   const [departamentoId, setDepartamentoId] = React.useState("");
-  const servicos = activeUnits.filter((u) => u.parentId === departamentoId);
+  const servicos = React.useMemo(
+    () =>
+      departamentoId
+        ? activeUnits.filter((u) => u.id !== departamentoId && isDescendantOf(u, departamentoId, unitsById))
+        : [],
+    [activeUnits, departamentoId, unitsById]
+  );
+  const activePositions = React.useMemo(
+    () => positions.filter((item) => item.active).sort((a, b) => a.order - b.order),
+    [positions]
+  );
+  const positionOptions = React.useMemo(() => {
+    if (!values.cargo || activePositions.some((item) => item.label === values.cargo)) {
+      return activePositions;
+    }
+
+    return [
+      ...activePositions,
+      {
+        id: "cargo-actual",
+        code: "actual",
+        label: values.cargo,
+        description: "Cargo actualmente associado ao utilizador.",
+        order: activePositions.length + 1,
+        active: true,
+        isDefault: false,
+      },
+    ];
+  }, [activePositions, values.cargo]);
 
   React.useEffect(() => {
     if (!open) return;
@@ -53,12 +124,12 @@ export function UserFormDialog({
         telefone: initialUser.telefone ?? "",
       });
       const current = activeUnits.find((u) => u.id === initialUser.unidadeId);
-      setDepartamentoId(current ? (current.tipo === "direccao" ? current.id : current.parentId ?? "") : "");
+      setDepartamentoId(current ? getRootUnitId(current.id, unitsById) : "");
     } else {
       setValues(emptyValues());
       setDepartamentoId("");
     }
-  }, [open, mode, initialUser, activeUnits]);
+  }, [open, mode, initialUser, activeUnits, unitsById]);
 
   function emptyValues(): UserFormValues {
     return { nome: "", email: "", cargo: "", unidadeId: "", perfilId: "", estado: "activo", telefone: "" };
@@ -114,19 +185,22 @@ export function UserFormDialog({
               </div>
               <div className="sm:col-span-2">
                 <Label htmlFor="cargo" required>Cargo</Label>
-                <Input
-                  id="cargo"
-                  placeholder="Ex.: Técnico Superior de Via e Obras"
-                  value={values.cargo}
-                  onChange={(e) => setValues((v) => ({ ...v, cargo: e.target.value }))}
-                  required
-                />
+                <Select value={values.cargo} onValueChange={(cargo) => setValues((v) => ({ ...v, cargo }))}>
+                  <SelectTrigger id="cargo">
+                    <SelectValue placeholder="Seleccionar cargo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {positionOptions.map((item) => (
+                      <SelectItem key={item.id} value={item.label}>{item.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <div>
-                <Label required>Departamento</Label>
+                <Label required>Unidade principal</Label>
                 <Select value={departamentoId} onValueChange={selectDepartamento}>
                   <SelectTrigger>
-                    <SelectValue placeholder="Seleccionar departamento" />
+                    <SelectValue placeholder="Seleccionar unidade" />
                   </SelectTrigger>
                   <SelectContent>
                     {departamentos.map((u) => (
@@ -136,19 +210,19 @@ export function UserFormDialog({
                 </Select>
               </div>
               <div>
-                <Label>Serviço</Label>
+                <Label>Serviço / subunidade</Label>
                 <Select
                   value={servicos.some((u) => u.id === values.unidadeId) ? values.unidadeId : "sem-servico"}
                   onValueChange={(v) => setValues((s) => ({ ...s, unidadeId: v === "sem-servico" ? departamentoId : v }))}
                   disabled={!departamentoId}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Seleccionar serviço" />
+                    <SelectValue placeholder="Seleccionar subunidade" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="sem-servico">Fica no departamento (sem serviço específico)</SelectItem>
+                    <SelectItem value="sem-servico">Fica na unidade principal</SelectItem>
                     {servicos.map((u) => (
-                      <SelectItem key={u.id} value={u.id}>{u.sigla} — {u.nome}</SelectItem>
+                      <SelectItem key={u.id} value={u.id}>{u.codigo} · {u.sigla} — {u.nome}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>

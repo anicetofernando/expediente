@@ -4,6 +4,7 @@ import * as React from "react";
 import {
   ArrowDown,
   ArrowUp,
+  BriefcaseBusiness,
   Check,
   FileInput,
   LockKeyhole,
@@ -49,6 +50,7 @@ interface CatalogDefinition {
   icon: React.ComponentType<{ className?: string }>;
   items: CatalogOption[];
   setItems: SetCatalog;
+  allowCreate?: boolean;
 }
 
 interface EditState {
@@ -63,16 +65,76 @@ function normaliseOrder(items: CatalogOption[]) {
     .map((item, index) => ({ ...item, order: index + 1 }));
 }
 
+function slugify(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+function uniqueCode(label: string, items: CatalogOption[]) {
+  const base = slugify(label) || `opcao-${Date.now().toString(36)}`;
+  const existing = new Set(items.map((item) => item.code));
+  let code = base;
+  let suffix = 2;
+  while (existing.has(code)) {
+    code = `${base}-${suffix}`;
+    suffix += 1;
+  }
+  return code;
+}
+
 function CatalogTable({
   items,
   setItems,
+  allowCreate,
 }: {
   items: CatalogOption[];
   setItems: SetCatalog;
+  allowCreate?: boolean;
 }) {
   const { toast } = useToast();
   const [editing, setEditing] = React.useState<EditState | null>(null);
+  const [draft, setDraft] = React.useState({ label: "", description: "" });
   const orderedItems = React.useMemo(() => normaliseOrder(items), [items]);
+
+  function addItem() {
+    const label = draft.label.trim();
+    if (!label) {
+      toast({
+        title: "Nome obrigatório",
+        description: "Indique o nome do novo cargo.",
+        variant: "warning",
+      });
+      return;
+    }
+
+    const duplicate = orderedItems.some(
+      (item) => item.label.trim().toLowerCase() === label.toLowerCase()
+    );
+    if (duplicate) {
+      toast({
+        title: "Cargo já existe",
+        description: "Escolha outro nome ou active o cargo existente.",
+        variant: "warning",
+      });
+      return;
+    }
+
+    const next: CatalogOption = {
+      id: `cargo-${Date.now().toString(36)}`,
+      code: uniqueCode(label, orderedItems),
+      label,
+      description: draft.description.trim(),
+      order: orderedItems.length + 1,
+      active: true,
+      isDefault: orderedItems.length === 0,
+    };
+    setItems(normaliseOrder([...orderedItems, next]));
+    setDraft({ label: "", description: "" });
+  }
 
   function beginEdit(item: CatalogOption) {
     setEditing({
@@ -169,8 +231,33 @@ function CatalogTable({
   }
 
   return (
-    <TableContainer>
-      <Table className="min-w-[900px]">
+    <div>
+      {allowCreate ? (
+        <div className="grid gap-3 border-b border-graphite-200 p-3 sm:grid-cols-[minmax(180px,260px)_1fr_auto] sm:items-end">
+          <div>
+            <Input
+              value={draft.label}
+              onChange={(event) => setDraft((current) => ({ ...current, label: event.target.value }))}
+              placeholder="Novo cargo"
+              aria-label="Nome do novo cargo"
+            />
+          </div>
+          <div>
+            <Textarea
+              value={draft.description}
+              onChange={(event) => setDraft((current) => ({ ...current, description: event.target.value }))}
+              placeholder="Descrição"
+              className="min-h-9 resize-y"
+              aria-label="Descrição do novo cargo"
+            />
+          </div>
+          <Button type="button" onClick={addItem}>
+            Cadastrar
+          </Button>
+        </div>
+      ) : null}
+      <TableContainer>
+        <Table className="min-w-[900px]">
         <TableHead>
           <tr>
             <TableHeaderCell className="w-16 text-center">Ordem</TableHeaderCell>
@@ -336,8 +423,9 @@ function CatalogTable({
             );
           })}
         </TableBody>
-      </Table>
-    </TableContainer>
+        </Table>
+      </TableContainer>
+    </div>
   );
 }
 
@@ -351,6 +439,8 @@ export function CatalogSettings() {
     setDocumentOrigins,
     stampChoices,
     setStampChoices,
+    positions,
+    setPositions,
     resetCatalogs,
   } = useCatalogs();
 
@@ -390,6 +480,16 @@ export function CatalogSettings() {
       icon: Stamp,
       items: stampChoices,
       setItems: setStampChoices,
+    },
+    {
+      value: "cargos",
+      label: "Cargos",
+      title: "Cargos funcionais",
+      description: "Cargos disponíveis na criação e edição de utilizadores.",
+      icon: BriefcaseBusiness,
+      items: positions,
+      setItems: setPositions,
+      allowCreate: true,
     },
   ];
 
@@ -455,6 +555,7 @@ export function CatalogSettings() {
               <CatalogTable
                 items={catalog.items}
                 setItems={catalog.setItems}
+                allowCreate={catalog.allowCreate}
               />
             </TabsContent>
           ))}
