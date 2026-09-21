@@ -5,6 +5,7 @@ import { FileEdit, Upload } from "lucide-react";
 import type { FreePosition, Signature, Stamp } from "@/types";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogBody, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Alert } from "@/components/ui/alert";
 import { Label, Textarea } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { LetterEditor } from "@/components/documents/letter-editor";
@@ -12,6 +13,44 @@ import { StampPositionPicker } from "@/components/documents/stamp-position-picke
 import { useCatalogs } from "@/lib/catalogs";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { useSession } from "@/lib/session";
+import { deleteBrowserDraft, readBrowserDraft, writeBrowserDraft, type BrowserDraft } from "@/lib/browser-drafts";
+
+interface DespachoLocalDraftValue {
+  modo: "sistema" | "importado";
+  modeloId: string;
+  conteudo: string;
+  assunto: string;
+  note: string;
+  incluirCarimbo: boolean;
+  ficheiro: File | null;
+}
+
+function textFromHtml(html: string) {
+  return html.replace(/<[^>]*>/g, "").replace(/&nbsp;/g, " ").trim();
+}
+
+function hasMeaningfulDraft(value: DespachoLocalDraftValue) {
+  return Boolean(
+    value.assunto.trim() ||
+    value.note.trim() ||
+    value.modeloId ||
+    textFromHtml(value.conteudo) ||
+    value.ficheiro,
+  );
+}
+
+function formatDraftTimestamp(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return new Intl.DateTimeFormat("pt-MZ", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+}
 
 export function DespachoDialog({
   expedientId,
@@ -44,6 +83,7 @@ export function DespachoDialog({
   isCobertura?: boolean;
 }) {
   const { toast } = useToast();
+  const { user } = useSession();
   const { documentTemplates } = useCatalogs();
   const isDespacho = endpoint === "resposta";
   // Precisa de carimbo/assinatura de quem esta a criar o documento em ambos os
@@ -65,6 +105,13 @@ export function DespachoDialog({
   const [pdfUrl, setPdfUrl] = React.useState<string | null>(null);
   const [positioning, setPositioning] = React.useState(false);
   const [submitting, setSubmitting] = React.useState(false);
+  const [localDraftReady, setLocalDraftReady] = React.useState(false);
+  const [localDraftRestored, setLocalDraftRestored] = React.useState<BrowserDraft<DespachoLocalDraftValue> | null>(null);
+  const [localSaveStatus, setLocalSaveStatus] = React.useState<"idle" | "saving" | "saved" | "error">("idle");
+  const draftKey = React.useMemo(
+    () => `document-editor:${user.id}:${expedientId}:${endpoint}:${intent ?? "normal"}:${isCobertura ? "cobertura" : "regular"}`,
+    [endpoint, expedientId, intent, isCobertura, user.id],
+  );
 
   React.useEffect(() => {
     // A nota de cobertura nunca leva carimbo/assinatura da Secretaria -- nao
@@ -87,6 +134,125 @@ export function DespachoDialog({
   const hasFreePositionImages = Boolean((applyStamp && authorization.stamp?.imagemUrl) || (needsAuthorization && authorization.signature?.imagemUrl));
   const successLabel = isDespacho ? "Despacho registado" : "Nota registada";
   const failureLabel = isDespacho ? "Despacho não registado" : "Nota não registada";
+  const localDraftStatusText =
+    localSaveStatus === "saving"
+      ? "A guardar rascunho local..."
+      : localSaveStatus === "saved"
+        ? "Rascunho local guardado"
+        : localSaveStatus === "error"
+          ? "Rascunho local não guardado"
+          : "";
+
+  const currentDraftValue = React.useCallback((): DespachoLocalDraftValue => ({
+    modo,
+    modeloId,
+    conteudo,
+    assunto,
+    note,
+    incluirCarimbo,
+    ficheiro,
+  }), [assunto, conteudo, ficheiro, incluirCarimbo, modeloId, modo, note]);
+
+  const clearLocalDraft = React.useCallback(async () => {
+    try {
+      await deleteBrowserDraft(draftKey);
+    } finally {
+      setLocalDraftRestored(null);
+      setLocalSaveStatus("idle");
+    }
+  }, [draftKey]);
+
+  const saveLocalDraft = React.useCallback(async ({ silent = false }: { silent?: boolean } = {}) => {
+    if (submitting) return;
+    const value = currentDraftValue();
+    try {
+      if (!hasMeaningfulDraft(value)) {
+        await deleteBrowserDraft(draftKey);
+        if (!silent) setLocalSaveStatus("idle");
+        return;
+      }
+      if (!silent) setLocalSaveStatus("saving");
+      await writeBrowserDraft<DespachoLocalDraftValue>({
+        key: draftKey,
+        version: 1,
+        updatedAt: new Date().toISOString(),
+        value,
+      });
+      if (!silent) setLocalSaveStatus("saved");
+    } catch {
+      if (!silent) setLocalSaveStatus("error");
+    }
+  }, [currentDraftValue, draftKey, submitting]);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    setLocalDraftReady(false);
+    void readBrowserDraft<DespachoLocalDraftValue>(draftKey)
+      .then((draft) => {
+        if (cancelled) return;
+        if (draft && hasMeaningfulDraft(draft.value)) {
+          setModo(draft.value.modo ?? "sistema");
+          setModeloId(draft.value.modeloId ?? "");
+          setConteudo(draft.value.conteudo ?? "");
+          setAssunto(draft.value.assunto ?? "");
+          setNote(draft.value.note ?? "");
+          setIncluirCarimbo(draft.value.incluirCarimbo ?? true);
+          setFicheiro(draft.value.ficheiro ?? null);
+          setLocalDraftRestored(draft);
+          setLocalSaveStatus("saved");
+          toast({
+            title: "Rascunho local recuperado",
+            description: `Última edição: ${formatDraftTimestamp(draft.updatedAt) || "há pouco"}.`,
+            variant: "success",
+          });
+          return;
+        }
+        setLocalDraftRestored(null);
+        setLocalSaveStatus("idle");
+      })
+      .catch(() => {
+        if (!cancelled) setLocalSaveStatus("error");
+      })
+      .finally(() => {
+        if (!cancelled) setLocalDraftReady(true);
+      });
+    return () => { cancelled = true; };
+  }, [draftKey, toast]);
+
+  React.useEffect(() => {
+    if (!localDraftReady || positioning || submitting) return;
+    const timer = window.setTimeout(() => {
+      void saveLocalDraft();
+    }, 600);
+    return () => window.clearTimeout(timer);
+  }, [assunto, conteudo, ficheiro, incluirCarimbo, localDraftReady, modeloId, modo, note, positioning, saveLocalDraft, submitting]);
+
+  React.useEffect(() => {
+    if (!localDraftReady) return;
+    const persistSilently = () => {
+      void saveLocalDraft({ silent: true });
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "hidden") persistSilently();
+    };
+    window.addEventListener("pagehide", persistSilently);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      window.removeEventListener("pagehide", persistSilently);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [localDraftReady, saveLocalDraft]);
+
+  async function discardRecoveredLocalDraft() {
+    await clearLocalDraft();
+    setModo("sistema");
+    setModeloId("");
+    setConteudo("");
+    setAssunto("");
+    setNote("");
+    setIncluirCarimbo(true);
+    setFicheiro(null);
+  }
 
   async function submitSistema() {
     if (!isDespacho && !assunto.trim()) {
@@ -109,6 +275,7 @@ export function DespachoDialog({
         setPdfUrl(result.pdfUrl);
         setPositioning(true);
       } else {
+        await clearLocalDraft();
         toast({ title: successLabel, variant: "success" });
         onDone();
       }
@@ -136,6 +303,7 @@ export function DespachoDialog({
       const response = await fetch(`/api/expedients/${expedientId}/${endpoint}`, { method: "POST", body: form });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error ?? `Não foi possível registar ${isDespacho ? "o despacho" : "a nota"}.`);
+      await clearLocalDraft();
       toast({ title: successLabel, variant: "success" });
       onDone();
     } catch (error) {
@@ -154,6 +322,7 @@ export function DespachoDialog({
       const response = await fetch(`/api/expedients/${expedientId}/${endpoint}`, { method: "POST", body: form });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error ?? "Não foi possível posicionar o carimbo/assinatura.");
+      await clearLocalDraft();
       toast({ title: successLabel, variant: "success" });
       onDone();
     } catch (error) {
@@ -184,6 +353,21 @@ export function DespachoDialog({
           <DialogDescription>{protocolo}</DialogDescription>
         </DialogHeader>
         <DialogBody className="space-y-4">
+          {localDraftRestored && (
+            <Alert
+              variant="success"
+              title="Rascunho local recuperado"
+              action={
+                <Button type="button" variant="secondary" size="sm" onClick={discardRecoveredLocalDraft}>
+                  Descartar
+                </Button>
+              }
+            >
+              O editor voltou à última edição guardada neste navegador
+              {formatDraftTimestamp(localDraftRestored.updatedAt) ? ` em ${formatDraftTimestamp(localDraftRestored.updatedAt)}.` : "."}
+            </Alert>
+          )}
+
           <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
             <button
               type="button"
@@ -291,6 +475,9 @@ export function DespachoDialog({
                 onChange={(event) => setFicheiro(event.target.files?.[0] ?? null)}
                 className="mt-1 block text-[13px] text-graphite-600 file:mr-3 file:rounded-md file:border-0 file:bg-graphite-100 file:px-3 file:py-1.5 file:text-[13px] file:font-medium file:text-graphite-700 hover:file:bg-graphite-200"
               />
+              {ficheiro && (
+                <p className="mt-1 text-2xs text-graphite-500">Seleccionado: {ficheiro.name}</p>
+              )}
             </div>
           )}
 
@@ -301,7 +488,10 @@ export function DespachoDialog({
         </DialogBody>
         <DialogFooter className="flex-col items-stretch gap-2 sm:flex-row sm:items-center sm:justify-end">
           {submitting && modo === "sistema" && (
-            <p className="text-2xs text-graphite-400 sm:mr-auto">A gerar o documento — pode demorar alguns segundos…</p>
+            <p className="text-2xs text-graphite-400 sm:mr-auto">A gerar o documento — pode demorar alguns segundos...</p>
+          )}
+          {!submitting && localDraftStatusText && (
+            <p className="text-2xs text-graphite-400 sm:mr-auto">{localDraftStatusText}</p>
           )}
           <div className="flex justify-end gap-2">
             <Button variant="secondary" onClick={onClose}>Cancelar</Button>
