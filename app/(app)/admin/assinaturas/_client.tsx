@@ -80,6 +80,7 @@ export function AssinaturasPageClient() {
   const [search, setSearch] = React.useState("");
   const [status, setStatus] = React.useState("todos");
   const [open, setOpen] = React.useState(false);
+  const [editing, setEditing] = React.useState<Signature | null>(null);
   const [users, setUsers] = React.useState<Array<{id:string;nome:string;email:string;cargo:string;unidade:string;estado:string}>>([]);
   const [userId, setUserId] = React.useState("");
   const [nome, setNome] = React.useState("");
@@ -134,14 +135,41 @@ export function AssinaturasPageClient() {
   ).length;
   const expiringCount = items.filter((item) => item.estado !== "activa").length;
   const usageCount = items.reduce((total, item) => total + item.utilizacoes, 0);
+  const ownerOptions = React.useMemo(() => {
+    const options = users
+      .filter((user) => user.estado === "activo" || user.id === userId)
+      .map((user) => ({ value: user.id, label: `${user.nome} — ${user.unidade}`, description: `${user.cargo} ${user.email}` }));
+    if (editing && userId && !options.some((option) => option.value === userId)) {
+      options.unshift({ value: userId, label: `${nome} — ${unidade}`, description: cargo });
+    }
+    return options;
+  }, [cargo, editing, nome, unidade, userId, users]);
 
   function resetForm() {
+    setEditing(null);
     setUserId("");
     setNome("");
     setCargo("");
     setUnidade("");
     setValidadeFim("2027-12-31");
     setImagemUrl("");
+  }
+
+  function openCreateDialog() {
+    resetForm();
+    setOpen(true);
+  }
+
+  function openEditDialog(item: Signature) {
+    const owner = users.find((user) => user.id === item.utilizadorId || user.email.toLowerCase() === item.email?.toLowerCase());
+    setEditing(item);
+    setUserId(owner?.id ?? item.utilizadorId ?? item.id);
+    setNome(owner?.nome ?? item.proprietario);
+    setCargo(owner?.cargo ?? item.cargo);
+    setUnidade(owner?.unidade ?? item.unidade);
+    setValidadeFim(item.validadeFim);
+    setImagemUrl(item.imagemUrl ?? "");
+    setOpen(true);
   }
 
   function createSignature() {
@@ -168,6 +196,30 @@ export function AssinaturasPageClient() {
     toast({
       title: "Assinatura registada",
       description: `A assinatura de ${signature.proprietario} está pronta para utilização.`,
+      variant: "success",
+    });
+  }
+
+  function saveSignature() {
+    if (!editing) return createSignature();
+    const owner = users.find((user) => user.id === userId);
+    const updated: Signature = {
+      ...editing,
+      utilizadorId: owner?.id ?? editing.utilizadorId,
+      email: owner?.email ?? editing.email,
+      proprietario: owner?.nome ?? nome.trim(),
+      cargo: owner?.cargo ?? cargo.trim(),
+      unidade: owner?.unidade ?? unidade.trim(),
+      validadeFim,
+      estado: editing.estado === "expirada" ? "activa" : editing.estado,
+      imagemUrl: imagemUrl || undefined,
+    };
+    setItems((current) => current.map((signature) => (signature.id === editing.id ? updated : signature)));
+    setOpen(false);
+    resetForm();
+    toast({
+      title: "Assinatura actualizada",
+      description: `A assinatura de ${updated.proprietario} foi actualizada.`,
       variant: "success",
     });
   }
@@ -230,7 +282,7 @@ export function AssinaturasPageClient() {
           { label: "Assinaturas" },
         ]}
         actions={
-          <Button onClick={() => setOpen(true)}>
+          <Button onClick={openCreateDialog}>
             <Plus className="size-4" />
             Registar assinatura
           </Button>
@@ -338,7 +390,10 @@ export function AssinaturasPageClient() {
                               <KeyRound className="size-3" /> PIN
                             </Badge>
                           )}
-                          {!item.requerPin && (
+                          {item.imagemUrl && (
+                            <Badge variant="success">Imagem</Badge>
+                          )}
+                          {!item.requerPin && !item.imagemUrl && (
                             <span className="text-graphite-400">—</span>
                           )}
                         </div>
@@ -368,6 +423,10 @@ export function AssinaturasPageClient() {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent>
+                            <DropdownMenuItem onClick={() => openEditDialog(item)}>
+                              <PenLine className="size-3.5" />
+                              Editar assinatura
+                            </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => renew(item)}>
                               <RefreshCw className="size-3.5" />
                               Renovar por um ano
@@ -432,9 +491,9 @@ export function AssinaturasPageClient() {
       >
         <DialogContent size="md">
           <DialogHeader>
-            <DialogTitle>Registar assinatura digital</DialogTitle>
+            <DialogTitle>{editing ? "Editar assinatura digital" : "Registar assinatura digital"}</DialogTitle>
             <DialogDescription>
-              Associe a assinatura a um único utilizador. Assinaturas não são partilhadas pela unidade ou departamento.
+              {editing ? "Actualize a validade ou carregue a imagem da assinatura individual." : "Associe a assinatura a um único utilizador. Assinaturas não são partilhadas pela unidade ou departamento."}
             </DialogDescription>
           </DialogHeader>
           <DialogBody className="grid gap-4 sm:grid-cols-2">
@@ -452,7 +511,8 @@ export function AssinaturasPageClient() {
                 placeholder="Seleccione o utilizador"
                 searchPlaceholder="Pesquisar por nome, cargo ou unidade…"
                 emptyMessage="Nenhum utilizador encontrado."
-                options={users.filter((user) => user.estado === "activo").map((user) => ({ value: user.id, label: `${user.nome} — ${user.unidade}`, description: `${user.cargo} ${user.email}` }))}
+                disabled={!!editing}
+                options={ownerOptions}
               />
             </div>
             <div className="sm:col-span-2">
@@ -502,6 +562,11 @@ export function AssinaturasPageClient() {
                   onChange={(event) => { const file = event.target.files?.[0]; if (file) void handleImageUpload(file); }}
                   className="text-[13px] text-graphite-600 file:mr-3 file:rounded-md file:border-0 file:bg-graphite-100 file:px-3 file:py-1.5 file:text-[13px] file:font-medium file:text-graphite-700 hover:file:bg-graphite-200"
                 />
+                {imagemUrl && (
+                  <Button type="button" variant="secondary" size="sm" onClick={() => setImagemUrl("")}>
+                    Remover imagem
+                  </Button>
+                )}
               </div>
               <p className="mt-1.5 text-2xs text-graphite-500">
                 {imagemUrl ? "Ao assinar um documento, poderá posicionar a imagem livremente." : "Opcional. Sem imagem, a assinatura continua a ser gerada como texto."}
@@ -514,16 +579,16 @@ export function AssinaturasPageClient() {
             </Button>
             <Button
               disabled={
-                !userId ||
+                (!editing && !userId) ||
                 !nome.trim() ||
                 !cargo.trim() ||
                 !unidade.trim() ||
                 !validadeFim
               }
-              onClick={createSignature}
+              onClick={saveSignature}
             >
               <ShieldCheck className="size-4" />
-              Registar
+              {editing ? "Guardar alterações" : "Registar"}
             </Button>
           </DialogFooter>
         </DialogContent>
