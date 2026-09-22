@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 const STAMP_DEFAULT: FreePosition = { x: 10, y: 76, width: 28, height: 14 };
 const SIGNATURE_DEFAULT: FreePosition = { x: 62, y: 78, width: 28, height: 14 };
 const NOTE_DEFAULT: FreePosition = { x: 36, y: 66, width: 38, height: 11 };
+const REFERENCE_DEFAULT: FreePosition = { x: 58, y: 8, width: 34, height: 6 };
 const MIN_SIZE = 6;
 const MAX_SIZE = 60;
 const MAX_PREVIEW_WIDTH = 680;
@@ -95,7 +96,7 @@ interface PositionableItem {
  * unlike an <iframe> pointed at the browser's native PDF viewer, which adds its own
  * chrome/padding that can't be measured, breaking the % coordinates dragged over it.
  */
-function PdfPagePreview({ pdfUrl, onReady }: { pdfUrl: string; onReady: (canvas: HTMLCanvasElement) => void }) {
+function PdfPagePreview({ pdfUrl, previewPage, onReady }: { pdfUrl: string; previewPage: "first" | "last"; onReady: (canvas: HTMLCanvasElement) => void }) {
   const canvasRef = React.useRef<HTMLCanvasElement>(null);
   const [status, setStatus] = React.useState<"loading" | "ready" | "error">("loading");
   const [slow, setSlow] = React.useState(false);
@@ -112,7 +113,7 @@ function PdfPagePreview({ pdfUrl, onReady }: { pdfUrl: string; onReady: (canvas:
         if (!response.ok) throw new Error("Nao foi possivel carregar o documento.");
         const bytes = await response.arrayBuffer();
         const doc = await pdfjs.getDocument({ data: bytes }).promise;
-        const page = await doc.getPage(doc.numPages);
+        const page = await doc.getPage(previewPage === "first" ? 1 : doc.numPages);
         const base = page.getViewport({ scale: 1 });
         const scale = Math.min(MAX_PREVIEW_WIDTH / base.width, MAX_PREVIEW_HEIGHT / base.height);
         const viewport = page.getViewport({ scale });
@@ -139,7 +140,7 @@ function PdfPagePreview({ pdfUrl, onReady }: { pdfUrl: string; onReady: (canvas:
     })();
     return () => { cancelled = true; clearTimeout(slowTimer); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pdfUrl]);
+  }, [pdfUrl, previewPage]);
 
   return (
     <>
@@ -247,6 +248,8 @@ export function StampPositionPicker({
   stamp,
   signature,
   note,
+  reference,
+  previewPage = "last",
   onConfirm,
 }: {
   open: boolean;
@@ -255,12 +258,15 @@ export function StampPositionPicker({
   stamp?: PositionableItem;
   signature?: PositionableItem;
   note?: Omit<PositionableItem, "imageUrl"> & { imageUrl?: string };
-  onConfirm: (result: { posicaoCarimbo?: FreePosition; posicaoAssinatura?: FreePosition; posicaoNota?: FreePosition }) => void;
+  reference?: Omit<PositionableItem, "imageUrl"> & { imageUrl?: string };
+  previewPage?: "first" | "last";
+  onConfirm: (result: { posicaoCarimbo?: FreePosition; posicaoAssinatura?: FreePosition; posicaoNota?: FreePosition; posicaoReferencia?: FreePosition }) => void;
 }) {
   const containerRef = React.useRef<HTMLDivElement>(null);
   const [stampPosition, setStampPosition] = React.useState<FreePosition>(stamp?.initialPosition ?? STAMP_DEFAULT);
   const [signaturePosition, setSignaturePosition] = React.useState<FreePosition>(signature?.initialPosition ?? SIGNATURE_DEFAULT);
   const [notePosition, setNotePosition] = React.useState<FreePosition>(note?.initialPosition ?? NOTE_DEFAULT);
+  const [referencePosition, setReferencePosition] = React.useState<FreePosition>(reference?.initialPosition ?? REFERENCE_DEFAULT);
   const [previewReady, setPreviewReady] = React.useState(false);
 
   React.useEffect(() => {
@@ -268,6 +274,7 @@ export function StampPositionPicker({
     setStampPosition(stamp?.initialPosition ?? STAMP_DEFAULT);
     setSignaturePosition(signature?.initialPosition ?? SIGNATURE_DEFAULT);
     setNotePosition(note?.initialPosition ?? NOTE_DEFAULT);
+    setReferencePosition(reference?.initialPosition ?? REFERENCE_DEFAULT);
     setPreviewReady(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, pdfUrl]);
@@ -281,7 +288,16 @@ export function StampPositionPicker({
         </DialogHeader>
         <DialogBody className="flex flex-1 flex-col items-center">
           <div ref={containerRef} className="relative mx-auto inline-block border border-graphite-300 bg-white shadow-sm">
-            <PdfPagePreview pdfUrl={pdfUrl} onReady={() => setPreviewReady(true)} />
+            <PdfPagePreview pdfUrl={pdfUrl} previewPage={previewPage} onReady={() => setPreviewReady(true)} />
+            {previewReady && reference && (
+              <PositionableOverlay
+                containerRef={containerRef}
+                item={{ imageUrl: "", kind: "text", label: reference.label, text: reference.text, attribution: reference.attribution }}
+                position={referencePosition}
+                onChange={setReferencePosition}
+                accent="#173f70"
+              />
+            )}
             {previewReady && stamp && (
               <PositionableOverlay containerRef={containerRef} item={stamp} position={stampPosition} onChange={setStampPosition} accent="#173f70" />
             )}
@@ -299,12 +315,12 @@ export function StampPositionPicker({
             )}
           </div>
           <p className="mt-2 shrink-0 text-center text-2xs text-graphite-500">
-            Mostra a última página do documento, à escala exacta. A posição de cada elemento fica guardada para as próximas vezes.
+            Mostra a {previewPage === "first" ? "primeira" : "ultima"} pagina do documento, a escala exacta. A posicao de cada elemento fica guardada para as proximas vezes.
           </p>
         </DialogBody>
         <DialogFooter>
           <Button variant="secondary" onClick={() => onOpenChange(false)}>Cancelar</Button>
-          <Button disabled={!previewReady} onClick={() => onConfirm({ posicaoCarimbo: stamp ? stampPosition : undefined, posicaoAssinatura: signature ? signaturePosition : undefined, posicaoNota: note ? notePosition : undefined })}>
+          <Button disabled={!previewReady} onClick={() => onConfirm({ posicaoCarimbo: stamp ? stampPosition : undefined, posicaoAssinatura: signature ? signaturePosition : undefined, posicaoNota: note ? notePosition : undefined, posicaoReferencia: reference ? referencePosition : undefined })}>
             Aplicar aqui
           </Button>
         </DialogFooter>

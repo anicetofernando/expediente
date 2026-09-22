@@ -98,7 +98,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
   const session = await getCurrentSession();
   if (!session) return NextResponse.json({ error: "Nao autenticado." }, { status: 401 });
 
-  let input: { action?: string; note?: string; target?: string; posicaoCarimbo?: FreePosition; posicaoAssinatura?: FreePosition; posicaoNota?: FreePosition; alvo?: string };
+  let input: { action?: string; note?: string; target?: string; posicaoCarimbo?: FreePosition; posicaoAssinatura?: FreePosition; posicaoNota?: FreePosition; posicaoReferencia?: FreePosition; alvo?: string };
   try {
     input = await request.json();
   } catch {
@@ -256,12 +256,21 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
             const signatureEntry = signatureMetadataJson(signature, session.user, input.posicaoAssinatura ?? signature.posicaoLivre);
             const protocolStamps = [...(doc.stamps_metadata ?? []), stampEntry];
             const protocolSignatures = [...(doc.signatures_metadata ?? []), signatureEntry];
+            const referenceEntry = input.posicaoReferencia
+              ? {
+                  texto: `N/Ref.: ${protocol}`,
+                  label: "Referencia",
+                  aplicadoPor: session.user.nome,
+                  aplicadoEm: new Date().toISOString(),
+                  posicaoLivre: input.posicaoReferencia,
+                }
+              : null;
             await client.query(
-              `INSERT INTO documents(expedient_id,name,document_kind,source,mime_type,size_bytes,page_count,storage_path,content_html,confidentiality,created_by,template_metadata,stamp_id,stamped,signed,stamp_metadata,signature_metadata,stamps_metadata,signatures_metadata,created_for_unit_id)
-               VALUES($1,$2,'protocolo',$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb,$12,true,true,$13::jsonb,$14::jsonb,$15::jsonb,$16::jsonb,$17)`,
+              `INSERT INTO documents(expedient_id,name,document_kind,source,mime_type,size_bytes,page_count,storage_path,content_html,confidentiality,created_by,template_metadata,stamp_id,stamped,signed,stamp_metadata,signature_metadata,stamps_metadata,signatures_metadata,created_for_unit_id,reference_metadata)
+               VALUES($1,$2,'protocolo',$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb,$12,true,true,$13::jsonb,$14::jsonb,$15::jsonb,$16::jsonb,$17,$18::jsonb)`,
               [exp.id, `Protocolo - ${doc.name}`, doc.source, doc.mime_type, doc.size_bytes, doc.page_count, doc.storage_path, doc.content_html, doc.confidentiality,
                 session.user.id, doc.template_metadata ? JSON.stringify(doc.template_metadata) : null, stamp.id,
-                JSON.stringify(stampEntry), JSON.stringify(signatureEntry), JSON.stringify(protocolStamps), JSON.stringify(protocolSignatures), doc.created_for_unit_id ?? exp.recipient_unit_id],
+                JSON.stringify(stampEntry), JSON.stringify(signatureEntry), JSON.stringify(protocolStamps), JSON.stringify(protocolSignatures), doc.created_for_unit_id ?? exp.recipient_unit_id, referenceEntry ? JSON.stringify(referenceEntry) : null],
             );
             if (stamp.imagemUrl && input.posicaoCarimbo) await rememberStampPosition(client, stamp.id, input.posicaoCarimbo);
             if (signature.imagemUrl && input.posicaoAssinatura) await rememberSignaturePosition(client, signature.id, input.posicaoAssinatura);

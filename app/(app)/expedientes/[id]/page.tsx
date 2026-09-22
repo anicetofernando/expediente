@@ -178,6 +178,7 @@ export default async function ExpedientDetailPage({ params }: { params: { id: st
                   pendingNextStatus: expedient.pendingNextStatus,
                 }}
                 principalPdfUrl={originalPrincipal?.pdfUrl}
+                principalCanPositionReference={originalPrincipal?.origem === "importado"}
                 approvalPdfUrls={{ nota: latestNote?.pdfUrl, expediente: originalPrincipal?.pdfUrl }}
               />
             </CardContent>

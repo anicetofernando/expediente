@@ -67,7 +67,7 @@ const PROFILE_ACTIONS: Record<string, Set<string>> = {
   administracao: new Set(Object.values(ACTIONS_BY_STATUS).flat().map((action) => action.key)),
 };
 
-export function ActionPanel({ expedient, principalPdfUrl, approvalPdfUrls }: { expedient: ActionExpedient; principalPdfUrl?: string; approvalPdfUrls?: ApprovalPdfUrls }) {
+export function ActionPanel({ expedient, principalPdfUrl, principalCanPositionReference = false, approvalPdfUrls }: { expedient: ActionExpedient; principalPdfUrl?: string; principalCanPositionReference?: boolean; approvalPdfUrls?: ApprovalPdfUrls }) {
   const { toast } = useToast();
   const { perfilNavegacao, profile, user } = useSession();
   const router = useRouter();
@@ -97,12 +97,12 @@ export function ActionPanel({ expedient, principalPdfUrl, approvalPdfUrls }: { e
         : action);
   const [activeAction, setActiveAction] = React.useState<ActionDef | null>(null);
 
-  async function complete(action: ActionDef, message: string, target?: string, posicaoCarimbo?: FreePosition, posicaoAssinatura?: FreePosition, alvo?: string, posicaoNota?: FreePosition) {
+  async function complete(action: ActionDef, message: string, target?: string, posicaoCarimbo?: FreePosition, posicaoAssinatura?: FreePosition, alvo?: string, posicaoNota?: FreePosition, posicaoReferencia?: FreePosition) {
     try {
       const response = await fetch(`/api/expedients/${expedient.id}/actions`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ action: action.key, note: message, target, posicaoCarimbo, posicaoAssinatura, alvo, posicaoNota }),
+        body: JSON.stringify({ action: action.key, note: message, target, posicaoCarimbo, posicaoAssinatura, alvo, posicaoNota, posicaoReferencia }),
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error ?? "Não foi possível registar a acção.");
@@ -174,10 +174,11 @@ export function ActionPanel({ expedient, principalPdfUrl, approvalPdfUrls }: { e
           action={activeAction}
           expedient={expedient}
           principalPdfUrl={principalPdfUrl}
+          principalCanPositionReference={principalCanPositionReference}
           approvalPdfUrls={approvalPdfUrls}
           onClose={() => setActiveAction(null)}
-          onComplete={(msg, target, posicaoCarimbo, posicaoAssinatura, actionKeyOverride, alvo, posicaoNota) =>
-            complete(actionKeyOverride ? { ...activeAction, key: actionKeyOverride } : activeAction, msg, target, posicaoCarimbo, posicaoAssinatura, alvo, posicaoNota)}
+          onComplete={(msg, target, posicaoCarimbo, posicaoAssinatura, actionKeyOverride, alvo, posicaoNota, posicaoReferencia) =>
+            complete(actionKeyOverride ? { ...activeAction, key: actionKeyOverride } : activeAction, msg, target, posicaoCarimbo, posicaoAssinatura, alvo, posicaoNota, posicaoReferencia)}
         />
       )}
     </div>
@@ -188,6 +189,7 @@ function ActionDialog({
   action,
   expedient,
   principalPdfUrl,
+  principalCanPositionReference,
   approvalPdfUrls,
   onClose,
   onComplete,
@@ -195,9 +197,10 @@ function ActionDialog({
   action: ActionDef;
   expedient: ActionExpedient;
   principalPdfUrl?: string;
+  principalCanPositionReference?: boolean;
   approvalPdfUrls?: ApprovalPdfUrls;
   onClose: () => void;
-  onComplete: (message: string, target?: string, posicaoCarimbo?: FreePosition, posicaoAssinatura?: FreePosition, actionKeyOverride?: string, alvo?: string, posicaoNota?: FreePosition) => void;
+  onComplete: (message: string, target?: string, posicaoCarimbo?: FreePosition, posicaoAssinatura?: FreePosition, actionKeyOverride?: string, alvo?: string, posicaoNota?: FreePosition, posicaoReferencia?: FreePosition) => void;
 }) {
   const { organizationalUnits } = useCatalogs();
   const { perfilNavegacao } = useSession();
@@ -418,8 +421,9 @@ function ActionDialog({
       <ReceiveForwardDialog
         expedient={expedient}
         principalPdfUrl={principalPdfUrl}
+        principalCanPositionReference={principalCanPositionReference}
         onClose={onClose}
-        onComplete={(message, destination, posicaoCarimbo, posicaoAssinatura) => onComplete(message, destination, posicaoCarimbo, posicaoAssinatura)}
+        onComplete={(message, destination, posicaoCarimbo, posicaoAssinatura, posicaoReferencia) => onComplete(message, destination, posicaoCarimbo, posicaoAssinatura, undefined, undefined, undefined, posicaoReferencia)}
       />
     );
   }
@@ -476,17 +480,20 @@ function ActionDialog({
 function ReceiveForwardDialog({
   expedient,
   principalPdfUrl,
+  principalCanPositionReference,
   onClose,
   onComplete,
 }: {
   expedient: ActionExpedient;
   principalPdfUrl?: string;
+  principalCanPositionReference?: boolean;
   onClose: () => void;
-  onComplete: (message: string, target: string, posicaoCarimbo?: FreePosition, posicaoAssinatura?: FreePosition) => void;
+  onComplete: (message: string, target: string, posicaoCarimbo?: FreePosition, posicaoAssinatura?: FreePosition, posicaoReferencia?: FreePosition) => void;
 }) {
   const { organizationalUnits } = useCatalogs();
   const [authorization, setAuthorization] = React.useState<{ stamp: StampDefinition | null; signature: Signature | null; loading: boolean }>({ stamp: null, signature: null, loading: true });
-  const [positioning, setPositioning] = React.useState(false);
+  const [positioning, setPositioning] = React.useState<"reference" | "stamp" | null>(null);
+  const [referencePosition, setReferencePosition] = React.useState<FreePosition | undefined>();
   const [note, setNote] = React.useState("");
 
   // "em_transito" e' sempre um salto seguinte (subida a director, ou pedido de
@@ -513,20 +520,40 @@ function ReceiveForwardDialog({
   }, []);
 
   const needsStamp = isFirstHop && Boolean(principalPdfUrl);
+  const needsReference = isFirstHop && principalCanPositionReference && Boolean(principalPdfUrl);
   const readyToStamp = Boolean(authorization.stamp && authorization.signature);
   const ready = Boolean(target && (!needsStamp || readyToStamp));
-  const hasPositionableItems = isFirstHop && Boolean(principalPdfUrl && (authorization.stamp?.imagemUrl || authorization.signature?.imagemUrl));
+  const hasStampPositionableItems = isFirstHop && Boolean(principalPdfUrl && (authorization.stamp?.imagemUrl || authorization.signature?.imagemUrl));
+  const hasPositionableItems = needsReference || hasStampPositionableItems;
   const targetName = organizationalUnits.find((unit) => unit.id === target)?.nome ?? "a unidade seleccionada";
+  const completeMessage = `Recebido em ${targetName}. ${note}`.trim();
 
-  if (positioning && principalPdfUrl) {
+  if (positioning === "reference" && principalPdfUrl) {
     return (
       <StampPositionPicker
         open
-        onOpenChange={(v) => !v && setPositioning(false)}
+        onOpenChange={(v) => !v && setPositioning(null)}
+        pdfUrl={principalPdfUrl}
+        previewPage="first"
+        reference={{ kind: "text", label: "Referencia", text: "N/Ref.: protocolo oficial" }}
+        onConfirm={(result) => {
+          setReferencePosition(result.posicaoReferencia);
+          if (hasStampPositionableItems) setPositioning("stamp");
+          else onComplete(completeMessage, target, undefined, undefined, result.posicaoReferencia);
+        }}
+      />
+    );
+  }
+
+  if (positioning === "stamp" && principalPdfUrl) {
+    return (
+      <StampPositionPicker
+        open
+        onOpenChange={(v) => !v && setPositioning(null)}
         pdfUrl={principalPdfUrl}
         stamp={authorization.stamp?.imagemUrl ? { imageUrl: authorization.stamp.imagemUrl, label: authorization.stamp.nome, initialPosition: authorization.stamp.posicaoLivre } : undefined}
         signature={authorization.signature?.imagemUrl ? { imageUrl: authorization.signature.imagemUrl, label: authorization.signature.proprietario, initialPosition: authorization.signature.posicaoLivre } : undefined}
-        onConfirm={(result) => onComplete(`Recebido em ${targetName}. ${note}`.trim(), target, result.posicaoCarimbo, result.posicaoAssinatura)}
+        onConfirm={(result) => onComplete(completeMessage, target, result.posicaoCarimbo, result.posicaoAssinatura, referencePosition)}
       />
     );
   }
@@ -572,6 +599,7 @@ function ReceiveForwardDialog({
           ) : readyToStamp ? (
             <p className="text-[13px] text-graphite-600">
               A cópia de protocolo será carimbada com <strong>{authorization.stamp?.nome}</strong> e assinada por {authorization.signature?.proprietario}.
+              {needsReference ? " Antes disso, vai posicionar a referencia no cabecalho do documento importado." : ""}
             </p>
           ) : (
             <p className="border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-relaxed text-amber-800">
@@ -586,8 +614,8 @@ function ReceiveForwardDialog({
           <Button
             disabled={!ready || (needsStamp && authorization.loading)}
             onClick={() => (hasPositionableItems
-              ? setPositioning(true)
-              : onComplete(`Recebido em ${targetName}. ${note}`.trim(), target))}
+              ? setPositioning(needsReference ? "reference" : "stamp")
+              : onComplete(completeMessage, target))}
           >
             {hasPositionableItems ? "Posicionar e concluir" : isFirstHop ? "Receber e protocolar" : "Confirmar recepção"}
           </Button>

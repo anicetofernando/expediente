@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getCurrentSession } from "@/lib/auth";
 import { query } from "@/lib/db";
 import { loadFile } from "@/lib/file-storage";
-import { createDocumentPdf, type PdfSignatureMetadata, type PdfStampMetadata } from "@/lib/document-pdf";
+import { createDocumentPdf, type PdfReferenceMetadata, type PdfSignatureMetadata, type PdfStampMetadata } from "@/lib/document-pdf";
 import type { DocumentTemplate, FreePosition } from "@/types";
 
 export const runtime = "nodejs";
@@ -15,6 +15,7 @@ interface DocumentAccessRow {
   template_metadata:Partial<DocumentTemplate>|null; document_number:string|null; own_subject:string|null; issuing_unit_name:string|null;
   issuing_parent_unit_name:string|null; recipient_unit_name:string|null; recipient_parent_unit_name:string|null;
   decision_note:{ texto: string; autor: string; cargo?: string; data?: string; posicaoLivre?: FreePosition }|null;
+  reference_metadata:PdfReferenceMetadata|null;
   protocol:string; subject:string; status:string; created_by:string; origin_unit_id:string; recipient_unit_id:string; responsible_user_id:string|null;
 }
 
@@ -23,7 +24,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
   if (!session) return NextResponse.json({ error: "Nao autenticado." }, { status: 401 });
   const result = await query<DocumentAccessRow>(
     `SELECT d.name,d.mime_type,d.storage_path,d.content_html,d.document_kind,d.stamps_metadata,d.signatures_metadata,d.template_metadata,
-            d.document_number,d.subject own_subject,d.decision_note,
+            d.document_number,d.subject own_subject,d.decision_note,d.reference_metadata,
             issuer.name issuing_unit_name,issuer_parent.name issuing_parent_unit_name,
             recipient.name recipient_unit_name,recipient_parent.name recipient_parent_unit_name,
             e.protocol,e.subject,e.status,e.created_by,e.origin_unit_id,e.recipient_unit_id,e.responsible_user_id
@@ -63,6 +64,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       recipientParentUnit: doc.recipient_parent_unit_name,
       documentNumber: doc.document_number, documentKind: doc.document_kind,
       decisionNote: doc.decision_note,
+      reference: doc.reference_metadata,
     });
     const name = `${doc.name.replace(/\.[^.]+$/, "").replace(/["\r\n]/g, "")}.pdf`;
     const disposition = request.nextUrl.searchParams.get("download") === "1" ? "attachment" : "inline";
