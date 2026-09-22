@@ -3,6 +3,7 @@ import { getCurrentSession } from "@/lib/auth";
 import { query } from "@/lib/db";
 import { loadFile } from "@/lib/file-storage";
 import { createDocumentPdf, type PdfReferenceMetadata, type PdfSignatureMetadata, type PdfStampMetadata } from "@/lib/document-pdf";
+import { ensureDocumentReferenceMetadataColumn } from "@/lib/document-schema";
 import type { DocumentTemplate, FreePosition } from "@/types";
 
 export const runtime = "nodejs";
@@ -22,6 +23,7 @@ interface DocumentAccessRow {
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
   const session = await getCurrentSession();
   if (!session) return NextResponse.json({ error: "Nao autenticado." }, { status: 401 });
+  await ensureDocumentReferenceMetadataColumn();
   const result = await query<DocumentAccessRow>(
     `SELECT d.name,d.mime_type,d.storage_path,d.content_html,d.document_kind,d.stamps_metadata,d.signatures_metadata,d.template_metadata,
             d.document_number,d.subject own_subject,d.decision_note,d.reference_metadata,

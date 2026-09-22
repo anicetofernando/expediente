@@ -12,6 +12,7 @@ import {
 } from "@/lib/routing";
 import { configuredSignatures, configuredStamps, rememberSignaturePosition, rememberStampPosition } from "@/lib/document-configuration";
 import { resolveUnitStamp, resolveUserSignature } from "@/lib/document-authorization";
+import { ensureDocumentReferenceMetadataColumn } from "@/lib/document-schema";
 import { signatureMetadataJson, stampMetadataJson } from "@/lib/stamping";
 import { generateProtocolNumber } from "@/lib/numbering";
 import { hasActionPermission } from "@/lib/permissions";
@@ -192,6 +193,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       }
 
       if (action === "receber_encaminhar") {
+        await ensureDocumentReferenceMetadataColumn(client);
         const isFirstHop = exp.status !== "em_transito";
 
         if (isFirstHop) {
