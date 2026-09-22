@@ -67,7 +67,19 @@ const PROFILE_ACTIONS: Record<string, Set<string>> = {
   administracao: new Set(Object.values(ACTIONS_BY_STATUS).flat().map((action) => action.key)),
 };
 
-export function ActionPanel({ expedient, principalPdfUrl, principalCanPositionReference = false, approvalPdfUrls }: { expedient: ActionExpedient; principalPdfUrl?: string; principalCanPositionReference?: boolean; approvalPdfUrls?: ApprovalPdfUrls }) {
+export function ActionPanel({
+  expedient,
+  principalPdfUrl,
+  principalOriginalPdfUrl,
+  principalCanPositionReference = false,
+  approvalPdfUrls,
+}: {
+  expedient: ActionExpedient;
+  principalPdfUrl?: string;
+  principalOriginalPdfUrl?: string;
+  principalCanPositionReference?: boolean;
+  approvalPdfUrls?: ApprovalPdfUrls;
+}) {
   const { toast } = useToast();
   const { perfilNavegacao, profile, user } = useSession();
   const router = useRouter();
@@ -174,6 +186,7 @@ export function ActionPanel({ expedient, principalPdfUrl, principalCanPositionRe
           action={activeAction}
           expedient={expedient}
           principalPdfUrl={principalPdfUrl}
+          principalOriginalPdfUrl={principalOriginalPdfUrl}
           principalCanPositionReference={principalCanPositionReference}
           approvalPdfUrls={approvalPdfUrls}
           onClose={() => setActiveAction(null)}
@@ -189,6 +202,7 @@ function ActionDialog({
   action,
   expedient,
   principalPdfUrl,
+  principalOriginalPdfUrl,
   principalCanPositionReference,
   approvalPdfUrls,
   onClose,
@@ -197,6 +211,7 @@ function ActionDialog({
   action: ActionDef;
   expedient: ActionExpedient;
   principalPdfUrl?: string;
+  principalOriginalPdfUrl?: string;
   principalCanPositionReference?: boolean;
   approvalPdfUrls?: ApprovalPdfUrls;
   onClose: () => void;
@@ -421,6 +436,7 @@ function ActionDialog({
       <ReceiveForwardDialog
         expedient={expedient}
         principalPdfUrl={principalPdfUrl}
+        principalOriginalPdfUrl={principalOriginalPdfUrl}
         principalCanPositionReference={principalCanPositionReference}
         onClose={onClose}
         onComplete={(message, destination, posicaoCarimbo, posicaoAssinatura, posicaoReferencia) => onComplete(message, destination, posicaoCarimbo, posicaoAssinatura, undefined, undefined, undefined, posicaoReferencia)}
@@ -480,12 +496,14 @@ function ActionDialog({
 function ReceiveForwardDialog({
   expedient,
   principalPdfUrl,
+  principalOriginalPdfUrl,
   principalCanPositionReference,
   onClose,
   onComplete,
 }: {
   expedient: ActionExpedient;
   principalPdfUrl?: string;
+  principalOriginalPdfUrl?: string;
   principalCanPositionReference?: boolean;
   onClose: () => void;
   onComplete: (message: string, target: string, posicaoCarimbo?: FreePosition, posicaoAssinatura?: FreePosition, posicaoReferencia?: FreePosition) => void;
@@ -534,6 +552,7 @@ function ReceiveForwardDialog({
         open
         onOpenChange={(v) => !v && setPositioning(null)}
         pdfUrl={principalPdfUrl}
+        fallbackPdfUrl={principalOriginalPdfUrl}
         previewPage="first"
         reference={{ kind: "text", label: "Referencia", text: "N/Ref.: protocolo oficial" }}
         onConfirm={(result) => {
@@ -551,6 +570,7 @@ function ReceiveForwardDialog({
         open
         onOpenChange={(v) => !v && setPositioning(null)}
         pdfUrl={principalPdfUrl}
+        fallbackPdfUrl={principalOriginalPdfUrl}
         stamp={authorization.stamp?.imagemUrl ? { imageUrl: authorization.stamp.imagemUrl, label: authorization.stamp.nome, initialPosition: authorization.stamp.posicaoLivre } : undefined}
         signature={authorization.signature?.imagemUrl ? { imageUrl: authorization.signature.imagemUrl, label: authorization.signature.proprietario, initialPosition: authorization.signature.posicaoLivre } : undefined}
         onConfirm={(result) => onComplete(completeMessage, target, result.posicaoCarimbo, result.posicaoAssinatura, referencePosition)}

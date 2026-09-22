@@ -33,7 +33,7 @@ type PdfDocumentProxy = {
 };
 type PdfJsRuntime = {
   GlobalWorkerOptions: { workerSrc: string };
-  getDocument: (source: { data: ArrayBuffer }) => { promise: Promise<PdfDocumentProxy> };
+  getDocument: (source: { data: Uint8Array }) => { promise: Promise<PdfDocumentProxy> };
 };
 
 declare global {
@@ -82,6 +82,12 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }
 
+function pdfViewerUrl(url: string, previewPage: "first" | "last") {
+  const base = url.split("#", 1)[0];
+  const page = previewPage === "first" ? "&page=1" : "";
+  return `${base}#toolbar=0&navpanes=0&view=FitH${page}`;
+}
+
 interface PositionableItem {
   kind?: "image" | "text";
   imageUrl: string;
@@ -96,51 +102,75 @@ interface PositionableItem {
  * unlike an <iframe> pointed at the browser's native PDF viewer, which adds its own
  * chrome/padding that can't be measured, breaking the % coordinates dragged over it.
  */
-function PdfPagePreview({ pdfUrl, previewPage, onReady }: { pdfUrl: string; previewPage: "first" | "last"; onReady: (canvas: HTMLCanvasElement) => void }) {
+function PdfPagePreview({
+  pdfUrl,
+  fallbackPdfUrl,
+  previewPage,
+  onReady,
+}: {
+  pdfUrl: string;
+  fallbackPdfUrl?: string;
+  previewPage: "first" | "last";
+  onReady: () => void;
+}) {
   const canvasRef = React.useRef<HTMLCanvasElement>(null);
-  const [status, setStatus] = React.useState<"loading" | "ready" | "error">("loading");
+  const [status, setStatus] = React.useState<"loading" | "ready" | "fallback" | "error">("loading");
   const [slow, setSlow] = React.useState(false);
+  const [fallbackUrl, setFallbackUrl] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     let cancelled = false;
     setStatus("loading");
     setSlow(false);
     const slowTimer = setTimeout(() => { if (!cancelled) setSlow(true); }, 4000);
+    async function renderWithPdfJs(url: string) {
+      const pdfjs = await loadPdfJsRuntime();
+      const response = await fetch(url, { cache: "no-store", credentials: "same-origin" });
+      if (!response.ok) throw new Error(`PDF preview fetch failed: ${response.status}`);
+      const bytes = new Uint8Array(await response.arrayBuffer());
+      if (bytes.length === 0) throw new Error("PDF preview is empty.");
+      const doc = await pdfjs.getDocument({ data: bytes }).promise;
+      const page = await doc.getPage(previewPage === "first" ? 1 : doc.numPages);
+      const base = page.getViewport({ scale: 1 });
+      const scale = Math.min(MAX_PREVIEW_WIDTH / base.width, MAX_PREVIEW_HEIGHT / base.height);
+      const viewport = page.getViewport({ scale });
+      const canvas = canvasRef.current;
+      const context = canvas?.getContext("2d");
+      if (!canvas || !context || cancelled) return;
+      const outputScale = window.devicePixelRatio || 1;
+      canvas.width = Math.floor(viewport.width * outputScale);
+      canvas.height = Math.floor(viewport.height * outputScale);
+      canvas.style.width = `${viewport.width}px`;
+      canvas.style.height = `${viewport.height}px`;
+      await page.render({
+        canvas,
+        canvasContext: context,
+        viewport,
+        transform: outputScale !== 1 ? [outputScale, 0, 0, outputScale, 0, 0] : undefined,
+      }).promise;
+    }
     (async () => {
-      try {
-        const pdfjs = await loadPdfJsRuntime();
-        const response = await fetch(pdfUrl);
-        if (!response.ok) throw new Error("Nao foi possivel carregar o documento.");
-        const bytes = await response.arrayBuffer();
-        const doc = await pdfjs.getDocument({ data: bytes }).promise;
-        const page = await doc.getPage(previewPage === "first" ? 1 : doc.numPages);
-        const base = page.getViewport({ scale: 1 });
-        const scale = Math.min(MAX_PREVIEW_WIDTH / base.width, MAX_PREVIEW_HEIGHT / base.height);
-        const viewport = page.getViewport({ scale });
-        const canvas = canvasRef.current;
-        const context = canvas?.getContext("2d");
-        if (!canvas || !context || cancelled) return;
-        const outputScale = window.devicePixelRatio || 1;
-        canvas.width = Math.floor(viewport.width * outputScale);
-        canvas.height = Math.floor(viewport.height * outputScale);
-        canvas.style.width = `${viewport.width}px`;
-        canvas.style.height = `${viewport.height}px`;
-        await page.render({
-          canvas,
-          canvasContext: context,
-          viewport,
-          transform: outputScale !== 1 ? [outputScale, 0, 0, outputScale, 0, 0] : undefined,
-        }).promise;
-        if (!cancelled) { setStatus("ready"); onReady(canvas); }
-      } catch {
-        if (!cancelled) setStatus("error");
-      } finally {
-        clearTimeout(slowTimer);
+      const sources = Array.from(new Set([pdfUrl, fallbackPdfUrl].filter(Boolean))) as string[];
+      for (const source of sources) {
+        try {
+          await renderWithPdfJs(source);
+          if (!cancelled) { setStatus("ready"); onReady(); }
+          return;
+        } catch (error) {
+          console.warn("[document-preview] pdf.js preview failed", error);
+        }
       }
-    })();
+      if (!cancelled) {
+        setFallbackUrl(sources.at(-1) ?? pdfUrl);
+        setStatus("fallback");
+        onReady();
+      }
+    })().finally(() => {
+      clearTimeout(slowTimer);
+    });
     return () => { cancelled = true; clearTimeout(slowTimer); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pdfUrl, previewPage]);
+  }, [pdfUrl, fallbackPdfUrl, previewPage]);
 
   return (
     <>
@@ -152,6 +182,15 @@ function PdfPagePreview({ pdfUrl, previewPage, onReady }: { pdfUrl: string; prev
         </div>
       )}
       {status === "error" && <div className="flex h-64 w-[420px] items-center justify-center text-[13px] text-crimson-600">Não foi possível carregar a pré-visualização do documento.</div>}
+      {status === "fallback" && fallbackUrl && (
+        <div className="h-[594px] w-[420px] overflow-hidden bg-white">
+          <iframe
+            title="Pre-visualizacao alternativa do documento"
+            src={pdfViewerUrl(fallbackUrl, previewPage)}
+            className="h-full w-full border-0 bg-white"
+          />
+        </div>
+      )}
       <canvas ref={canvasRef} className={status === "ready" ? "block" : "hidden"} />
     </>
   );
@@ -245,6 +284,7 @@ export function StampPositionPicker({
   open,
   onOpenChange,
   pdfUrl,
+  fallbackPdfUrl,
   stamp,
   signature,
   note,
@@ -255,6 +295,7 @@ export function StampPositionPicker({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   pdfUrl: string;
+  fallbackPdfUrl?: string;
   stamp?: PositionableItem;
   signature?: PositionableItem;
   note?: Omit<PositionableItem, "imageUrl"> & { imageUrl?: string };
@@ -277,7 +318,7 @@ export function StampPositionPicker({
     setReferencePosition(reference?.initialPosition ?? REFERENCE_DEFAULT);
     setPreviewReady(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, pdfUrl]);
+  }, [open, pdfUrl, fallbackPdfUrl]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -288,7 +329,7 @@ export function StampPositionPicker({
         </DialogHeader>
         <DialogBody className="flex flex-1 flex-col items-center">
           <div ref={containerRef} className="relative mx-auto inline-block border border-graphite-300 bg-white shadow-sm">
-            <PdfPagePreview pdfUrl={pdfUrl} previewPage={previewPage} onReady={() => setPreviewReady(true)} />
+            <PdfPagePreview pdfUrl={pdfUrl} fallbackPdfUrl={fallbackPdfUrl} previewPage={previewPage} onReady={() => setPreviewReady(true)} />
             {previewReady && reference && (
               <PositionableOverlay
                 containerRef={containerRef}
