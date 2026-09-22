@@ -74,6 +74,65 @@ const STATUS_VARIANT: Record<
   revogada: "crimson",
 };
 
+function SignaturePreview({ signature }: { signature: Signature }) {
+  const imageUrl = signature.imagemUrl;
+  const triggerRef = React.useRef<HTMLButtonElement>(null);
+  const [zoomPosition, setZoomPosition] = React.useState<{ top: number; left: number } | null>(null);
+
+  function showZoom() {
+    if (!imageUrl || !triggerRef.current) return;
+    const rect = triggerRef.current.getBoundingClientRect();
+    const width = 224;
+    const height = 104;
+    const left = Math.min(Math.max(12, rect.left - 16), window.innerWidth - width - 12);
+    const preferredTop = rect.bottom + 8;
+    const top = preferredTop + height > window.innerHeight
+      ? Math.max(12, rect.top - height - 8)
+      : preferredTop;
+    setZoomPosition({ top, left });
+  }
+
+  if (!imageUrl) {
+    return (
+      <span
+        className="flex h-10 w-28 items-center justify-center rounded-sm border border-dashed border-graphite-300 bg-graphite-50 text-graphite-400"
+        title="Assinatura sem imagem"
+        aria-label={`Assinatura de ${signature.proprietario} sem imagem`}
+      >
+        <PenTool className="size-4" aria-hidden />
+      </span>
+    );
+  }
+
+  return (
+    <>
+      <button
+        ref={triggerRef}
+        type="button"
+        onMouseEnter={showZoom}
+        onMouseLeave={() => setZoomPosition(null)}
+        onFocus={showZoom}
+        onBlur={() => setZoomPosition(null)}
+        className="flex h-10 w-28 items-center justify-center rounded-sm border border-graphite-200 bg-white p-1.5 shadow-sm transition-colors hover:border-cfm-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-cfm-500"
+        aria-label={`Ver assinatura de ${signature.proprietario}`}
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={imageUrl} alt="" className="max-h-full max-w-full object-contain" />
+      </button>
+      {zoomPosition && (
+        <div
+          className="pointer-events-none fixed z-[90] w-56 rounded-md border border-graphite-300 bg-white p-3 shadow-xl"
+          style={{ top: zoomPosition.top, left: zoomPosition.left }}
+          aria-hidden
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={imageUrl} alt="" className="h-20 w-full object-contain" />
+        </div>
+      )}
+    </>
+  );
+}
+
 export function AssinaturasPageClient() {
   const { toast } = useToast();
   const [items, setItems] = useDatabaseSetting<Signature[]>("signatures", initialSignatures);
@@ -348,6 +407,7 @@ export function AssinaturasPageClient() {
                 <TableHead>
                   <TableRow>
                     <TableHeaderCell>Proprietário</TableHeaderCell>
+                    <TableHeaderCell>Assinatura</TableHeaderCell>
                     <TableHeaderCell>Unidade</TableHeaderCell>
                     <TableHeaderCell>Documentos</TableHeaderCell>
                     <TableHeaderCell>Segurança</TableHeaderCell>
@@ -367,6 +427,9 @@ export function AssinaturasPageClient() {
                         <p className="mt-0.5 text-2xs text-graphite-500">
                           {item.cargo}
                         </p>
+                      </TableCell>
+                      <TableCell>
+                        <SignaturePreview signature={item} />
                       </TableCell>
                       <TableCell className="max-w-[220px]">
                         {item.unidade}
@@ -390,10 +453,7 @@ export function AssinaturasPageClient() {
                               <KeyRound className="size-3" /> PIN
                             </Badge>
                           )}
-                          {item.imagemUrl && (
-                            <Badge variant="success">Imagem</Badge>
-                          )}
-                          {!item.requerPin && !item.imagemUrl && (
+                          {!item.requerPin && (
                             <span className="text-graphite-400">—</span>
                           )}
                         </div>
