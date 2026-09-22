@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { History } from "lucide-react";
-import type { Stamp } from "@/types";
+import type { OrganizationalUnit, Stamp } from "@/types";
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription, DrawerBody, DrawerFooter } from "@/components/ui/drawer";
 import { Button } from "@/components/ui/button";
 import { Input, Textarea, Label, FieldHint } from "@/components/ui/input";
@@ -53,6 +53,20 @@ const TAMANHO_PREVIEW: Record<Stamp["tamanho"], string> = {
   grande: "text-[12px] px-2.5 py-1.5",
 };
 
+const IMAGEM_PREVIEW: Record<Stamp["tamanho"], string> = {
+  pequeno: "w-14 max-h-12",
+  medio: "w-20 max-h-16",
+  grande: "w-28 max-h-20",
+};
+
+const TIPO_UNIDADE_LABEL: Record<OrganizationalUnit["tipo"], string> = {
+  direccao: "Direccao",
+  departamento: "Departamento",
+  seccao: "Seccao",
+  sector: "Sector",
+  unidade: "Unidade",
+};
+
 function posicaoClasses(posicao: Stamp["posicao"]) {
   const vertical = posicao.includes("superior") ? "top-3" : posicao.includes("inferior") ? "bottom-3" : "top-1/2 -translate-y-1/2";
   const horizontal = posicao.includes("esquerda") ? "left-3" : posicao.includes("direita") ? "right-3" : "left-1/2 -translate-x-1/2";
@@ -66,6 +80,51 @@ function slugify(nome: string) {
     .replace(/[̀-ͯ]/g, "")
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/(^-|-$)/g, "");
+}
+
+function buildUnitOptions(units: OrganizationalUnit[], currentUnit?: string) {
+  const sorted = [...units].sort((a, b) => a.codigo.localeCompare(b.codigo, "pt", { numeric: true }) || a.nome.localeCompare(b.nome, "pt"));
+  const byParent = new Map<string | null, OrganizationalUnit[]>();
+  const byId = new Map(sorted.map((unit) => [unit.id, unit]));
+  for (const unit of sorted) {
+    const group = byParent.get(unit.parentId) ?? [];
+    group.push(unit);
+    byParent.set(unit.parentId, group);
+  }
+
+  const options: Array<{ value: string; label: string; detail: string; depth: number }> = [
+    { value: "Global", label: "Global", detail: "Aplica-se a todas as unidades quando nao houver carimbo especifico", depth: 0 },
+  ];
+  const visited = new Set<string>();
+
+  function walk(parentId: string | null, depth: number) {
+    for (const unit of byParent.get(parentId) ?? []) {
+      visited.add(unit.id);
+      const parent = unit.parentId ? byId.get(unit.parentId) : null;
+      options.push({
+        value: unit.nome,
+        label: unit.nome,
+        detail: parent ? `${TIPO_UNIDADE_LABEL[unit.tipo]} subordinado a ${parent.sigla}` : `${TIPO_UNIDADE_LABEL[unit.tipo]} principal`,
+        depth,
+      });
+      walk(unit.id, depth + 1);
+    }
+  }
+
+  walk(null, 0);
+  for (const unit of sorted) {
+    if (visited.has(unit.id)) continue;
+    options.push({
+      value: unit.nome,
+      label: unit.nome,
+      detail: `${TIPO_UNIDADE_LABEL[unit.tipo]} sem unidade superior activa`,
+      depth: 0,
+    });
+  }
+  if (currentUnit && currentUnit !== "Global" && !options.some((option) => option.value === currentUnit)) {
+    options.push({ value: currentUnit, label: currentUnit, detail: "Unidade gravada neste carimbo", depth: 0 });
+  }
+  return options;
 }
 
 export function StampEditorDrawer({
@@ -82,7 +141,6 @@ export function StampEditorDrawer({
   onOpenUsage: (stamp: Stamp) => void;
 }) {
   const { organizationalUnits } = useCatalogs();
-  const unidadeOptions = React.useMemo(() => ["Global", ...organizationalUnits.map((u) => u.nome)], [organizationalUnits]);
   const [nome, setNome] = React.useState(stamp?.nome ?? "");
   const [categoria, setCategoria] = React.useState<Stamp["categoria"]>(stamp?.categoria ?? "protocolo");
   const [unidade, setUnidade] = React.useState(stamp?.unidade ?? "Global");
@@ -96,6 +154,7 @@ export function StampEditorDrawer({
   const [activo, setActivo] = React.useState(stamp?.activo ?? true);
   const [imagemUrl, setImagemUrl] = React.useState(stamp?.imagemUrl ?? "");
   const [uploading, setUploading] = React.useState(false);
+  const unidadeOptions = React.useMemo(() => buildUnitOptions(organizationalUnits, unidade), [organizationalUnits, unidade]);
 
   async function handleImageUpload(file: File) {
     setUploading(true);
@@ -185,8 +244,15 @@ export function StampEditorDrawer({
                   <Label required>Unidade proprietária</Label>
                   <Select value={unidade} onValueChange={setUnidade}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {unidadeOptions.map((u) => <SelectItem key={u} value={u}>{u}</SelectItem>)}
+                    <SelectContent className="w-[320px]">
+                      {unidadeOptions.map((option) => (
+                        <SelectItem key={option.value} value={option.value} textValue={option.label} className="py-2">
+                          <span className="flex min-w-0 flex-col" style={{ paddingLeft: option.depth * 12 }}>
+                            <span className="truncate">{option.label}</span>
+                            <span className="truncate text-2xs font-normal text-graphite-500">{option.detail}</span>
+                          </span>
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -261,7 +327,15 @@ export function StampEditorDrawer({
               <div className="flex items-center justify-center rounded-lg border border-dashed border-graphite-300 bg-graphite-50 p-3">
                 <div className="relative aspect-[210/297] w-full border border-graphite-200 bg-white">
                   <span className="absolute inset-x-0 top-1/2 -translate-y-1/2 text-center text-2xs text-graphite-300">Folha A4</span>
-                  {nome.trim() && (
+                  {imagemUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={imagemUrl}
+                      alt={nome.trim() || "Carimbo"}
+                      className={cn("absolute object-contain", IMAGEM_PREVIEW[tamanho], posicaoClasses(posicao))}
+                      style={{ opacity: 1 - transparencia / 100 }}
+                    />
+                  ) : nome.trim() ? (
                     <span
                       className={cn(
                         "absolute rotate-[-8deg] whitespace-nowrap rounded border-2 font-bold uppercase tracking-wide",
@@ -273,7 +347,7 @@ export function StampEditorDrawer({
                     >
                       {nome}
                     </span>
-                  )}
+                  ) : null}
                 </div>
               </div>
               <p className="mt-2 text-2xs leading-relaxed text-graphite-500">

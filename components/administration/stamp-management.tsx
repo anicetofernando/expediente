@@ -77,6 +77,20 @@ function normaliseSearch(value: string) {
 }
 
 function StampPreview({ stamp }: { stamp: Stamp }) {
+  if (stamp.imagemUrl) {
+    return (
+      <span
+        className={cn(
+          "flex size-9 shrink-0 items-center justify-center rounded-md border border-graphite-200 bg-white p-1",
+          !stamp.activo && "opacity-55 grayscale"
+        )}
+        aria-hidden
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={stamp.imagemUrl} alt="" className="max-h-full max-w-full object-contain" />
+      </span>
+    );
+  }
   return (
     <span
       className={cn(

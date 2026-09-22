@@ -37,13 +37,16 @@ export function signatureBelongsToUser(signature: Signature, user: Pick<User, "i
  * The stamp for a department/service unit is fixed by the administrator, never
  * chosen by the acting user. A unit can have different operational stamps for
  * sender, secretary and approval flows, so callers pass the intended purpose
- * and the resolver picks the best matching active unit stamp. "Global" stamps
- * are annotation stamps, not substitutes for a missing unit identity stamp.
+ * and the resolver picks the best matching active unit stamp. A Global stamp is
+ * a shared fallback for all units only when it clearly matches that purpose.
  */
 export function resolveUnitStamp(stamps: Stamp[], user: Pick<User, "nome">, unitName: string, profile: string, purpose?: StampPurpose) {
   const resolvedPurpose = purpose ?? defaultPurposeForProfile(profile);
-  const candidates = stamps.filter((stamp) => stamp.unidade !== "Global" && userCanUseStamp(stamp, user, unitName, profile));
-  return candidates.sort((a, b) => stampPurposeScore(b, resolvedPurpose, profile) - stampPurposeScore(a, resolvedPurpose, profile))[0];
+  const candidates = stamps.filter((stamp) => userCanUseStamp(stamp, user, unitName, profile) && canServePurpose(stamp, resolvedPurpose));
+  return candidates.sort((a, b) =>
+    stampScopeScore(b, unitName) - stampScopeScore(a, unitName)
+    || stampPurposeScore(b, resolvedPurpose, profile) - stampPurposeScore(a, resolvedPurpose, profile)
+  )[0];
 }
 
 /** A user's own individual signature — at most one active match is expected. */
@@ -90,4 +93,15 @@ function stampPurposeScore(stamp: Stamp, purpose: StampPurpose, profile: string)
 function matchesPurposeTerm(value: string, purpose: StampPurpose) {
   const text = normalized(value);
   return PURPOSE_TERMS[purpose].some((term) => text.includes(term));
+}
+
+function canServePurpose(stamp: Stamp, purpose: StampPurpose) {
+  if (purpose === "geral") return true;
+  return PURPOSE_CATEGORIES[purpose].includes(stamp.categoria)
+    || matchesPurposeTerm(stamp.nome, purpose)
+    || stamp.etapasPermitidas.some((item) => matchesPurposeTerm(item, purpose));
+}
+
+function stampScopeScore(stamp: Stamp, unitName: string) {
+  return normalized(stamp.unidade) === normalized(unitName) ? 1000 : 0;
 }
