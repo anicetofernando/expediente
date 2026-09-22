@@ -104,6 +104,7 @@ export function DespachoDialog({
   const [documentId, setDocumentId] = React.useState<string | null>(null);
   const [pdfUrl, setPdfUrl] = React.useState<string | null>(null);
   const [positioning, setPositioning] = React.useState(false);
+  const [referencePositioning, setReferencePositioning] = React.useState(false);
   const [submitting, setSubmitting] = React.useState(false);
   const [localDraftReady, setLocalDraftReady] = React.useState(false);
   const [localDraftRestored, setLocalDraftRestored] = React.useState<BrowserDraft<DespachoLocalDraftValue> | null>(null);
@@ -220,12 +221,12 @@ export function DespachoDialog({
   }, [draftKey, toast]);
 
   React.useEffect(() => {
-    if (!localDraftReady || positioning || submitting) return;
+    if (!localDraftReady || positioning || referencePositioning || submitting) return;
     const timer = window.setTimeout(() => {
       void saveLocalDraft();
     }, 600);
     return () => window.clearTimeout(timer);
-  }, [assunto, conteudo, ficheiro, incluirCarimbo, localDraftReady, modeloId, modo, note, positioning, saveLocalDraft, submitting]);
+  }, [assunto, conteudo, ficheiro, incluirCarimbo, localDraftReady, modeloId, modo, note, positioning, referencePositioning, saveLocalDraft, submitting]);
 
   React.useEffect(() => {
     if (!localDraftReady) return;
@@ -303,6 +304,12 @@ export function DespachoDialog({
       const response = await fetch(`/api/expedients/${expedientId}/${endpoint}`, { method: "POST", body: form });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error ?? `Não foi possível registar ${isDespacho ? "o despacho" : "a nota"}.`);
+      if (!isDespacho) {
+        setDocumentId(result.documentId);
+        setPdfUrl(result.pdfUrl);
+        setReferencePositioning(true);
+        return;
+      }
       await clearLocalDraft();
       toast({ title: successLabel, variant: "success" });
       onDone();
@@ -330,6 +337,39 @@ export function DespachoDialog({
     } finally {
       setSubmitting(false);
     }
+  }
+
+  async function confirmReferencePosition(result: { posicaoReferencia?: FreePosition }) {
+    if (!documentId) return;
+    setSubmitting(true);
+    try {
+      const form = new FormData();
+      form.set("data", JSON.stringify({ modo: "importado", documentId, posicaoReferencia: result.posicaoReferencia, intent }));
+      const response = await fetch(`/api/expedients/${expedientId}/${endpoint}`, { method: "POST", body: form });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error ?? "Não foi possível posicionar a referência.");
+      await clearLocalDraft();
+      toast({ title: successLabel, variant: "success" });
+      onDone();
+    } catch (error) {
+      toast({ title: failureLabel, description: error instanceof Error ? error.message : "Erro inesperado.", variant: "destructive" });
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  if (referencePositioning && pdfUrl) {
+    return (
+      <StampPositionPicker
+        open
+        onOpenChange={(v) => { if (!v) { setReferencePositioning(false); onClose(); } }}
+        pdfUrl={pdfUrl}
+        fallbackPdfUrl={documentId ? `/api/documents/${documentId}` : undefined}
+        previewPage="first"
+        reference={{ kind: "text", label: "Referencia", text: "N/Ref.: referencia oficial" }}
+        onConfirm={confirmReferencePosition}
+      />
+    );
   }
 
   if (positioning && pdfUrl) {
@@ -500,7 +540,7 @@ export function DespachoDialog({
               loading={submitting}
               onClick={() => (modo === "sistema" ? submitSistema() : submitImportado())}
             >
-              {modo === "sistema" && hasFreePositionImages ? "Continuar e posicionar" : submitLabel}
+              {modo === "sistema" && hasFreePositionImages ? "Continuar e posicionar" : modo === "importado" && !isDespacho ? "Continuar e posicionar referencia" : submitLabel}
             </Button>
           </div>
         </DialogFooter>

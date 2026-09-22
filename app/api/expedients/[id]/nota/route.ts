@@ -10,6 +10,7 @@ import { rememberStampSignaturePositions, resolveOptionalStampSignature, signatu
 import { saveFile } from "@/lib/file-storage";
 import { generateProtocolNumber } from "@/lib/numbering";
 import { targetResponsible } from "@/lib/routing";
+import { ensureDocumentReferenceMetadataColumn } from "@/lib/document-schema";
 import type { FreePosition } from "@/types";
 
 export const runtime = "nodejs";
@@ -34,6 +35,7 @@ interface NotaInput {
   conteudo?: string;
   posicaoCarimbo?: FreePosition;
   posicaoAssinatura?: FreePosition;
+  posicaoReferencia?: FreePosition;
   note?: string;
   /** A Secretaria escolhe explicitamente se a nota leva tambem o carimbo da
    * unidade -- nunca e' aplicado automaticamente so por estar configurado.
@@ -112,8 +114,25 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       const isCobertura = exp.pending_next_status === "nota_cobertura";
 
       if (input.documentId) {
-        const doc = await client.query<{ id: string }>("SELECT id FROM documents WHERE id=$1 AND expedient_id=$2 AND document_kind='nota'", [input.documentId, exp.id]);
+        const doc = await client.query<{ id: string; source: string; document_number: string | null }>(
+          "SELECT id,source,document_number FROM documents WHERE id=$1 AND expedient_id=$2 AND document_kind='nota'",
+          [input.documentId, exp.id],
+        );
         if (!doc.rows[0]) throw new Error("Nota nao encontrada.");
+        if (doc.rows[0].source === "importado") {
+          if (!input.posicaoReferencia) throw new Error("Posicione a referencia da nota importada.");
+          await ensureDocumentReferenceMetadataColumn(client);
+          const referenceEntry = {
+            texto: `N/Ref.: ${doc.rows[0].document_number ?? exp.protocol}`,
+            label: "Referencia",
+            aplicadoPor: session.user.nome,
+            aplicadoEm: new Date().toISOString(),
+            posicaoLivre: input.posicaoReferencia,
+          };
+          await client.query("UPDATE documents SET reference_metadata=$2::jsonb WHERE id=$1", [input.documentId, JSON.stringify(referenceEntry)]);
+          const nextResponsible = await completeHandoff();
+          return { documentId: input.documentId, finalized: true, nextResponsible };
+        }
         const resolved = await resolveOptionalStampSignature(client, session.user, session.unitName, session.perfilNavegacao, "secretaria");
         if (!input.incluirCarimbo) resolved.stamp = null;
         const signatureEntry = JSON.stringify(signatureMetadataJson(resolved.signature, session.user, input.posicaoAssinatura));
@@ -171,7 +190,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       }
 
       let nextResponsible: string | null = null;
-      if (input.modo === "importado" || !sistemaHasFreePositionImages) {
+      if (input.modo !== "importado" && !sistemaHasFreePositionImages) {
         nextResponsible = await completeHandoff();
       }
       const eventTitle = isCobertura ? "Nota de cobertura emitida" : "Nota de encaminhamento criada";
@@ -188,7 +207,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
           );
         }
       }
-      return { documentId, finalized: input.modo === "importado", nextResponsible };
+      return { documentId, finalized: input.modo !== "importado" && !sistemaHasFreePositionImages, nextResponsible };
     });
 
     await audit({ userId: session.user.id, action: "Nota de encaminhamento criada", entityType: "Expediente", entityId: params.id, details: { documentId: result.documentId } });
