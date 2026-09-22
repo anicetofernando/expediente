@@ -126,7 +126,7 @@ function ConfiguracoesContent() {
   const [resetOpen, setResetOpen] = React.useState(false);
   const [resetConfirmText, setResetConfirmText] = React.useState("");
   const [resetting, setResetting] = React.useState(false);
-  const RESET_PHRASE = "ELIMINAR TUDO";
+  const RESET_PHRASE = "ELIMINAR EXPEDIENTES";
   const [resetUsersOpen, setResetUsersOpen] = React.useState(false);
   const [resetUsersConfirmText, setResetUsersConfirmText] = React.useState("");
   const [resettingUsers, setResettingUsers] = React.useState(false);
@@ -143,16 +143,16 @@ function ConfiguracoesContent() {
         body: JSON.stringify({ confirmacao: resetConfirmText }),
       });
       const result = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(result.error ?? "Não foi possível zerar os expedientes.");
+      if (!response.ok) throw new Error(result.error ?? "Não foi possível eliminar os expedientes.");
       toast({
-        title: "Expedientes zerados",
-        description: `${result.expedientes} expediente(s) e ${result.documentos} documento(s) eliminados. A numeração de protocolos foi reiniciada.`,
+        title: "Expedientes eliminados",
+        description: `${result.expedientes} expediente(s), ${result.documentos} documento(s), ${result.notas} nota(s) e ${result.anexos} anexo(s) eliminados. A numeração foi reiniciada.`,
         variant: "success",
       });
       setResetOpen(false);
       setResetConfirmText("");
     } catch (error) {
-      toast({ title: "Não foi possível zerar os expedientes", description: error instanceof Error ? error.message : undefined, variant: "destructive" });
+      toast({ title: "Não foi possível eliminar os expedientes", description: error instanceof Error ? error.message : undefined, variant: "destructive" });
     } finally {
       setResetting(false);
     }
@@ -744,21 +744,21 @@ function ConfiguracoesContent() {
             <Card className="border-crimson-200">
               <CardHeader>
                 <div>
-                  <CardTitle className="flex items-center gap-2 text-crimson-700"><AlertTriangle className="size-4" /> Zerar todos os expedientes</CardTitle>
+                  <CardTitle className="flex items-center gap-2 text-crimson-700"><AlertTriangle className="size-4" /> Eliminar apenas expedientes e documentos</CardTitle>
                   <CardDescription>
-                    Elimina permanentemente todos os expedientes, documentos, comentários, histórico de tramitação e
-                    notificações ligadas a eles, e reinicia a numeração de protocolos do zero. Utilizadores, perfis,
-                    estrutura organizacional, carimbos, assinaturas e restantes configurações não são afectados. O
-                    registo de auditoria mantém-se — fica registado que esta limpeza aconteceu e quando.
+                    Elimina permanentemente todos os expedientes e tudo o que pertence a eles: documentos principais,
+                    notas, protocolos, despachos/respostas, anexos, comentários, histórico de tramitação, notificações
+                    ligadas e ficheiros importados. Utilizadores, perfis, estrutura organizacional, carimbos, assinaturas,
+                    modelos e restantes configurações não são afectados. O registo de auditoria mantém-se.
                   </CardDescription>
                 </div>
               </CardHeader>
               <CardContent>
                 <Alert variant="destructive" title="Esta acção é irreversível">
-                  Não existe forma de recuperar os expedientes depois de eliminados. Use apenas para limpar dados de teste antes de começar a utilização real.
+                  Não existe forma de recuperar os expedientes, notas ou documentos depois de eliminados. Use apenas para limpar dados de teste antes de começar a utilização real.
                 </Alert>
                 <Button variant="destructive" className="mt-4" onClick={() => setResetOpen(true)}>
-                  <Trash2 className="size-4" /> Zerar todos os expedientes
+                  <Trash2 className="size-4" /> Eliminar apenas expedientes
                 </Button>
               </CardContent>
             </Card>
@@ -792,7 +792,7 @@ function ConfiguracoesContent() {
         <Dialog open={resetOpen} onOpenChange={(open) => { setResetOpen(open); if (!open) setResetConfirmText(""); }}>
           <DialogContent size="sm">
             <DialogHeader>
-              <DialogTitle>Zerar todos os expedientes</DialogTitle>
+              <DialogTitle>Eliminar apenas expedientes e documentos</DialogTitle>
               <DialogDescription>Esta acção não pode ser desfeita.</DialogDescription>
             </DialogHeader>
             <DialogBody className="space-y-3.5">
@@ -807,7 +807,7 @@ function ConfiguracoesContent() {
             <DialogFooter>
               <Button variant="secondary" onClick={() => setResetOpen(false)}>Cancelar</Button>
               <Button variant="destructive" disabled={resetConfirmText !== RESET_PHRASE || resetting} loading={resetting} onClick={resetExpedients}>
-                Eliminar tudo
+                Eliminar expedientes
               </Button>
             </DialogFooter>
           </DialogContent>

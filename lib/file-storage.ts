@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 function blobEnabled() {
@@ -73,5 +73,23 @@ export async function loadFileByPathname(category: string, subpath: string): Pro
     return await readFile(target);
   } catch {
     return null;
+  }
+}
+
+/** Deletes a locator produced by saveFile. Missing files are ignored. */
+export async function deleteFile(locator: string): Promise<boolean> {
+  if (isRemoteLocator(locator)) {
+    const { del } = await import("@vercel/blob");
+    await del(locator);
+    return true;
+  }
+  const root = path.resolve(process.cwd(), "storage", "uploads");
+  const target = path.resolve(root, locator);
+  if (!target.startsWith(root + path.sep)) throw new Error("Caminho de armazenamento invalido.");
+  try {
+    await rm(target, { force: true });
+    return true;
+  } catch {
+    return false;
   }
 }
