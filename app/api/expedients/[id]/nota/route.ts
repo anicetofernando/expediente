@@ -132,7 +132,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         "SELECT acronym FROM organizational_units WHERE id=$1 AND active=true", [session.user.unidadeId],
       );
       const documentNumber = unit.rows[0]
-        ? await generateProtocolNumber(client, session.user.unidadeId, unit.rows[0].acronym, new Date().getFullYear())
+        ? await generateProtocolNumber(client, session.user.unidadeId, unit.rows[0].acronym, new Date().getFullYear(), "nota")
         : null;
       let sistemaHasFreePositionImages = false;
       if (input.modo === "sistema") {

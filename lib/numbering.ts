@@ -12,6 +12,14 @@ const DEFAULTS = { prefixoInstitucional: "CFM", separador: "/" as const, digitos
 
 export const GLOBAL_NUMBERING_ID = "";
 
+export type NumberingScope = "expediente" | "nota" | "despacho";
+
+const SCOPE_META: Record<NumberingScope, { bucketOffset: number; label?: string }> = {
+  expediente: { bucketOffset: 0 },
+  nota: { bucketOffset: 1, label: "NOTA" },
+  despacho: { bucketOffset: 2, label: "DESP" },
+};
+
 async function loadNumberingConfig(client: PoolClient, unitId: string) {
   const result = await client.query<{ setting_value: unknown }>("SELECT setting_value FROM system_settings WHERE setting_key='numbering'", []);
   const list = Array.isArray(result.rows[0]?.setting_value) ? result.rows[0].setting_value as UnitNumberingConfig[] : [];
@@ -33,9 +41,18 @@ async function loadNumberingConfig(client: PoolClient, unitId: string) {
  * number_sequences so it never resets, while the year segment shown in the
  * formatted number still reflects the current calendar year.
  */
-export async function generateProtocolNumber(client: PoolClient, unitId: string, unitAcronym: string, year: number): Promise<string> {
+export async function generateProtocolNumber(
+  client: PoolClient,
+  unitId: string,
+  unitAcronym: string,
+  year: number,
+  scope: NumberingScope = "expediente",
+): Promise<string> {
   const config = await loadNumberingConfig(client, unitId);
-  const bucketYear = config.reinicioAnual ? year : 0;
+  const scopeMeta = SCOPE_META[scope];
+  const bucketYear = config.reinicioAnual
+    ? (scopeMeta.bucketOffset === 0 ? year : (year * 10) + scopeMeta.bucketOffset)
+    : -scopeMeta.bucketOffset;
   const sequence = await client.query<{ value: number }>(
     `INSERT INTO number_sequences(unit_id,year,next_value) VALUES($1,$2,2)
      ON CONFLICT(unit_id,year) DO UPDATE SET next_value=number_sequences.next_value+1
@@ -43,5 +60,5 @@ export async function generateProtocolNumber(client: PoolClient, unitId: string,
     [unitId, bucketYear],
   );
   const padded = String(sequence.rows[0].value).padStart(config.digitos, "0");
-  return [config.prefixoInstitucional, unitAcronym, String(year), padded].join(config.separador);
+  return [config.prefixoInstitucional, unitAcronym, scopeMeta.label, String(year), padded].filter(Boolean).join(config.separador);
 }

@@ -178,7 +178,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         "SELECT acronym FROM organizational_units WHERE id=$1 AND active=true", [session.user.unidadeId],
       );
       const documentNumber = respondingUnit.rows[0]
-        ? await generateProtocolNumber(client, session.user.unidadeId, respondingUnit.rows[0].acronym, new Date().getFullYear())
+        ? await generateProtocolNumber(client, session.user.unidadeId, respondingUnit.rows[0].acronym, new Date().getFullYear(), "despacho")
         : null;
       const recipientUnitId = await responseRecipientUnitId(client, exp);
       let sistemaHasFreePositionImages = false;

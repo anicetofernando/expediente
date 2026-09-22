@@ -101,6 +101,26 @@ function mapBase(row: ExpedientRow): Expedient {
 
 export type ExpedientView = "all" | "mine" | "inbox" | "outbox" | "pending" | "analysis" | "returned" | "completed" | "secretary-reception" | "secretary-protocols" | "secretary-forwarding" | "secretary-deliveries" | "official-book" | "approval" | "opinions" | "approval-history";
 
+const SENDER_RELEASED_DOCUMENT_STATUSES = new Set<ExpedientStatus>(["disponivel_remetente", "recebimento_confirmado", "arquivado"]);
+
+function isVisibleDocumentForSession(
+  session: AuthSession,
+  doc: { document_kind: ExpedientDocument["tipo"]; created_for_unit_id?: string | null },
+  status: ExpedientStatus,
+) {
+  if (session.perfilNavegacao === "superior") {
+    if (doc.document_kind === "protocolo") return false;
+    if (doc.document_kind === "nota") return doc.created_for_unit_id === null || doc.created_for_unit_id === session.user.unidadeId;
+    return true;
+  }
+  if (session.perfilNavegacao === "secretaria") return doc.document_kind !== "protocolo";
+  if (session.perfilNavegacao === "remetente") {
+    if (doc.document_kind === "principal" || doc.document_kind === "anexo" || doc.document_kind === "protocolo") return true;
+    return SENDER_RELEASED_DOCUMENT_STATUSES.has(status);
+  }
+  return true;
+}
+
 const VIEW_FILTERS: Record<ExpedientView, string> = {
   all: "TRUE",
   mine: "(e.created_by=__USER__ OR e.responsible_user_id=__USER__)",
@@ -146,12 +166,13 @@ export async function listDocuments(session: AuthSession): Promise<ListedDocumen
     id:string;expedient_id:string;protocol:string;subject:string;name:string;document_kind:ExpedientDocument["tipo"];
     source:ExpedientDocument["origem"];mime_type:string|null;size_bytes:string|number;page_count:number;
     confidentiality:Confidentiality;stamped:boolean;signed:boolean;version:number;created_at:string;creator_name:string;
+    status: ExpedientStatus; created_for_unit_id: string | null;
     stamps_metadata:{id?:string;nome:string;posicao?:string;aplicadoPor?:string;aplicadoEm?:string}[];
     signatures_metadata:{id?:string;proprietario:string;cargo?:string;aplicadoPor?:string;aplicadoEm?:string}[];
-  }>(`SELECT d.*,e.protocol,e.subject,u.full_name creator_name
+  }>(`SELECT d.*,e.protocol,e.subject,e.status,u.full_name creator_name
         FROM documents d JOIN expedients e ON e.id=d.expedient_id JOIN users u ON u.id=d.created_by
        WHERE ${access.sql} ORDER BY d.created_at DESC`, access.params);
-  return result.rows.map((doc) => ({
+  return result.rows.filter((doc) => isVisibleDocumentForSession(session, doc, doc.status)).map((doc) => ({
     id:doc.id,nome:doc.name,tipo:doc.document_kind,
     formato:doc.mime_type?.includes("pdf") ? "pdf" : doc.mime_type?.includes("image") ? "imagem" : "docx",
     paginas:doc.page_count,tamanho:formatSize(Number(doc.size_bytes)),criadoEm:iso(doc.created_at),criadoPor:doc.creator_name,
@@ -208,7 +229,7 @@ export async function getExpedient(session: AuthSession, id: string) {
   const row = base.rows[0];
   if (!row) return null;
   const [documents, timeline, comments, audit] = await Promise.all([
-    query<DocumentRow>(`SELECT d.*,u.full_name creator_name FROM documents d JOIN users u ON u.id=d.created_by WHERE d.expedient_id=$1 ORDER BY d.created_at`, [id]),
+    query<DocumentRow>(`SELECT d.*,u.full_name creator_name FROM documents d JOIN users u ON u.id=d.created_by WHERE d.expedient_id=$1 ORDER BY d.created_at DESC`, [id]),
     query<TimelineRow>(`SELECT t.id,t.event_type,t.title,t.description,t.created_at,u.full_name user_name,ou.name unit_name FROM timeline_events t LEFT JOIN users u ON u.id=t.user_id LEFT JOIN organizational_units ou ON ou.id=t.unit_id WHERE t.expedient_id=$1 ORDER BY t.created_at`, [id]),
     query<CommentRow>(`SELECT c.id,c.body,c.internal,c.created_at,u.full_name author_name,u.job_title FROM comments c JOIN users u ON u.id=c.author_id WHERE c.expedient_id=$1 ORDER BY c.created_at`, [id]),
     query<{ id: string; created_at: string; user_name: string | null; action: string; details: Record<string, unknown>; ip: string | null; result: AuditEntry["resultado"] }>(`SELECT a.id::text,a.created_at,u.full_name user_name,a.action,a.details,a.ip::text,a.result FROM audit_logs a LEFT JOIN users u ON u.id=a.user_id WHERE a.entity_id IN ($1,$2) ORDER BY a.created_at DESC`, [id,row.protocol]),
@@ -219,22 +240,7 @@ export async function getExpedient(session: AuthSession, id: string) {
   expedient.exigeCarimbo = Boolean(documentType?.exigeCarimbo);
   expedient.exigeAssinatura = Boolean(documentType?.exigeAssinatura);
   expedient.tipoLabel = documentType?.nome ?? row.document_type;
-  // O chefe/director so' ve' o expediente original, os seus anexos e as notas
-  // do seu proprio nivel/salto -- nunca o "protocolo" (que e' sempre para quem
-  // enviou aquele salto, nao para quem o recebeu) nem as notas de outra
-  // unidade (internas ao nivel anterior ou seguinte da cadeia). A Secretaria
-  // tambem nao guarda o "protocolo" entre os seus documentos -- essa copia e'
-  // sempre para o remetente (ou para quem enviou o salto anterior), nunca
-  // para quem protocolou.
-  const visibleDocuments = session.perfilNavegacao === "superior"
-    ? documents.rows.filter((doc) => {
-        if (doc.document_kind === "protocolo") return false;
-        if (doc.document_kind === "nota") return doc.created_for_unit_id === null || doc.created_for_unit_id === session.user.unidadeId;
-        return true;
-      })
-    : session.perfilNavegacao === "secretaria"
-      ? documents.rows.filter((doc) => doc.document_kind !== "protocolo")
-      : documents.rows;
+  const visibleDocuments = documents.rows.filter((doc) => isVisibleDocumentForSession(session, doc, row.status));
   expedient.documentos = visibleDocuments.map((doc) => ({
     id: doc.id, nome: doc.name, numero: doc.document_number ?? undefined, tipo: doc.document_kind, formato: doc.mime_type?.includes("pdf") ? "pdf" : doc.mime_type?.includes("image") ? "imagem" : "docx",
     paginas: doc.page_count, tamanho: formatSize(Number(doc.size_bytes)), criadoEm: iso(doc.created_at), criadoPor: doc.creator_name,

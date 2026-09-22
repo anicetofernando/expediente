@@ -207,6 +207,27 @@ function ActionDialog({
   const [departmentId, setDepartmentId] = React.useState("");
   const [aprovarDespacho, setAprovarDespacho] = React.useState(false);
   const [rejeitarDespacho, setRejeitarDespacho] = React.useState(false);
+  const [forwardAuthorization, setForwardAuthorization] = React.useState<{ stamp: StampDefinition | null; signature: Signature | null; loading: boolean }>({ stamp: null, signature: null, loading: false });
+  const [forwardPositioning, setForwardPositioning] = React.useState(false);
+  const shouldSignCoverageNote = action.kind === "forward" && expedient.estado === "nota_cobertura";
+
+  React.useEffect(() => {
+    if (!shouldSignCoverageNote) {
+      setForwardAuthorization({ stamp: null, signature: null, loading: false });
+      return;
+    }
+    let cancelled = false;
+    setForwardAuthorization((current) => ({ ...current, loading: true }));
+    void fetch("/api/document-authorizations?purpose=aprovacao", { cache: "no-store" })
+      .then((response) => response.json())
+      .then((data) => { if (!cancelled) setForwardAuthorization({ stamp: data.stamp ?? null, signature: data.signature ?? null, loading: false }); })
+      .catch(() => { if (!cancelled) setForwardAuthorization({ stamp: null, signature: null, loading: false }); });
+    return () => { cancelled = true; };
+  }, [shouldSignCoverageNote]);
+
+  React.useEffect(() => {
+    setForwardPositioning(false);
+  }, [action.key, target]);
 
   if (action.kind === "rejeitar") {
     if (rejeitarDespacho) {
@@ -311,7 +332,23 @@ function ActionDialog({
   if (action.kind === "forward") {
     const departments = organizationalUnits.filter((u) => u.tipo === "direccao");
     const services = departmentId ? organizationalUnits.filter((u) => u.parentId === departmentId) : [];
-    const targetName = organizationalUnits.find((u) => u.id === target)?.nome;
+    const targetName = organizationalUnits.find((u) => u.id === target)?.nome ?? "a unidade seleccionada";
+    const coveragePdfUrl = approvalPdfUrls?.nota;
+    const readyToSignCoverage = !shouldSignCoverageNote || (!forwardAuthorization.loading && Boolean(forwardAuthorization.stamp && forwardAuthorization.signature));
+    const canPositionCoverage = shouldSignCoverageNote && Boolean(coveragePdfUrl && (forwardAuthorization.stamp?.imagemUrl || forwardAuthorization.signature?.imagemUrl));
+    const message = `${action.key === "parecer" ? "Solicitado parecer a" : "Encaminhado para"} ${targetName}. ${note}`.trim();
+    if (forwardPositioning && coveragePdfUrl) {
+      return (
+        <StampPositionPicker
+          open
+          onOpenChange={(v) => !v && setForwardPositioning(false)}
+          pdfUrl={coveragePdfUrl}
+          stamp={forwardAuthorization.stamp?.imagemUrl ? { imageUrl: forwardAuthorization.stamp.imagemUrl, label: forwardAuthorization.stamp.nome, initialPosition: forwardAuthorization.stamp.posicaoLivre } : undefined}
+          signature={forwardAuthorization.signature?.imagemUrl ? { imageUrl: forwardAuthorization.signature.imagemUrl, label: forwardAuthorization.signature.proprietario, initialPosition: forwardAuthorization.signature.posicaoLivre } : undefined}
+          onConfirm={(result) => onComplete(message, target, result.posicaoCarimbo, result.posicaoAssinatura)}
+        />
+      );
+    }
     return (
       <Dialog open onOpenChange={(v) => !v && onClose()}>
         <DialogContent size="sm">
@@ -351,11 +388,24 @@ function ActionDialog({
               <Label>Instruções (opcional)</Label>
               <Textarea rows={3} placeholder="Acrescente instruções para o destinatário…" value={note} onChange={(e) => setNote(e.target.value)} />
             </div>
+            {shouldSignCoverageNote && forwardAuthorization.loading && (
+              <p className="text-[13px] text-graphite-500">A verificar o carimbo e a assinatura...</p>
+            )}
+            {shouldSignCoverageNote && !forwardAuthorization.loading && !readyToSignCoverage && (
+              <p className="border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-relaxed text-amber-800">
+                {!forwardAuthorization.stamp && "A sua unidade ainda nao tem um carimbo activo. "}
+                {!forwardAuthorization.signature && "Nao tem uma assinatura individual configurada. "}
+                Configure antes de encaminhar esta nota.
+              </p>
+            )}
           </DialogBody>
           <DialogFooter>
             <Button variant="secondary" onClick={onClose}>Cancelar</Button>
-            <Button disabled={!target} onClick={() => onComplete(`Encaminhado para ${targetName}.`, target)}>
-              {action.label}
+            <Button
+              disabled={!target || !readyToSignCoverage || (shouldSignCoverageNote && forwardAuthorization.loading)}
+              onClick={() => (canPositionCoverage ? setForwardPositioning(true) : onComplete(message, target))}
+            >
+              {canPositionCoverage ? "Posicionar e continuar" : action.label}
             </Button>
           </DialogFooter>
         </DialogContent>

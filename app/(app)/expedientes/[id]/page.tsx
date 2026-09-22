@@ -28,17 +28,10 @@ export default async function ExpedientDetailPage({ params }: { params: { id: st
   if (!result) notFound();
   const { expedient, audit } = result;
 
-  // Cada interveniente ve' a frente o documento mais recente que lhe diz
-  // respeito -- o remetente ve' o protocolo assim que ele existe, o chefe/
-  // director ve' a ultima nota preparada para ele -- excepto a Secretaria, que
-  // trabalha sempre a partir do expediente original (e' ela que prepara a
-  // nota, precisa de ver o conteudo original, nao a sua propria nota).
   const nonAttachments = expedient.documentos.filter((d) => d.tipo !== "anexo");
   const originalPrincipal = expedient.documentos.find((d) => d.tipo === "principal");
-  const latestNote = expedient.documentos.filter((d) => d.tipo === "nota").at(-1);
-  const principal = session.perfilNavegacao === "secretaria"
-    ? expedient.documentos.find((d) => d.tipo === "principal") ?? nonAttachments[0] ?? expedient.documentos[0]
-    : nonAttachments.at(-1) ?? expedient.documentos[0];
+  const latestNote = expedient.documentos.find((d) => d.tipo === "nota");
+  const previewDocument = nonAttachments[0] ?? expedient.documentos[0];
   // O remetente nao ve o detalhe interno da tramitacao do lado do superior --
   // ver lib/status.ts#remetenteDisplayStatus. Isto e so' para a etiqueta
   // apresentada; a logica de accoes usa sempre expedient.estado real.
@@ -92,7 +85,7 @@ export default async function ExpedientDetailPage({ params }: { params: { id: st
                     {expedient.observacoes && <Field label="Observações" value={expedient.observacoes} block />}
                   </dl>
                 )}
-                <div className="h-[80vh] min-h-[760px]">{principal ? <DocumentViewer document={principal} /> : <EmptyState title="Sem documento principal" />}</div>
+                <div className="h-[80vh] min-h-[760px]">{previewDocument ? <DocumentViewer document={previewDocument} /> : <EmptyState title="Sem documento principal" />}</div>
               </div>
 
               {expedient.processosRelacionados && expedient.processosRelacionados.length > 0 && (
@@ -114,10 +107,10 @@ export default async function ExpedientDetailPage({ params }: { params: { id: st
 
             <TabsContent value="documentos" className="pt-5">
               <div className="space-y-5">
-                {principal && (
+                {previewDocument && (
                   <div>
-                    <p className="mb-2 text-[13px] font-semibold text-graphite-800">{principal.nome}</p>
-                    <div className="h-[82vh] min-h-[780px]"><DocumentViewer document={principal} /></div>
+                    <p className="mb-2 text-[13px] font-semibold text-graphite-800">{previewDocument.nome}</p>
+                    <div className="h-[82vh] min-h-[780px]"><DocumentViewer document={previewDocument} /></div>
                   </div>
                 )}
                 <DocumentList title="Todos os documentos" docs={expedient.documentos} />
@@ -184,7 +177,7 @@ export default async function ExpedientDetailPage({ params }: { params: { id: st
                   confidencialidade: expedient.confidencialidade,
                   pendingNextStatus: expedient.pendingNextStatus,
                 }}
-                principalPdfUrl={principal?.pdfUrl}
+                principalPdfUrl={originalPrincipal?.pdfUrl}
                 approvalPdfUrls={{ nota: latestNote?.pdfUrl, expediente: originalPrincipal?.pdfUrl }}
               />
             </CardContent>
