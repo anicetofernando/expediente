@@ -307,6 +307,19 @@ async function embedFreePositionImage(pdf: PDFDocument, page: PDFPage, imagemUrl
   page.drawImage(embedded, { x, y, width, height });
 }
 
+async function loadExistingPdfAsCleanDocument(bytes: Buffer) {
+  let source: PDFDocument;
+  try {
+    source = await PDFDocument.load(bytes, { ignoreEncryption: false, parseSpeed: ParseSpeeds.Fastest, throwOnInvalidObject: false, updateMetadata: false });
+  } catch {
+    source = await PDFDocument.load(bytes, { ignoreEncryption: true, parseSpeed: ParseSpeeds.Fastest, throwOnInvalidObject: false, updateMetadata: false });
+  }
+  const pdf = await PDFDocument.create({ updateMetadata: false });
+  const pages = await pdf.copyPages(source, source.getPageIndices());
+  for (const page of pages) pdf.addPage(page);
+  return pdf;
+}
+
 function stampCoordinates(position: string | undefined, pageWidth: number, pageHeight: number) {
   const width = 190;
   const height = 58;
@@ -360,12 +373,7 @@ function drawFreePositionedReference(page: PDFPage, reference: PdfReferenceMetad
 async function decorateExistingPdf(input: PdfDocumentInput) {
   if (!input.sourceFile) throw new Error("Ficheiro PDF indisponivel.");
   if (input.stamps.length === 0 && input.signatures.length === 0 && !input.watermark && !input.decisionNote?.texto && !input.reference?.texto) return input.sourceFile;
-  let pdf: PDFDocument;
-  try {
-    pdf = await PDFDocument.load(input.sourceFile, { ignoreEncryption: false, parseSpeed: ParseSpeeds.Fastest, throwOnInvalidObject: false, updateMetadata: false });
-  } catch {
-    pdf = await PDFDocument.load(input.sourceFile, { ignoreEncryption: true, parseSpeed: ParseSpeeds.Fastest, throwOnInvalidObject: false, updateMetadata: false });
-  }
+  const pdf = await loadExistingPdfAsCleanDocument(input.sourceFile);
   const regular = await pdf.embedFont(StandardFonts.Helvetica);
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
   const italic = await pdf.embedFont(StandardFonts.HelveticaOblique);
@@ -439,7 +447,7 @@ async function decorateExistingPdf(input: PdfDocumentInput) {
       page.drawText(plainText(formattedDate(signature.aplicadoEm)), { x: x + 20, y: 37 + yOffset, size: 6, font: regular, color: rgb(0.3, 0.35, 0.42) });
     }
   }
-  return Buffer.from(await pdf.save());
+  return Buffer.from(await pdf.save({ useObjectStreams: false }));
 }
 
 async function bodyFromInput(input: PdfDocumentInput) {
