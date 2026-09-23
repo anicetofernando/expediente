@@ -6,7 +6,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { createHash } from "node:crypto";
 import mammoth from "mammoth";
-import { PDFDocument, PDFFont, PDFPage, StandardFonts, degrees, rgb } from "pdf-lib";
+import { PDFDocument, PDFFont, PDFPage, ParseSpeeds, StandardFonts, degrees, rgb } from "pdf-lib";
 import { loadFileByPathname } from "@/lib/file-storage";
 import type { DocumentTemplate } from "@/types";
 
@@ -22,6 +22,7 @@ export interface PdfFreePosition {
 
 const DEFAULT_DECISION_NOTE_POSITION: PdfFreePosition = { x: 7, y: 70, width: 86, height: 12 };
 const DEFAULT_REFERENCE_POSITION: PdfFreePosition = { x: 58, y: 8, width: 34, height: 6 };
+const PDF_HEADER = "%PDF-";
 
 export interface PdfStampMetadata {
   id?: string;
@@ -104,6 +105,13 @@ function formattedShortDate(date: Date) {
   const day = String(date.getDate()).padStart(2, "0");
   const month = String(date.getMonth() + 1).padStart(2, "0");
   return `${day}.${month}.${date.getFullYear()}`;
+}
+
+function isPdfInput(input: Pick<PdfDocumentInput, "name" | "mimeType" | "sourceFile">) {
+  const mime = input.mimeType?.toLowerCase().split(";", 1)[0].trim();
+  if (mime === "application/pdf" || mime === "application/x-pdf") return true;
+  if (input.name.toLowerCase().endsWith(".pdf")) return true;
+  return input.sourceFile?.subarray(0, PDF_HEADER.length).toString("latin1") === PDF_HEADER;
 }
 
 function decisionAttribution(note: NonNullable<PdfDocumentInput["decisionNote"]>) {
@@ -352,7 +360,12 @@ function drawFreePositionedReference(page: PDFPage, reference: PdfReferenceMetad
 async function decorateExistingPdf(input: PdfDocumentInput) {
   if (!input.sourceFile) throw new Error("Ficheiro PDF indisponivel.");
   if (input.stamps.length === 0 && input.signatures.length === 0 && !input.watermark && !input.decisionNote?.texto && !input.reference?.texto) return input.sourceFile;
-  const pdf = await PDFDocument.load(input.sourceFile, { ignoreEncryption: false });
+  let pdf: PDFDocument;
+  try {
+    pdf = await PDFDocument.load(input.sourceFile, { ignoreEncryption: false, parseSpeed: ParseSpeeds.Fastest, throwOnInvalidObject: false, updateMetadata: false });
+  } catch {
+    pdf = await PDFDocument.load(input.sourceFile, { ignoreEncryption: true, parseSpeed: ParseSpeeds.Fastest, throwOnInvalidObject: false, updateMetadata: false });
+  }
   const regular = await pdf.embedFont(StandardFonts.Helvetica);
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
   const italic = await pdf.embedFont(StandardFonts.HelveticaOblique);
@@ -449,7 +462,7 @@ export async function createDocumentPdf(input: PdfDocumentInput) {
     .digest("hex");
   const cached = outputCache.get(key);
   if (cached) return cached;
-  const output = input.mimeType === "application/pdf"
+  const output = isPdfInput(input)
     ? await decorateExistingPdf(input)
     : await renderHtmlPdf(await printableHtml(input, await bodyFromInput(input)));
   if (outputCache.size >= 50) outputCache.delete(outputCache.keys().next().value!);
