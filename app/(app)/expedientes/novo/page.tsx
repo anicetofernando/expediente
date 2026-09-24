@@ -124,7 +124,7 @@ function WizardProgress({
   onStepChange?: (index: number) => void;
 }) {
   return (
-    <div className="border-b border-graphite-200 bg-graphite-50 px-4 py-3 sm:px-5 lg:px-7">
+    <div className="border-b border-graphite-200 bg-graphite-50 px-3 py-2.5 sm:px-5 sm:py-3 lg:px-7">
       <Stepper steps={STEPS} current={current} onStepChange={onStepChange} />
     </div>
   );
@@ -533,10 +533,10 @@ function NovoExpedienteContent() {
             {formatDraftTimestamp(localDraftRestored.updatedAt) ? ` em ${formatDraftTimestamp(localDraftRestored.updatedAt)}.` : "."}
           </Alert>
         )}
-        <section className="flex min-h-[520px] w-full flex-col border border-graphite-300 bg-white">
+        <section className="flex min-h-[calc(100dvh-9rem)] w-full flex-col border border-graphite-300 bg-white sm:min-h-[520px]">
           <WizardProgress current={step} onStepChange={setStep} />
 
-          <div className="flex-1 px-5 py-5 sm:px-6 lg:px-8 lg:py-6 xl:px-10">
+          <div className="flex-1 px-3 py-4 sm:px-6 sm:py-5 lg:px-8 lg:py-6 xl:px-10">
             {step === 0 && <StepBasicInfo state={state} update={update} />}
             {step === 1 && <StepDocumentOrigin state={state} update={update} />}
             {step === 2 && <StepDocument state={state} update={update} />}
@@ -545,10 +545,11 @@ function NovoExpedienteContent() {
             {step === 5 && <StepReview state={state} update={update} />}
           </div>
 
-          <footer className="sticky bottom-0 z-10 flex flex-col-reverse gap-2 border-t border-graphite-200 bg-white/95 px-5 py-3 backdrop-blur-sm sm:flex-row sm:items-center sm:justify-between lg:px-8">
+          <footer className="sticky bottom-0 z-10 flex flex-col-reverse gap-2 border-t border-graphite-200 bg-white/95 px-3 py-3 backdrop-blur-sm sm:flex-row sm:items-center sm:justify-between sm:px-5 lg:px-8">
             <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-3">
               <Button
                 variant="secondary"
+                className="w-full sm:w-auto"
                 disabled={step === 0}
                 onClick={() => setStep((current) => Math.max(0, current - 1))}
               >
@@ -562,24 +563,25 @@ function NovoExpedienteContent() {
 
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
               {effectiveDraftId && step < 5 && (
-                <Button variant="secondary" onClick={() => persist(true)} loading={saving} disabled={saving || !isValidFutureOrTodayDate(state.prazo)}>
+                <Button className="w-full sm:w-auto" variant="secondary" onClick={() => persist(true)} loading={saving} disabled={saving || !isValidFutureOrTodayDate(state.prazo)}>
                   <Save className="size-3.5" />
                   Guardar alterações
                 </Button>
               )}
               {step === 5 ? (
                 <>
-                  <Button variant="secondary" onClick={() => persist(true)} loading={saving} disabled={saving}>
+                  <Button className="w-full sm:w-auto" variant="secondary" onClick={() => persist(true)} loading={saving} disabled={saving}>
                     <Save className="size-3.5" />
                     Guardar rascunho
                   </Button>
-                  <Button onClick={() => persist(false)} loading={saving} disabled={saving}>
+                  <Button className="w-full sm:w-auto" onClick={() => persist(false)} loading={saving} disabled={saving}>
                     <Send className="size-3.5" />
                     Submeter expediente
                   </Button>
                 </>
               ) : (
                 <Button
+                  className="w-full sm:w-auto"
                   disabled={!canProceed(step, state)}
                   onClick={() => setStep((current) => Math.min(5, current + 1))}
                 >

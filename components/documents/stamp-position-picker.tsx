@@ -132,7 +132,9 @@ function PdfPagePreview({
       const doc = await pdfjs.getDocument({ data: bytes }).promise;
       const page = await doc.getPage(previewPage === "first" ? 1 : doc.numPages);
       const base = page.getViewport({ scale: 1 });
-      const scale = Math.min(MAX_PREVIEW_WIDTH / base.width, MAX_PREVIEW_HEIGHT / base.height);
+      const availableWidth = Math.min(MAX_PREVIEW_WIDTH, Math.max(280, window.innerWidth - 48));
+      const availableHeight = Math.min(MAX_PREVIEW_HEIGHT, Math.max(320, window.innerHeight - 220));
+      const scale = Math.min(availableWidth / base.width, availableHeight / base.height);
       const viewport = page.getViewport({ scale });
       const canvas = canvasRef.current;
       const context = canvas?.getContext("2d");
@@ -175,15 +177,15 @@ function PdfPagePreview({
   return (
     <>
       {status === "loading" && (
-        <div className="flex h-64 w-[420px] flex-col items-center justify-center gap-2 text-[13px] text-graphite-500">
+        <div className="flex h-64 w-full max-w-[420px] flex-col items-center justify-center gap-2 text-[13px] text-graphite-500">
           <span className="size-5 animate-spin rounded-full border-2 border-graphite-300 border-t-navy-700" />
           <span>A carregar pré-visualização…</span>
           {slow && <span className="text-2xs text-graphite-400">A gerar o documento real pode demorar mais alguns segundos…</span>}
         </div>
       )}
-      {status === "error" && <div className="flex h-64 w-[420px] items-center justify-center text-[13px] text-crimson-600">Não foi possível carregar a pré-visualização do documento.</div>}
+      {status === "error" && <div className="flex h-64 w-full max-w-[420px] items-center justify-center px-4 text-center text-[13px] text-crimson-600">Não foi possível carregar a pré-visualização do documento.</div>}
       {status === "fallback" && fallbackUrl && (
-        <div className="h-[594px] w-[420px] overflow-hidden bg-white">
+        <div className="h-[58dvh] min-h-[320px] w-full max-w-[420px] overflow-hidden bg-white">
           <iframe
             title="Pre-visualizacao alternativa do documento"
             src={pdfViewerUrl(fallbackUrl, previewPage)}
@@ -322,13 +324,13 @@ export function StampPositionPicker({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent size="xl" className="max-h-[94vh]">
+      <DialogContent size="xl" className="h-[100dvh] max-h-[100dvh] sm:h-auto sm:max-h-[94vh]">
         <DialogHeader>
           <DialogTitle>Posicionar elementos</DialogTitle>
           <DialogDescription>Arraste cada elemento para o local exacto onde deve ficar, e use o ponto no canto inferior direito para ajustar o tamanho.</DialogDescription>
         </DialogHeader>
-        <DialogBody className="flex flex-1 flex-col items-center">
-          <div ref={containerRef} className="relative mx-auto inline-block border border-graphite-300 bg-white shadow-sm">
+        <DialogBody className="flex flex-1 flex-col items-stretch overflow-auto">
+          <div ref={containerRef} className="relative mx-auto inline-block max-w-full border border-graphite-300 bg-white shadow-sm">
             <PdfPagePreview pdfUrl={pdfUrl} fallbackPdfUrl={fallbackPdfUrl} previewPage={previewPage} onReady={() => setPreviewReady(true)} />
             {previewReady && reference && (
               <PositionableOverlay

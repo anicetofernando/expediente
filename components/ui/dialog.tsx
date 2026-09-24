@@ -33,7 +33,7 @@ export const DialogContent = React.forwardRef<
         ref={ref}
         onInteractOutside={onInteractOutside ?? ((event) => event.preventDefault())}
         className={cn(
-          "fixed left-1/2 top-1/2 z-50 w-[calc(100vw-2rem)] -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-lg border border-graphite-200 bg-white shadow-modal animate-fade-in max-h-[85vh] flex flex-col",
+          "fixed inset-x-0 bottom-0 z-50 flex max-h-[92dvh] w-screen translate-x-0 translate-y-0 flex-col overflow-hidden rounded-t-lg border border-graphite-200 bg-white shadow-modal animate-fade-in sm:left-1/2 sm:top-1/2 sm:bottom-auto sm:w-[calc(100vw-2rem)] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-lg sm:max-h-[85vh]",
           sizes[size],
           className
         )}
@@ -51,15 +51,15 @@ export const DialogContent = React.forwardRef<
 DialogContent.displayName = "DialogContent";
 
 export function DialogHeader({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn("bg-cfm-800 px-5 py-4 shrink-0", className)} {...props} />;
+  return <div className={cn("shrink-0 bg-cfm-800 px-4 py-3.5 sm:px-5 sm:py-4", className)} {...props} />;
 }
 
 export function DialogBody({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn("px-5 py-4 overflow-y-auto", className)} {...props} />;
+  return <div className={cn("overflow-y-auto px-4 py-3.5 sm:px-5 sm:py-4", className)} {...props} />;
 }
 
 export function DialogFooter({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn("flex items-center justify-end gap-2 border-t border-graphite-150 px-5 py-3.5 shrink-0", className)} {...props} />;
+  return <div className={cn("flex shrink-0 flex-col-reverse items-stretch gap-2 border-t border-graphite-150 px-4 py-3 sm:flex-row sm:items-center sm:justify-end sm:px-5 sm:py-3.5 [&>button]:w-full sm:[&>button]:w-auto", className)} {...props} />;
 }
 
 export const DialogTitle = React.forwardRef<

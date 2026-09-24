@@ -60,16 +60,16 @@ export function DocumentViewer({ document: doc }: { document: ExpedientDocument 
 
   const Toolbar = (
     <div className="flex min-h-11 flex-wrap items-center gap-2 border-b border-graphite-200 bg-graphite-50 px-3 py-2">
-      <div className="flex min-w-0 items-center gap-2 text-xs text-graphite-600">
+      <div className="flex min-w-0 flex-1 basis-full items-center gap-2 text-xs text-graphite-600 sm:basis-auto">
         <FileText className="size-4 shrink-0 text-navy-700" />
         <span className="truncate">{doc.nome}</span>
         <span className="shrink-0 text-graphite-400">· {doc.paginas} pág.</span>
       </div>
 
-      <div className="ml-auto flex items-center gap-1.5">
+      <div className="ml-0 flex w-full items-center justify-end gap-1.5 sm:ml-auto sm:w-auto">
         {canShowOriginal && (
           <Select value={version} onValueChange={(value) => setVersion(value as VersionView)}>
-            <SelectTrigger className="h-8 w-[168px] text-xs"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="h-8 w-[150px] text-xs sm:w-[168px]"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="pdf">Documento final em PDF</SelectItem>
               <SelectItem value="original">Ficheiro original</SelectItem>
@@ -96,16 +96,16 @@ export function DocumentViewer({ document: doc }: { document: ExpedientDocument 
   );
 
   const Canvas = (
-    <div className="min-h-0 flex-1 bg-graphite-200/70 p-2 sm:p-3">
+    <div className="min-h-0 flex-1 bg-graphite-200/70 p-1.5 sm:p-3">
       {viewUrl ? (
         <iframe
           key={`${version}-${viewUrl}`}
           title={`Pré-visualização de ${doc.nome}`}
           src={version === "pdf" ? `${viewUrl}#toolbar=1&navpanes=0&view=FitH` : viewUrl}
-          className="h-full min-h-[680px] w-full border border-graphite-300 bg-white shadow-sm"
+          className="h-full min-h-[420px] w-full border border-graphite-300 bg-white shadow-sm sm:min-h-[620px] lg:min-h-[680px]"
         />
       ) : (
-        <div className="flex h-full min-h-[680px] flex-col items-center justify-center gap-3 border border-graphite-300 bg-white p-8 text-center">
+        <div className="flex h-full min-h-[420px] flex-col items-center justify-center gap-3 border border-graphite-300 bg-white p-8 text-center sm:min-h-[620px] lg:min-h-[680px]">
           <FileText className="size-10 text-graphite-300" />
           <p className="text-[13px] font-medium text-graphite-600">Pré-visualização indisponível</p>
         </div>
@@ -115,14 +115,14 @@ export function DocumentViewer({ document: doc }: { document: ExpedientDocument 
 
   return (
     <>
-      <div className="flex h-full min-h-[740px] flex-col overflow-hidden rounded-lg border border-graphite-200 bg-white">
+      <div className="flex h-full min-h-[520px] flex-col overflow-hidden rounded-md border border-graphite-200 bg-white sm:min-h-[680px] sm:rounded-lg lg:min-h-[740px]">
         {Toolbar}
         {Canvas}
       </div>
 
       <Dialog open={fullscreen} onOpenChange={setFullscreen}>
-        <DialogContent size="xl" className="h-[94vh] w-[96vw] max-w-[1600px] p-0">
-          <div className="flex h-full min-h-0 flex-col pt-8">
+        <DialogContent size="xl" className="inset-0 h-[100dvh] max-h-[100dvh] w-screen max-w-none translate-x-0 translate-y-0 rounded-none p-0 sm:left-1/2 sm:top-1/2 sm:h-[94vh] sm:w-[96vw] sm:max-w-[1600px] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-lg">
+          <div className="flex h-full min-h-0 flex-col pt-10 sm:pt-8">
             {Toolbar}
             {Canvas}
           </div>

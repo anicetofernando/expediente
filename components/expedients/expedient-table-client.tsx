@@ -154,7 +154,7 @@ export function ExpedientTableClient({
           />
         </label>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <label className="flex items-center gap-1.5 text-xs font-medium text-graphite-600">
             <span>Estado</span>
             <select
@@ -163,7 +163,7 @@ export function ExpedientTableClient({
                 setStatusFilter(event.target.value as "todos" | ExpedientStatus);
                 setPage(1);
               }}
-              className="h-8 max-w-52 rounded-sm border border-graphite-300 bg-white px-2 text-xs text-graphite-800 outline-none hover:border-graphite-400 focus:border-cfm-500 focus:ring-2 focus:ring-cfm-500/20"
+              className="h-8 max-w-[calc(100vw-8rem)] rounded-sm border border-graphite-300 bg-white px-2 text-xs text-graphite-800 outline-none hover:border-graphite-400 focus:border-cfm-500 focus:ring-2 focus:ring-cfm-500/20 sm:max-w-52"
             >
               <option value="todos">Todos</option>
               {statusOptions.map((status) => (
@@ -188,7 +188,60 @@ export function ExpedientTableClient({
           </div>
         </div>
       ) : (
-        <div className="min-h-0 flex-1 overflow-auto">
+        <>
+        <div className="min-h-0 flex-1 overflow-auto md:hidden">
+          <div className="space-y-2 p-2">
+            {paged.map((expedient) => {
+              const href = `/expedientes/${expedient.id}`;
+              const status = STATUS_META[expedient.estado];
+
+              return (
+                <Link
+                  key={expedient.id}
+                  href={href}
+                  prefetch={false}
+                  onPointerEnter={() => prefetchOnIntent(href)}
+                  onPointerDown={() => prefetchOnIntent(href)}
+                  className="block border border-graphite-200 bg-white p-3 shadow-sm transition-colors hover:border-cfm-300 hover:bg-cfm-50 focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-cfm-500"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-[13px] font-semibold text-cfm-900">{expedient.protocolo}</p>
+                      <p className="mt-1 line-clamp-2 text-[13px] font-medium leading-5 text-graphite-800">{expedient.assunto}</p>
+                    </div>
+                    <span
+                      className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap text-2xs font-medium text-graphite-700"
+                      title={status.description}
+                    >
+                      <span className={cn("size-1.5 rounded-full", status.dot)} aria-hidden />
+                      {status.label}
+                    </span>
+                  </div>
+                  <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-1.5 text-2xs text-graphite-500">
+                    <span className="min-w-0">
+                      <span className="block uppercase tracking-wide text-graphite-400">Remetente</span>
+                      <span className="block truncate text-graphite-700">{expedient.remetente}</span>
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block uppercase tracking-wide text-graphite-400">Responsavel</span>
+                      <span className="block truncate text-graphite-700">{expedient.responsavelActual}</span>
+                    </span>
+                    <span>
+                      <span className="block uppercase tracking-wide text-graphite-400">Entrada</span>
+                      <span className="block tabular-nums text-graphite-700">{formatDate(expedient.dataEntrada)}</span>
+                    </span>
+                    <span>
+                      <span className="block uppercase tracking-wide text-graphite-400">Prazo</span>
+                      <span className={cn("block tabular-nums", expedient.atrasado ? "font-semibold text-crimson-700" : "text-graphite-700")}>{formatDate(expedient.prazo)}</span>
+                    </span>
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="hidden min-h-0 flex-1 overflow-auto md:block">
           <table className="w-full min-w-[1110px] border-collapse text-left text-xs leading-5">
             <thead className="sticky top-0 z-10 border-b border-graphite-200 bg-graphite-50">
               <tr>
@@ -313,6 +366,7 @@ export function ExpedientTableClient({
             </tbody>
           </table>
         </div>
+        </>
       )}
 
       {filtered.length > 0 && (

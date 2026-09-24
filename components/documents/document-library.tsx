@@ -67,7 +67,7 @@ export function DocumentLibrary({ documents }: { documents: FlatDocument[] }) {
             />
           </div>
           <Select value={tipoFilter} onValueChange={(v) => { setTipoFilter(v); setPage(1); }}>
-            <SelectTrigger className="h-9 w-[150px]"><SelectValue placeholder="Tipo" /></SelectTrigger>
+            <SelectTrigger className="h-9 w-[calc(50vw-1.25rem)] min-w-[140px] sm:w-[150px]"><SelectValue placeholder="Tipo" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="todos">Todos os tipos</SelectItem>
               {TIPO_OPTIONS.map((t) => (
@@ -76,7 +76,7 @@ export function DocumentLibrary({ documents }: { documents: FlatDocument[] }) {
             </SelectContent>
           </Select>
           <Select value={formatoFilter} onValueChange={(v) => { setFormatoFilter(v); setPage(1); }}>
-            <SelectTrigger className="h-9 w-[140px]"><SelectValue placeholder="Formato" /></SelectTrigger>
+            <SelectTrigger className="h-9 w-[calc(50vw-1.25rem)] min-w-[130px] sm:w-[140px]"><SelectValue placeholder="Formato" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="todos">Todos os formatos</SelectItem>
               {FORMATO_OPTIONS.map((f) => (
@@ -174,9 +174,9 @@ export function DocumentLibrary({ documents }: { documents: FlatDocument[] }) {
       )}
 
       <Dialog open={Boolean(preview)} onOpenChange={(open) => !open && setPreview(null)}>
-        <DialogContent size="xl" className="h-[94vh] w-[96vw] max-w-[1600px] p-0">
+        <DialogContent size="xl" className="inset-0 h-[100dvh] max-h-[100dvh] w-screen max-w-none translate-x-0 translate-y-0 rounded-none p-0 sm:left-1/2 sm:top-1/2 sm:h-[94vh] sm:w-[96vw] sm:max-w-[1600px] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-lg">
           {preview && (
-            <div className="flex h-full min-h-0 flex-col pt-8">
+            <div className="flex h-full min-h-0 flex-col pt-10 sm:pt-8">
               <DocumentViewer document={preview} />
             </div>
           )}

@@ -63,9 +63,9 @@ export default function LoginPage() {
         </div>
 
         <div>
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
             <Label htmlFor="password" required>Palavra-passe</Label>
-            <Link href="/recuperar-acesso" className="mb-1.5 text-[13px] font-medium text-cfm-800 hover:underline">
+            <Link href="/recuperar-acesso" className="mb-1.5 text-[13px] font-medium leading-4 text-cfm-800 hover:underline sm:text-right">
               Esqueceu-se da palavra-passe?
             </Link>
           </div>
@@ -91,9 +91,14 @@ export default function LoginPage() {
           </div>
         </div>
 
-        <label className="flex items-center gap-2 text-[13px] text-graphite-600">
-          <Checkbox checked={keepSignedIn} onCheckedChange={(v) => setKeepSignedIn(v === true)} />
-          Manter sessão iniciada neste dispositivo
+        <label htmlFor="keep-signed-in" className="flex cursor-pointer items-start gap-2.5 text-[13px] leading-5 text-graphite-600">
+          <Checkbox
+            id="keep-signed-in"
+            checked={keepSignedIn}
+            onCheckedChange={(v) => setKeepSignedIn(v === true)}
+            className="mt-0.5 size-4"
+          />
+          <span className="min-w-0">Manter sessão iniciada neste dispositivo</span>
         </label>
 
         <Button type="submit" className="w-full" size="lg" loading={loading}>

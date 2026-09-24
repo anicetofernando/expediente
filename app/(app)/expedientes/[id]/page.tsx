@@ -40,7 +40,7 @@ export default async function ExpedientDetailPage({ params }: { params: { id: st
   return (
     <CatalogsProvider>
     <div>
-      <div className="border-b border-graphite-200 bg-white px-4 py-3 lg:px-5">
+      <div className="border-b border-graphite-200 bg-white px-3 py-3 sm:px-4 lg:px-5">
         <Breadcrumb items={[{ label: "Expediente", href: "/expedientes" }, { label: expedient.protocolo }]} />
 
         <div className="mt-2.5 flex flex-wrap items-center gap-x-4 gap-y-1.5">
@@ -52,7 +52,7 @@ export default async function ExpedientDetailPage({ params }: { params: { id: st
           </div>
         </div>
 
-        <div className="mt-2.5 grid grid-cols-2 gap-x-6 gap-y-2 border-t border-graphite-150 pt-2.5 sm:grid-cols-4">
+        <div className="mt-2.5 grid grid-cols-1 gap-x-6 gap-y-2 border-t border-graphite-150 pt-2.5 sm:grid-cols-2 lg:grid-cols-4">
           <MetaField icon={FileText} label="Tipo" value={expedient.tipoLabel} />
           <MetaField icon={Building2} label="Unidade de origem" value={expedient.unidadeOrigem} />
           <MetaField icon={CalendarClock} label="Entrada" value={formatDate(expedient.dataEntrada)} />
@@ -60,10 +60,10 @@ export default async function ExpedientDetailPage({ params }: { params: { id: st
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_220px] lg:p-5">
-        <div className="min-w-0">
+      <div className="grid grid-cols-1 gap-3 p-3 sm:gap-4 sm:p-4 lg:grid-cols-[minmax(0,1fr)_220px] lg:p-5">
+        <div className="order-2 min-w-0 lg:order-1">
           <Tabs defaultValue="visao-geral">
-            <TabsList>
+            <TabsList className="-mx-3 px-3 sm:mx-0 sm:px-0">
               <TabsTrigger value="visao-geral">Resumo</TabsTrigger>
               <TabsTrigger value="documentos">Documentos ({expedient.documentos.length})</TabsTrigger>
               <TabsTrigger value="tramitacao">Tramitação</TabsTrigger>
@@ -85,7 +85,7 @@ export default async function ExpedientDetailPage({ params }: { params: { id: st
                     {expedient.observacoes && <Field label="Observações" value={expedient.observacoes} block />}
                   </dl>
                 )}
-                <div className="h-[80vh] min-h-[760px]">{previewDocument ? <DocumentViewer document={previewDocument} /> : <EmptyState title="Sem documento principal" />}</div>
+                <div className="h-[65dvh] min-h-[520px] sm:min-h-[680px] lg:h-[80vh] lg:min-h-[760px]">{previewDocument ? <DocumentViewer document={previewDocument} /> : <EmptyState title="Sem documento principal" />}</div>
               </div>
 
               {expedient.processosRelacionados && expedient.processosRelacionados.length > 0 && (
@@ -110,7 +110,7 @@ export default async function ExpedientDetailPage({ params }: { params: { id: st
                 {previewDocument && (
                   <div>
                     <p className="mb-2 text-[13px] font-semibold text-graphite-800">{previewDocument.nome}</p>
-                    <div className="h-[82vh] min-h-[780px]"><DocumentViewer document={previewDocument} /></div>
+                    <div className="h-[65dvh] min-h-[520px] sm:min-h-[680px] lg:h-[82vh] lg:min-h-[780px]"><DocumentViewer document={previewDocument} /></div>
                   </div>
                 )}
                 <DocumentList title="Todos os documentos" docs={expedient.documentos} />
@@ -129,8 +129,8 @@ export default async function ExpedientDetailPage({ params }: { params: { id: st
               {audit.length === 0 ? (
                 <EmptyState icon={HistoryIcon} title="Sem registos de auditoria" description="Não existem eventos de auditoria específicos para este processo." />
               ) : (
-                <div className="overflow-hidden border border-graphite-200">
-                  <table className="w-full text-left text-[13px]">
+                <div className="overflow-x-auto border border-graphite-200">
+                  <table className="w-full min-w-[760px] text-left text-[13px]">
                     <thead className="bg-graphite-50 text-2xs uppercase tracking-wide text-graphite-500">
                       <tr>
                         <th className="px-4 py-2.5">Data</th>
@@ -158,8 +158,8 @@ export default async function ExpedientDetailPage({ params }: { params: { id: st
           </Tabs>
         </div>
 
-        <div className="lg:sticky lg:top-4 lg:self-start">
-          <Card>
+        <div className="order-1 lg:order-2 lg:sticky lg:top-4 lg:self-start">
+          <Card className="shadow-sm lg:shadow-none">
             <CardHeader><CardTitle>Acções</CardTitle></CardHeader>
             <CardContent>
               <ActionPanel

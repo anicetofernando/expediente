@@ -45,7 +45,7 @@ export function DocumentList({ title, docs }: { title?: string; docs: Expedient[
       </ul>
 
       <Dialog open={Boolean(preview)} onOpenChange={(open) => !open && setPreview(null)}>
-        <DialogContent size="lg" className="h-[82vh] w-[90vw] max-w-[1000px] p-0">
+        <DialogContent size="lg" className="h-[100dvh] max-h-[100dvh] w-screen max-w-none rounded-none p-0 sm:h-[82vh] sm:w-[90vw] sm:max-w-[1000px] sm:rounded-lg">
           {preview && (
             <div className="flex h-full min-h-0 flex-col pt-8">
               <DocumentViewer document={preview} />

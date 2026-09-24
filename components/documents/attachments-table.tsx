@@ -110,9 +110,9 @@ export function AttachmentsTable({ documents }: { documents: FlatDocument[] }) {
       )}
 
       <Dialog open={Boolean(preview)} onOpenChange={(open) => !open && setPreview(null)}>
-        <DialogContent size="xl" className="h-[94vh] w-[96vw] max-w-[1600px] p-0">
+        <DialogContent size="xl" className="inset-0 h-[100dvh] max-h-[100dvh] w-screen max-w-none translate-x-0 translate-y-0 rounded-none p-0 sm:left-1/2 sm:top-1/2 sm:h-[94vh] sm:w-[96vw] sm:max-w-[1600px] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-lg">
           {preview && (
-            <div className="flex h-full min-h-0 flex-col pt-8">
+            <div className="flex h-full min-h-0 flex-col pt-10 sm:pt-8">
               <DocumentViewer document={preview} />
             </div>
           )}
