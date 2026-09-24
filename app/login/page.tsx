@@ -49,33 +49,33 @@ export default function LoginPage() {
 
   return (
     <AuthShell>
-      <h1 className="text-xl font-semibold tracking-tight text-cfm-900">Iniciar sessão</h1>
+      <h1 className="text-[22px] font-semibold leading-7 tracking-tight text-cfm-900 sm:text-xl">Iniciar sessão</h1>
 
       <form onSubmit={handleSubmit} className="mt-5 space-y-4">
         {error && <Alert variant="destructive">{error}</Alert>}
 
         <div>
-          <Label htmlFor="email" required>E-mail</Label>
+          <Label htmlFor="email" required className="text-[13px] leading-5">E-mail</Label>
           <div className="relative">
-            <Mail className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-graphite-400" />
-            <Input id="email" type="email" placeholder="nome.apelido@cfm.co.mz" className="pl-9" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="username" />
+            <Mail className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-graphite-400" />
+            <Input id="email" type="email" placeholder="nome.apelido@cfm.co.mz" className="h-11 pl-10 text-[15px] sm:h-8 sm:pl-9 sm:text-[13px]" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="username" />
           </div>
         </div>
 
         <div>
           <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-            <Label htmlFor="password" required>Palavra-passe</Label>
-            <Link href="/recuperar-acesso" className="mb-1.5 text-[13px] font-medium leading-4 text-cfm-800 hover:underline sm:text-right">
+            <Label htmlFor="password" required className="text-[13px] leading-5">Palavra-passe</Label>
+            <Link href="/recuperar-acesso" className="mb-1.5 text-[14px] font-medium leading-5 text-cfm-800 hover:underline sm:text-right sm:text-[13px] sm:leading-4">
               Esqueceu-se da palavra-passe?
             </Link>
           </div>
           <div className="relative">
-            <Lock className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-graphite-400" />
+            <Lock className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-graphite-400" />
             <Input
               id="password"
               type={showPassword ? "text" : "password"}
               placeholder="••••••••••"
-              className="pl-9 pr-9"
+              className="h-11 pl-10 pr-10 text-[15px] sm:h-8 sm:pl-9 sm:pr-9 sm:text-[13px]"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               autoComplete="current-password"
@@ -83,7 +83,7 @@ export default function LoginPage() {
             <button
               type="button"
               onClick={() => setShowPassword((v) => !v)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-graphite-400 hover:text-graphite-600"
+              className="absolute right-3 top-1/2 flex size-8 -translate-y-1/2 items-center justify-center text-graphite-400 hover:text-graphite-600 sm:size-auto"
               aria-label={showPassword ? "Ocultar palavra-passe" : "Mostrar palavra-passe"}
             >
               {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
@@ -91,17 +91,17 @@ export default function LoginPage() {
           </div>
         </div>
 
-        <label htmlFor="keep-signed-in" className="flex cursor-pointer items-start gap-2.5 text-[13px] leading-5 text-graphite-600">
+        <label htmlFor="keep-signed-in" className="flex cursor-pointer items-start gap-3 text-[14px] leading-5 text-graphite-600 sm:gap-2.5 sm:text-[13px]">
           <Checkbox
             id="keep-signed-in"
             checked={keepSignedIn}
             onCheckedChange={(v) => setKeepSignedIn(v === true)}
-            className="mt-0.5 size-4"
+            className="mt-0.5 size-5 sm:size-4"
           />
           <span className="min-w-0">Manter sessão iniciada neste dispositivo</span>
         </label>
 
-        <Button type="submit" className="w-full" size="lg" loading={loading}>
+        <Button type="submit" className="h-11 w-full text-[15px] sm:h-8 sm:text-[13px]" size="lg" loading={loading}>
           {!loading && <LogIn className="size-3.5" aria-hidden />}
           {loading ? "A entrar…" : "Entrar"}
         </Button>
