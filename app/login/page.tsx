@@ -5,7 +5,6 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Eye, EyeOff, Lock, LogIn, Mail } from "lucide-react";
 import { AuthShell } from "@/components/layout/auth-shell";
-import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Alert } from "@/components/ui/alert";
@@ -63,12 +62,7 @@ export default function LoginPage() {
         </div>
 
         <div>
-          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-            <Label htmlFor="password" required className="text-[13px] leading-5">Palavra-passe</Label>
-            <Link href="/recuperar-acesso" className="mb-1.5 text-[14px] font-medium leading-5 text-cfm-800 hover:underline sm:text-right sm:text-[13px] sm:leading-4">
-              Esqueceu-se da palavra-passe?
-            </Link>
-          </div>
+          <Label htmlFor="password" required className="text-[13px] leading-5">Palavra-passe</Label>
           <div className="relative">
             <Lock className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-graphite-400" />
             <Input
@@ -89,22 +83,36 @@ export default function LoginPage() {
               {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
             </button>
           </div>
+          <Link href="/recuperar-acesso" className="mt-2 inline-flex text-[13px] font-medium leading-5 text-cfm-700 underline-offset-3 hover:text-cfm-900 hover:underline">
+            Esqueci a palavra-passe
+          </Link>
         </div>
 
-        <label htmlFor="keep-signed-in" className="flex cursor-pointer items-start gap-3 text-[14px] leading-5 text-graphite-600 sm:gap-2.5 sm:text-[13px]">
+        <label htmlFor="keep-signed-in" className="flex cursor-pointer items-center gap-2.5 text-[13px] leading-5 text-graphite-700">
           <Checkbox
             id="keep-signed-in"
             checked={keepSignedIn}
             onCheckedChange={(v) => setKeepSignedIn(v === true)}
-            className="mt-0.5 size-5 sm:size-4"
+            className="size-[18px] border-cfm-500 hover:border-cfm-700 focus-visible:ring-cfm-500/30 data-[state=checked]:border-cfm-700 data-[state=checked]:bg-cfm-700"
           />
           <span className="min-w-0">Manter sessão iniciada neste dispositivo</span>
         </label>
 
-        <Button type="submit" className="h-11 w-full text-[15px] sm:h-8 sm:text-[13px]" size="lg" loading={loading}>
+        <button
+          type="submit"
+          disabled={loading}
+          className="inline-flex h-11 w-full select-none items-center justify-center gap-2 rounded-sm border border-cfm-700 border-b-cfm-500 bg-cfm-700 px-4 text-[15px] font-semibold text-white transition-colors duration-100 hover:border-cfm-800 hover:border-b-cfm-600 hover:bg-cfm-800 active:border-cfm-900 active:bg-cfm-900 disabled:cursor-not-allowed disabled:border-graphite-200 disabled:bg-graphite-200 disabled:text-graphite-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-cfm-500 sm:h-8 sm:text-[13px]"
+          aria-busy={loading || undefined}
+        >
+          {loading && (
+            <span
+              className="size-3.5 animate-spin rounded-full border-2 border-current border-r-transparent"
+              aria-hidden
+            />
+          )}
           {!loading && <LogIn className="size-3.5" aria-hidden />}
           {loading ? "A entrar…" : "Entrar"}
-        </Button>
+        </button>
       </form>
     </AuthShell>
   );
