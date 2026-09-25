@@ -387,42 +387,13 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 
       if (action === "aprovar_nota") {
         // A Secretaria nunca assina nem carimba nenhuma nota -- so' protocola e
-        // transmite. Ao "aprovar para nova nota", e' o proprio chefe/director
-        // que carimba e assina a nota ACTUAL (a que tem em maos agora), antes
-        // de pedir a Secretaria para preparar a proxima (em branco, "nota de
-        // cobertura") -- so' mais tarde, ao encaminhar ou pedir parecer, e' que
-        // ele volta a carimbar/assinar essa nota seguinte.
-        const latestNota = await client.query<{
-          id: string; stamps_metadata: Array<{ id?: string }> | null; signatures_metadata: Array<{ id?: string }> | null;
-        }>(
-          "SELECT id,stamps_metadata,signatures_metadata FROM documents WHERE expedient_id=$1 AND document_kind='nota' ORDER BY created_at DESC LIMIT 1 FOR UPDATE",
-          [exp.id],
-        );
-        if (latestNota.rows[0]) {
-          const signatures = await configuredSignatures(client);
-          const signature = resolveUserSignature(signatures, session.user);
-          if (!signature) throw new Error("Nao tem uma assinatura individual activa. Configure-a em Administracao > Assinaturas.");
-          const signatureEntries = latestNota.rows[0].signatures_metadata ?? [];
-          if (!signatureEntries.some((entry) => entry.id === signature.id)) {
-            const entry = signatureMetadataJson(signature, session.user, signature.posicaoLivre);
-            signatureEntries.push(entry);
-            await client.query(
-              `UPDATE documents SET signed=true,signature_metadata=$2::jsonb,signatures_metadata=$3::jsonb WHERE id=$1`,
-              [latestNota.rows[0].id, JSON.stringify(entry), JSON.stringify(signatureEntries)],
-            );
-          }
-          const stamps = await configuredStamps(client);
-          const stamp = resolveUnitStamp(stamps, session.user, session.unitName, session.perfilNavegacao, "aprovacao");
-          const stampEntries = latestNota.rows[0].stamps_metadata ?? [];
-          if (stamp && !stampEntries.some((entry) => entry.id === stamp.id)) {
-            const entry = stampMetadataJson(stamp, session.user.nome, stamp.posicaoLivre);
-            stampEntries.push(entry);
-            await client.query(
-              `UPDATE documents SET stamped=true,stamp_metadata=$2::jsonb,stamps_metadata=$3::jsonb WHERE id=$1`,
-              [latestNota.rows[0].id, JSON.stringify(entry), JSON.stringify(stampEntries)],
-            );
-          }
-        }
+        // transmite. Ao "aprovar para nova nota", o chefe/director esta apenas a
+        // pedir que a Secretaria prepare a proxima nota (em branco, "nota de
+        // cobertura") -- e' so' nessa nota, mais tarde, ao encaminhar ou pedir
+        // parecer, que ele carimba e assina. A nota ACTUAL (que a Secretaria ja
+        // assinou ao cria-la) fica tal como esta -- nao leva um segundo carimbo
+        // aqui, isso e' que fazia o carimbo do chefe cair, por engano, na nota
+        // errada quando a de cobertura ainda nem existia.
         const secretaryId = await resolveSecretaryId(client, exp.recipient_unit_id);
         if (!secretaryId) throw new Error("Nao existe utilizador activo da Secretaria para preparar a nota de cobertura.");
         responsible = secretaryId;
