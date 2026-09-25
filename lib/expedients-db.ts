@@ -109,11 +109,22 @@ function isVisibleDocumentForSession(
   status: ExpedientStatus,
 ) {
   if (session.perfilNavegacao === "superior") {
+    // Um "protocolo" so' e' visivel para o chefe da unidade a quem serve de
+    // comprovativo (ex.: quem encaminhou ou pediu parecer recebe o protocolo
+    // da nota de cobertura que enviou) -- nunca o de outra unidade.
+    if (doc.document_kind === "protocolo") return doc.created_for_unit_id === session.user.unidadeId;
+    if (doc.document_kind === "nota") return doc.created_for_unit_id === null || doc.created_for_unit_id === session.user.unidadeId;
+    return true;
+  }
+  if (session.perfilNavegacao === "secretaria") {
+    // Tal como o superior, a secretaria so' ve' as notas preparadas para a sua
+    // propria unidade -- nunca as de outro departamento que o processo tenha
+    // atravessado a caminho ou a voltar (ex.: ao receber um pedido de parecer
+    // encaminhado por outra unidade).
     if (doc.document_kind === "protocolo") return false;
     if (doc.document_kind === "nota") return doc.created_for_unit_id === null || doc.created_for_unit_id === session.user.unidadeId;
     return true;
   }
-  if (session.perfilNavegacao === "secretaria") return doc.document_kind !== "protocolo";
   if (session.perfilNavegacao === "remetente") {
     if (doc.document_kind === "principal" || doc.document_kind === "anexo" || doc.document_kind === "protocolo") return true;
     return SENDER_RELEASED_DOCUMENT_STATUSES.has(status);
@@ -128,8 +139,8 @@ const VIEW_FILTERS: Record<ExpedientView, string> = {
   // A caixa de saida do remetente mostra so o que ainda esta "em curso" (nao
   // decidido nem entregue) -- uma vez devolvido, disponibilizado ou concluido,
   // o processo passa a viver so na caixa correspondente, nunca em ambas.
-  outbox: "e.origin_unit_id=__UNIT__ AND e.status IN ('submetido','recebido','protocolado','encaminhado','em_analise','aguardando_parecer','aguardando_esclarecimento','em_transito','nota_pendente','nota_cobertura','aprovado','atrasado')",
-  pending: "e.status IN ('submetido','recebido','protocolado','encaminhado','em_analise','aguardando_parecer','aguardando_esclarecimento','em_transito','nota_pendente','nota_cobertura','atrasado')",
+  outbox: "e.origin_unit_id=__UNIT__ AND e.status IN ('submetido','recebido','protocolado','encaminhado','em_analise','aguardando_parecer','aguardando_esclarecimento','em_transito','nota_pendente','nota_cobertura','resposta_parecer','aprovado','atrasado')",
+  pending: "e.status IN ('submetido','recebido','protocolado','encaminhado','em_analise','aguardando_parecer','aguardando_esclarecimento','em_transito','nota_pendente','nota_cobertura','resposta_parecer','atrasado')",
   analysis: "e.status='em_analise'",
   returned: "e.status IN ('devolvido','rejeitado')",
   // "aprovado" so passa a Concluidos depois de a Secretaria disponibilizar e o
@@ -141,7 +152,9 @@ const VIEW_FILTERS: Record<ExpedientView, string> = {
   "secretary-deliveries": "e.status IN ('aprovado','rejeitado','disponivel_remetente')",
   "official-book": "e.status <> 'rascunho' AND e.status <> 'cancelado' AND e.protocol NOT LIKE 'SUBMISSAO-%' AND e.protocol NOT LIKE 'RASCUNHO-%'",
   approval: "e.status IN ('encaminhado','nota_cobertura','em_analise','atrasado')",
-  opinions: "e.status='aguardando_parecer'",
+  // Continua em "Aguardando parecer" mesmo depois de pedida a nota de
+  // cobertura da resposta -- so' desaparece quando ela e' assinada e enviada.
+  opinions: "e.status IN ('aguardando_parecer','resposta_parecer')",
   "approval-history": "e.status IN ('aprovado','rejeitado','devolvido','arquivado')",
 };
 

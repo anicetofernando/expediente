@@ -63,7 +63,7 @@ const PROFILE_ACTIONS: Record<string, Set<string>> = {
   // "disponibilizar"/"notificar" so' se aplicam ao superior quando o processo e'
   // confidencial (a Secretaria nunca chega a ve-lo nesse caso) -- ver o filtro
   // allowSuperiorConfidentialHandoff mais abaixo.
-  superior: new Set(["encaminhar", "parecer", "aprovar", "aprovar_nota", "rejeitar", "devolver", "resposta", "retomar", "escalar", "disponibilizar", "notificar"]),
+  superior: new Set(["encaminhar", "parecer", "aprovar", "aprovar_nota", "rejeitar", "devolver", "resposta", "responder_nota", "enviar_parecer", "retomar", "escalar", "disponibilizar", "notificar"]),
   administracao: new Set(Object.values(ACTIONS_BY_STATUS).flat().map((action) => action.key)),
 };
 
@@ -237,9 +237,11 @@ function ActionDialog({
   const [forwardAuthorization, setForwardAuthorization] = React.useState<{ stamp: StampDefinition | null; signature: Signature | null; loading: boolean }>({ stamp: null, signature: null, loading: false });
   const [forwardPositioning, setForwardPositioning] = React.useState(false);
   const shouldSignCoverageNote = action.kind === "forward" && expedient.estado === "nota_cobertura";
+  const shouldSignResponseNote = action.kind === "resposta-cobertura";
+  const needsAprovacaoAuthorization = shouldSignCoverageNote || shouldSignResponseNote;
 
   React.useEffect(() => {
-    if (!shouldSignCoverageNote) {
+    if (!needsAprovacaoAuthorization) {
       setForwardAuthorization({ stamp: null, signature: null, loading: false });
       return;
     }
@@ -250,7 +252,7 @@ function ActionDialog({
       .then((data) => { if (!cancelled) setForwardAuthorization({ stamp: data.stamp ?? null, signature: data.signature ?? null, loading: false }); })
       .catch(() => { if (!cancelled) setForwardAuthorization({ stamp: null, signature: null, loading: false }); });
     return () => { cancelled = true; };
-  }, [shouldSignCoverageNote]);
+  }, [needsAprovacaoAuthorization]);
 
   React.useEffect(() => {
     setForwardPositioning(false);
@@ -440,6 +442,60 @@ function ActionDialog({
     );
   }
 
+  if (action.kind === "resposta-cobertura") {
+    const coveragePdfUrl = approvalPdfUrls?.nota;
+    const readyToSign = !forwardAuthorization.loading && Boolean(forwardAuthorization.stamp && forwardAuthorization.signature);
+    const canPosition = Boolean(coveragePdfUrl && (forwardAuthorization.stamp?.imagemUrl || forwardAuthorization.signature?.imagemUrl));
+    const message = `Parecer respondido. ${note}`.trim();
+    if (forwardPositioning && coveragePdfUrl) {
+      return (
+        <StampPositionPicker
+          open
+          onOpenChange={(v) => !v && setForwardPositioning(false)}
+          pdfUrl={coveragePdfUrl}
+          stamp={forwardAuthorization.stamp?.imagemUrl ? { imageUrl: forwardAuthorization.stamp.imagemUrl, label: forwardAuthorization.stamp.nome, initialPosition: forwardAuthorization.stamp.posicaoLivre } : undefined}
+          signature={forwardAuthorization.signature?.imagemUrl ? { imageUrl: forwardAuthorization.signature.imagemUrl, label: forwardAuthorization.signature.proprietario, initialPosition: forwardAuthorization.signature.posicaoLivre } : undefined}
+          onConfirm={(result) => onComplete(message, undefined, result.posicaoCarimbo, result.posicaoAssinatura)}
+        />
+      );
+    }
+    return (
+      <Dialog open onOpenChange={(v) => !v && onClose()}>
+        <DialogContent size="sm">
+          <DialogHeader>
+            <DialogTitle>{action.label} — {expedient.protocolo}</DialogTitle>
+            <DialogDescription>{expedient.assunto} · a nota de cobertura volta directamente a quem pediu o parecer.</DialogDescription>
+          </DialogHeader>
+          <DialogBody className="space-y-3.5">
+            <div>
+              <Label>Observações (opcional)</Label>
+              <Textarea rows={3} placeholder="Acrescente observações à resposta…" value={note} onChange={(e) => setNote(e.target.value)} />
+            </div>
+            {forwardAuthorization.loading && (
+              <p className="text-[13px] text-graphite-500">A verificar o carimbo e a assinatura...</p>
+            )}
+            {!forwardAuthorization.loading && !readyToSign && (
+              <p className="border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-relaxed text-amber-800">
+                {!forwardAuthorization.stamp && "A sua unidade ainda nao tem um carimbo activo. "}
+                {!forwardAuthorization.signature && "Nao tem uma assinatura individual configurada. "}
+                Configure antes de assinar esta nota.
+              </p>
+            )}
+          </DialogBody>
+          <DialogFooter>
+            <Button variant="secondary" onClick={onClose}>Cancelar</Button>
+            <Button
+              disabled={!readyToSign || forwardAuthorization.loading}
+              onClick={() => (canPosition ? setForwardPositioning(true) : onComplete(message, undefined))}
+            >
+              {canPosition ? "Posicionar e enviar" : action.label}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    );
+  }
+
   if (action.kind === "receive-forward") {
     return (
       <ReceiveForwardDialog
@@ -454,6 +510,7 @@ function ActionDialog({
   }
 
   if (action.kind === "nota") {
+    const isCobertura = expedient.pendingNextStatus === "nota_cobertura" || expedient.pendingNextStatus === "resposta_parecer";
     return (
       <DespachoDialog
         expedientId={expedient.id}
@@ -461,9 +518,9 @@ function ActionDialog({
         onClose={onClose}
         onDone={() => { onClose(); router.refresh(); }}
         endpoint="nota"
-        dialogTitle={expedient.pendingNextStatus === "nota_cobertura" ? "Criar nota de cobertura" : "Criar nota"}
-        submitLabel={expedient.pendingNextStatus === "nota_cobertura" ? "Registar nota de cobertura" : "Registar nota"}
-        isCobertura={expedient.pendingNextStatus === "nota_cobertura"}
+        dialogTitle={isCobertura ? "Criar nota de cobertura" : "Criar nota"}
+        submitLabel={isCobertura ? "Registar nota de cobertura" : "Registar nota"}
+        isCobertura={isCobertura}
       />
     );
   }

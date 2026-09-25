@@ -38,6 +38,7 @@ export const STATUS_META: Record<ExpedientStatus, StatusDef> = {
   em_transito: { label: "Em trânsito", badge: "bg-info-50 text-info-700 border-info-200", dot: "bg-info-500", description: "A caminho da secretaria da unidade seguinte, para protocolo e nota.", icon: "Send" },
   nota_pendente: { label: "Nota pendente", badge: "bg-navy-50 text-navy-700 border-navy-200", dot: "bg-navy-500", description: "A secretaria está a preparar a nota de encaminhamento.", icon: "FileEdit" },
   nota_cobertura: { label: "Nota de cobertura", badge: "bg-navy-50 text-navy-700 border-navy-200", dot: "bg-navy-500", description: "Nota de cobertura recebida; a aguardar carimbo/assinatura antes de encaminhar ou pedir parecer.", icon: "FileEdit" },
+  resposta_parecer: { label: "Resposta ao parecer", badge: "bg-navy-50 text-navy-700 border-navy-200", dot: "bg-navy-500", description: "Nota de cobertura da resposta pronta; a aguardar carimbo/assinatura antes de devolver a quem pediu o parecer.", icon: "FileEdit" },
   devolvido: { label: "Devolvido", badge: "bg-crimson-50 text-crimson-700 border-crimson-200", dot: "bg-crimson-500", description: "Devolvido para correcção antes de prosseguir.", icon: "Undo2" },
   aprovado: { label: "Aprovado", badge: "bg-success-50 text-success-700 border-success-200", dot: "bg-success-500", description: "Aprovado pelo responsável competente.", icon: "CheckCircle2" },
   rejeitado: { label: "Rejeitado", badge: "bg-crimson-50 text-crimson-700 border-crimson-200", dot: "bg-crimson-500", description: "Rejeitado. Processo não prossegue nesta forma.", icon: "XCircle" },
@@ -52,7 +53,7 @@ export const STATUS_META: Record<ExpedientStatus, StatusDef> = {
 
 const REMETENTE_FROZEN_AT_RECEBIDO = new Set<ExpedientStatus>([
   "recebido", "protocolado", "encaminhado", "em_analise",
-  "aguardando_parecer", "aguardando_esclarecimento", "em_transito", "nota_pendente", "nota_cobertura",
+  "aguardando_parecer", "aguardando_esclarecimento", "em_transito", "nota_pendente", "nota_cobertura", "resposta_parecer",
   "aprovado", "atrasado",
 ]);
 

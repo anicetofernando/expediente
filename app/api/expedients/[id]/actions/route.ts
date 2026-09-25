@@ -20,10 +20,10 @@ import { hasActionPermission } from "@/lib/permissions";
 const PROFILE_ACTIONS: Record<string, Set<string>> = {
   remetente: new Set(["confirmar", "resposta"]),
   secretaria: new Set(["receber_encaminhar", "devolver", "disponibilizar", "notificar"]),
-  superior: new Set(["encaminhar", "parecer", "aprovar", "aprovar_nota", "rejeitar", "devolver", "resposta", "retomar", "escalar", "disponibilizar", "notificar"]),
+  superior: new Set(["encaminhar", "parecer", "aprovar", "aprovar_nota", "rejeitar", "devolver", "resposta", "responder_nota", "enviar_parecer", "retomar", "escalar", "disponibilizar", "notificar"]),
   administracao: new Set([
     "submeter", "receber_encaminhar", "encaminhar", "parecer", "aprovar", "aprovar_nota", "rejeitar",
-    "devolver", "resposta", "disponibilizar", "confirmar", "arquivar", "retomar", "escalar", "notificar",
+    "devolver", "resposta", "responder_nota", "enviar_parecer", "disponibilizar", "confirmar", "arquivar", "retomar", "escalar", "notificar",
   ]),
 };
 
@@ -37,6 +37,8 @@ const NEXT_STATUS: Record<string, string | undefined> = {
   rejeitar: "rejeitado",
   devolver: "devolvido",
   resposta: "em_analise",
+  responder_nota: "nota_pendente",
+  enviar_parecer: "encaminhado",
   disponibilizar: "disponivel_remetente",
   confirmar: "arquivado",
   arquivar: "arquivado",
@@ -56,6 +58,8 @@ const LABELS: Record<string, string> = {
   rejeitar: "Expediente rejeitado",
   devolver: "Devolvido para correcao",
   resposta: "Resposta registada",
+  responder_nota: "Nota de cobertura da resposta pedida -- Secretaria vai prepara-la",
+  enviar_parecer: "Parecer respondido e devolvido a quem pediu",
   disponibilizar: "Disponibilizado ao remetente",
   confirmar: "Recebimento confirmado e expediente concluido",
   arquivar: "Expediente arquivado",
@@ -77,8 +81,12 @@ const ALLOWED_BY_STATUS: Record<string, string[]> = {
   // Secretaria) e' que se pode subir de nivel ou pedir parecer a outra unidade.
   nota_cobertura: ["encaminhar", "parecer"],
   em_analise: ["encaminhar", "aprovar", "rejeitar", "devolver", "parecer"],
-  aguardando_parecer: ["resposta"],
+  // Tal como Aprovar, quem recebe o pedido de parecer tem as duas opcoes
+  // directamente: despacho imediato, ou pedir nota de cobertura a' Secretaria
+  // (so' depois de assinada, em "resposta_parecer", e' que volta a quem pediu).
+  aguardando_parecer: ["resposta", "responder_nota"],
   aguardando_esclarecimento: ["resposta"],
+  resposta_parecer: ["enviar_parecer"],
   // A caminho da secretaria da unidade seguinte (subida a director, ou pedido
   // de parecer a outra unidade) -- so ela pode receber, protocolar e preparar
   // a nota antes de chegar a pessoa responsavel.
@@ -145,7 +153,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       // Enquanto se aguarda parecer/esclarecimento, so quem recebeu o pedido
       // (o responsavel actual) pode responder -- nao quem o solicitou.
       if (
-        (action === "resposta" || action === "esclarecimento") &&
+        (action === "resposta" || action === "esclarecimento" || action === "responder_nota") &&
         (exp.status === "aguardando_parecer" || exp.status === "aguardando_esclarecimento") &&
         session.perfilNavegacao !== "administracao" &&
         exp.responsible_user_id !== session.user.id
@@ -278,9 +286,44 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
             if (signature.imagemUrl && input.posicaoAssinatura) await rememberSignaturePosition(client, signature.id, input.posicaoAssinatura);
           }
         }
-        // Nos saltos seguintes, o "protocolo" desta etapa e' o proprio numero
-        // atribuido a nota que a Secretaria vai criar a seguir (mesmo mecanismo
-        // do despacho) -- nao duplica outra copia de protocolo aqui.
+        if (!isFirstHop) {
+          // Nos saltos seguintes (encaminhar/pedir parecer entre unidades), o que
+          // chega e' a nota de cobertura, ja' assinada por quem a enviou -- e' dela,
+          // nao do expediente original (ja' protocolado a' entrada), que se tira a
+          // copia de protocolo, disponivel como comprovativo a quem encaminhou ou
+          // pediu o parecer.
+          const coverageNota = await client.query<{
+            id: string; name: string; source: string; mime_type: string | null; size_bytes: string | number; page_count: number;
+            storage_path: string | null; content_html: string | null; confidentiality: string;
+            stamps_metadata: Array<Record<string, unknown>> | null; signatures_metadata: Array<Record<string, unknown>> | null;
+            template_metadata: Record<string, unknown> | null; created_for_unit_id: string | null;
+          }>(
+            `SELECT id,name,source,mime_type,size_bytes,page_count,storage_path,content_html,confidentiality,stamps_metadata,signatures_metadata,template_metadata,created_for_unit_id
+               FROM documents WHERE expedient_id=$1 AND document_kind='nota' ORDER BY created_at DESC LIMIT 1 FOR UPDATE`,
+            [exp.id],
+          );
+          if (coverageNota.rows[0]) {
+            const doc = coverageNota.rows[0];
+            const [stamps, signatures] = await Promise.all([configuredStamps(client), configuredSignatures(client)]);
+            const stamp = resolveUnitStamp(stamps, session.user, session.unitName, session.perfilNavegacao, "secretaria");
+            if (!stamp) throw new Error("A Secretaria ainda nao tem um carimbo institucional activo. Configure-o em Administracao > Carimbos.");
+            const signature = resolveUserSignature(signatures, session.user);
+            if (!signature) throw new Error("Nao tem uma assinatura individual activa. Configure-a em Administracao > Assinaturas.");
+            const stampEntry = stampMetadataJson(stamp, session.user.nome, input.posicaoCarimbo ?? stamp.posicaoLivre);
+            const signatureEntry = signatureMetadataJson(signature, session.user, input.posicaoAssinatura ?? signature.posicaoLivre);
+            const protocolStamps = [...(doc.stamps_metadata ?? []), stampEntry];
+            const protocolSignatures = [...(doc.signatures_metadata ?? []), signatureEntry];
+            await client.query(
+              `INSERT INTO documents(expedient_id,name,document_kind,source,mime_type,size_bytes,page_count,storage_path,content_html,confidentiality,created_by,template_metadata,stamp_id,stamped,signed,stamp_metadata,signature_metadata,stamps_metadata,signatures_metadata,created_for_unit_id)
+               VALUES($1,$2,'protocolo',$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb,$12,true,true,$13::jsonb,$14::jsonb,$15::jsonb,$16::jsonb,$17)`,
+              [exp.id, `Protocolo - ${doc.name}`, doc.source, doc.mime_type, doc.size_bytes, doc.page_count, doc.storage_path, doc.content_html, doc.confidentiality,
+                session.user.id, doc.template_metadata ? JSON.stringify(doc.template_metadata) : null, stamp.id,
+                JSON.stringify(stampEntry), JSON.stringify(signatureEntry), JSON.stringify(protocolStamps), JSON.stringify(protocolSignatures), doc.created_for_unit_id ?? exp.origin_unit_id],
+            );
+            if (stamp.imagemUrl && input.posicaoCarimbo) await rememberStampPosition(client, stamp.id, input.posicaoCarimbo);
+            if (signature.imagemUrl && input.posicaoAssinatura) await rememberSignaturePosition(client, signature.id, input.posicaoAssinatura);
+          }
+        }
 
         // A Secretaria recebeu e protocolou -- agora tem de preparar a nota
         // antes de entregar a pessoa responsavel (accao seguinte, dedicada).
@@ -399,6 +442,55 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         responsible = secretaryId;
         pendingNextStatus = "nota_cobertura";
         nextStep = "Secretaria a preparar a nota de cobertura";
+      }
+
+      if (action === "responder_nota") {
+        // Espelha o aprovar_nota, mas para responder a um parecer: o destino ja'
+        // e' conhecido (quem pediu) -- nao ha escolha de unidade. So' se pede a'
+        // Secretaria da propria unidade para preparar a nota de cobertura em
+        // branco; o chefe assina/carimba e devolve directamente a seguir
+        // (accao "enviar_parecer"), sem voltar a passar pela secretaria de la'.
+        const secretaryId = await resolveSecretaryId(client, exp.recipient_unit_id);
+        if (!secretaryId) throw new Error("Nao existe utilizador activo da Secretaria para preparar a nota de cobertura.");
+        responsible = secretaryId;
+        pendingNextStatus = "resposta_parecer";
+        nextStep = "Secretaria a preparar a nota de cobertura da resposta";
+      }
+
+      if (action === "enviar_parecer") {
+        // Assina/carimba a nota de cobertura que a Secretaria preparou para a
+        // resposta e devolve directamente a quem pediu o parecer -- o destino ja'
+        // e' conhecido, por isso nao ha' escolha de unidade nem novo protocolo.
+        const latestNota = await client.query<{
+          id: string; stamps_metadata: Array<{ id?: string }> | null; signatures_metadata: Array<{ id?: string }> | null;
+        }>(
+          "SELECT id,stamps_metadata,signatures_metadata FROM documents WHERE expedient_id=$1 AND document_kind='nota' ORDER BY created_at DESC LIMIT 1 FOR UPDATE",
+          [exp.id],
+        );
+        if (!latestNota.rows[0]) throw new Error("Nao existe nenhuma nota de cobertura para assinar.");
+        const signatures = await configuredSignatures(client);
+        const signature = resolveUserSignature(signatures, session.user);
+        if (!signature) throw new Error("Nao tem uma assinatura individual activa. Configure-a em Administracao > Assinaturas.");
+        const signatureEntry = signatureMetadataJson(signature, session.user, input.posicaoAssinatura ?? signature.posicaoLivre);
+        const signatureEntries = [...(latestNota.rows[0].signatures_metadata ?? []), signatureEntry];
+        const stamps = await configuredStamps(client);
+        const stamp = resolveUnitStamp(stamps, session.user, session.unitName, session.perfilNavegacao, "aprovacao");
+        if (!stamp) throw new Error("A sua unidade ainda nao tem um carimbo activo. Configure-o em Administracao > Carimbos.");
+        const stampEntry = stampMetadataJson(stamp, session.user.nome, input.posicaoCarimbo ?? stamp.posicaoLivre);
+        const stampEntries = [...(latestNota.rows[0].stamps_metadata ?? []), stampEntry];
+        await client.query(
+          `UPDATE documents SET signed=true,stamped=true,signature_metadata=$2::jsonb,signatures_metadata=$3::jsonb,stamp_id=$4,stamp_metadata=$5::jsonb,stamps_metadata=$6::jsonb WHERE id=$1`,
+          [latestNota.rows[0].id, JSON.stringify(signatureEntry), JSON.stringify(signatureEntries), stamp.id, JSON.stringify(stampEntry), JSON.stringify(stampEntries)],
+        );
+        if (stamp.imagemUrl && input.posicaoCarimbo) await rememberStampPosition(client, stamp.id, input.posicaoCarimbo);
+        if (signature.imagemUrl && input.posicaoAssinatura) await rememberSignaturePosition(client, signature.id, input.posicaoAssinatura);
+
+        const requester = await client.query<{ user_id: string | null }>(
+          "SELECT user_id FROM timeline_events WHERE expedient_id=$1 AND event_type='parecer' ORDER BY created_at DESC LIMIT 1",
+          [exp.id],
+        );
+        if (requester.rows[0]?.user_id) responsible = requester.rows[0].user_id;
+        nextStep = "Parecer recebido -- analise pela unidade requerente";
       }
 
       if (action === "resposta" && exp.status === "devolvido") {

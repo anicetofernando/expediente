@@ -12,6 +12,7 @@ export type ExpedientStatus =
   | "em_transito"
   | "nota_pendente"
   | "nota_cobertura"
+  | "resposta_parecer"
   | "devolvido"
   | "aprovado"
   | "rejeitado"

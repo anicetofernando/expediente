@@ -108,10 +108,11 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 
       // Nota de cobertura: a Secretaria so' cria o documento em branco -- nao
       // assina nem carimba. Quem o faz e' o chefe de servico, mais tarde, ao
-      // encaminhar ou pedir parecer (estado "nota_cobertura"). Em qualquer
-      // outro caso (a primeira nota de cada salto), a Secretaria assina (e,
-      // se escolher, carimba) a nota no proprio acto de a criar.
-      const isCobertura = exp.pending_next_status === "nota_cobertura";
+      // encaminhar ou pedir parecer (estado "nota_cobertura"), ou ao devolver
+      // directamente uma resposta a um parecer (estado "resposta_parecer"). Em
+      // qualquer outro caso (a primeira nota de cada salto), a Secretaria
+      // assina (e, se escolher, carimba) a nota no proprio acto de a criar.
+      const isCobertura = exp.pending_next_status === "nota_cobertura" || exp.pending_next_status === "resposta_parecer";
 
       if (input.documentId) {
         const doc = await client.query<{ id: string; source: string; document_number: string | null }>(
