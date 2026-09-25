@@ -533,10 +533,10 @@ function NovoExpedienteContent() {
             {formatDraftTimestamp(localDraftRestored.updatedAt) ? ` em ${formatDraftTimestamp(localDraftRestored.updatedAt)}.` : "."}
           </Alert>
         )}
-        <section className="flex min-h-[calc(100dvh-9rem)] w-full flex-col border border-graphite-300 bg-white sm:min-h-[520px]">
+        <section className="flex h-[calc(100dvh-9rem)] w-full flex-col overflow-hidden border border-graphite-300 bg-white sm:h-auto sm:min-h-[520px] sm:overflow-visible">
           <WizardProgress current={step} onStepChange={setStep} />
 
-          <div className="flex-1 px-3 py-4 sm:px-6 sm:py-5 lg:px-8 lg:py-6 xl:px-10">
+          <div className="min-h-0 flex-1 overflow-y-auto px-3 py-4 sm:overflow-visible sm:px-6 sm:py-5 lg:px-8 lg:py-6 xl:px-10">
             {step === 0 && <StepBasicInfo state={state} update={update} />}
             {step === 1 && <StepDocumentOrigin state={state} update={update} />}
             {step === 2 && <StepDocument state={state} update={update} />}
@@ -545,7 +545,7 @@ function NovoExpedienteContent() {
             {step === 5 && <StepReview state={state} update={update} />}
           </div>
 
-          <footer className="sticky bottom-0 z-10 flex flex-col-reverse gap-2 border-t border-graphite-200 bg-white/95 px-3 py-3 backdrop-blur-sm sm:flex-row sm:items-center sm:justify-between sm:px-5 lg:px-8">
+          <footer className="sticky bottom-0 z-10 flex shrink-0 flex-col-reverse gap-2 border-t border-graphite-200 bg-white/95 px-3 py-3 backdrop-blur-sm sm:flex-row sm:items-center sm:justify-between sm:px-5 lg:px-8">
             <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-3">
               <Button
                 variant="secondary"

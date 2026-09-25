@@ -52,7 +52,7 @@ export default async function ExpedientDetailPage({ params }: { params: { id: st
           </div>
         </div>
 
-        <div className="mt-2.5 grid grid-cols-1 gap-x-6 gap-y-2 border-t border-graphite-150 pt-2.5 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="mt-2.5 grid grid-cols-2 gap-x-4 gap-y-2 border-t border-graphite-150 pt-2.5 sm:gap-x-6 lg:grid-cols-4">
           <MetaField icon={FileText} label="Tipo" value={expedient.tipoLabel} />
           <MetaField icon={Building2} label="Unidade de origem" value={expedient.unidadeOrigem} />
           <MetaField icon={CalendarClock} label="Entrada" value={formatDate(expedient.dataEntrada)} />
@@ -73,7 +73,7 @@ export default async function ExpedientDetailPage({ params }: { params: { id: st
 
             <TabsContent value="visao-geral" className="pt-5">
               <div className="space-y-4">
-                <div className="grid grid-cols-1 gap-x-6 gap-y-2 border-b border-graphite-150 pb-4 text-[13px] sm:grid-cols-2 xl:grid-cols-4">
+                <div className="grid grid-cols-2 gap-x-4 gap-y-2 border-b border-graphite-150 pb-4 text-[13px] sm:gap-x-6 xl:grid-cols-4">
                   <MetaField icon={User} label="Remetente" value={`${expedient.remetente.nome}${expedient.remetente.unidade ? ` · ${expedient.remetente.unidade}` : ""}`} />
                   <MetaField icon={Building2} label="Destinatário" value={expedient.destinatario} />
                   <MetaField icon={FileText} label="Tipo de expediente" value={expedient.tipoLabel} />
