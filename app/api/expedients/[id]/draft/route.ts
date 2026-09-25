@@ -28,6 +28,7 @@ interface DraftInput {
 
 const ALLOWED_EXTENSIONS = new Set([".pdf", ".docx", ".jpg", ".jpeg", ".png"]);
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const EDITABLE_STATUSES = new Set(["rascunho", "devolvido", "submetido"]);
 
 function validateFile(file: File) {
   if (!ALLOWED_EXTENSIONS.has(path.extname(file.name).toLowerCase())) throw new Error(`Formato nao permitido: ${file.name}`);
@@ -59,8 +60,8 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
        WHERE e.id=$1 LIMIT 1`, [params.id]);
   const row = result.rows[0];
   if (!row) return NextResponse.json({ error: "Rascunho nao encontrado." }, { status: 404 });
-  if (!['rascunho', 'devolvido'].includes(row.status) || (row.created_by !== session.user.id && session.perfilNavegacao !== "administracao")) {
-    return NextResponse.json({ error: "Este expediente nao pode ser editado como rascunho." }, { status: 403 });
+  if (!EDITABLE_STATUSES.has(row.status) || (row.created_by !== session.user.id && session.perfilNavegacao !== "administracao")) {
+    return NextResponse.json({ error: "Este expediente ja nao pode ser editado." }, { status: 403 });
   }
   const attachments = await query<{id:string;name:string;size_bytes:string;confidentiality:Confidentiality}>(
     "SELECT id,name,size_bytes,confidentiality FROM documents WHERE expedient_id=$1 AND document_kind='anexo' ORDER BY created_at", [params.id],
@@ -69,6 +70,7 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
   return NextResponse.json({
     id: row.id,
     protocolo: row.protocol,
+    estado: row.status,
     draft: {
       tipo: row.document_type, unidadeOrigem: row.origin_unit_id, remetente: row.sender_name,
       destinatario: row.recipient_unit_id, assunto: row.subject, prioridade: row.priority,
@@ -111,7 +113,7 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
       );
       const current = found.rows[0];
       if (!current) throw new Error("Rascunho nao encontrado.");
-      if (!['rascunho', 'devolvido'].includes(current.status) || (current.created_by !== session.user.id && session.perfilNavegacao !== "administracao")) throw new Error("Este rascunho ja nao pode ser editado.");
+      if (!EDITABLE_STATUSES.has(current.status) || (current.created_by !== session.user.id && session.perfilNavegacao !== "administracao")) throw new Error("Este expediente ja nao pode ser editado.");
       input.unidadeOrigem = current.origin_unit_id;
       const originUnit = await client.query<{ acronym: string }>("SELECT acronym FROM organizational_units WHERE id=$1 AND active=true", [input.unidadeOrigem]);
       if (!originUnit.rows[0]) throw new Error("Unidade de origem invalida.");
@@ -145,12 +147,23 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
           }
         }
       }
-      // Enquanto se guarda uma pre-visualizacao (carimbo/assinatura) ou um rascunho
-      // parcial, NAO se pode voltar a "rascunho" se ja estava "devolvido" -- isso
-      // esconderia o processo da Secretaria (que so ve rascunhos que ela propria
-      // tocou) ate a submissao final. So a submissao final (rascunho=false) avanca.
-      const nextStatus = submitting ? (isConfidencial ? "encaminhado" : "submetido") : (current.status === "devolvido" ? "devolvido" : "rascunho");
-      const nextStep = submitting ? (isConfidencial ? "Analise directa pelo responsavel (confidencial)" : "Recepcao pela Secretaria") : (current.status === "devolvido" ? "Correccao em curso pelo remetente" : "Continuar a edicao");
+      // Enquanto se guarda uma pre-visualizacao (carimbo/assinatura) ou uma edicao
+      // parcial, nao se deve esconder um processo que ja saiu do remetente. Devolvido
+      // fica devolvido, e submetido continua submetido ate a Secretaria o receber.
+      const nextStatus = submitting
+        ? (isConfidencial ? "encaminhado" : "submetido")
+        : current.status === "devolvido"
+          ? "devolvido"
+          : current.status === "submetido"
+            ? "submetido"
+            : "rascunho";
+      const nextStep = submitting
+        ? (isConfidencial ? "Analise directa pelo responsavel (confidencial)" : "Recepcao pela Secretaria")
+        : current.status === "devolvido"
+          ? "Correccao em curso pelo remetente"
+          : current.status === "submetido"
+            ? "Recepcao pela Secretaria"
+            : "Continuar a edicao";
       const originSecretary = submitting && !isConfidencial ? responsible : null;
       await client.query(`UPDATE expedients SET protocol=$2,subject=$3,document_type=$4,status=$5,priority=$6,confidentiality=$7,sender_name=$8,origin_unit_id=$9,recipient_unit_id=$10,responsible_user_id=$11,origin_secretary_id=COALESCE(origin_secretary_id,$15),due_date=$12,next_step=$13,submitted_at=$14 WHERE id=$1`,
         [params.id,protocol,input.assunto.trim(),input.tipo,nextStatus,input.prioridade,input.confidencialidade,input.remetente.trim(),input.unidadeOrigem,input.destinatario,responsible,input.prazo,nextStep,submitting?new Date().toISOString():null,originSecretary]);

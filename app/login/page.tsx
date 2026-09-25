@@ -6,7 +6,6 @@ import { useRouter } from "next/navigation";
 import { Eye, EyeOff, Lock, LogIn, Mail } from "lucide-react";
 import { AuthShell } from "@/components/layout/auth-shell";
 import { Input, Label } from "@/components/ui/input";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Alert } from "@/components/ui/alert";
 
 export default function LoginPage() {
@@ -14,7 +13,6 @@ export default function LoginPage() {
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
   const [showPassword, setShowPassword] = React.useState(false);
-  const [keepSignedIn, setKeepSignedIn] = React.useState(true);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState("");
 
@@ -30,7 +28,7 @@ export default function LoginPage() {
       const response = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ email, password, persistent: keepSignedIn }),
+        body: JSON.stringify({ email, password, persistent: false }),
       });
       const result = await response.json();
       if (!response.ok) {
@@ -87,16 +85,6 @@ export default function LoginPage() {
             Esqueci a palavra-passe
           </Link>
         </div>
-
-        <label htmlFor="keep-signed-in" className="flex cursor-pointer items-center gap-2.5 text-[13px] leading-5 text-graphite-700">
-          <Checkbox
-            id="keep-signed-in"
-            checked={keepSignedIn}
-            onCheckedChange={(v) => setKeepSignedIn(v === true)}
-            className="size-[18px] border-cfm-500 hover:border-cfm-700 focus-visible:ring-cfm-500/30 data-[state=checked]:border-cfm-700 data-[state=checked]:bg-cfm-700"
-          />
-          <span className="min-w-0">Manter sessão iniciada neste dispositivo</span>
-        </label>
 
         <button
           type="submit"

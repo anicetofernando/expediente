@@ -108,6 +108,15 @@ export function ActionPanel({
         ? { ...action, label: expedient.pendingNextStatus === "nota_cobertura" ? "Criar nota de cobertura" : "Criar nota" }
         : action);
   const [activeAction, setActiveAction] = React.useState<ActionDef | null>(null);
+  const canSenderEdit =
+    perfilNavegacao === "remetente" &&
+    ["rascunho", "devolvido", "submetido"].includes(expedient.estado);
+  const senderEditLabel =
+    expedient.estado === "devolvido"
+      ? "Corrigir e voltar a submeter"
+      : expedient.estado === "submetido"
+        ? "Editar"
+        : "Continuar edição";
 
   async function complete(action: ActionDef, message: string, target?: string, posicaoCarimbo?: FreePosition, posicaoAssinatura?: FreePosition, alvo?: string, posicaoNota?: FreePosition, posicaoReferencia?: FreePosition) {
     try {
@@ -153,7 +162,7 @@ export function ActionPanel({
     );
   }
 
-  if (actions.length === 0 && !["rascunho", "devolvido"].includes(expedient.estado)) {
+  if (actions.length === 0 && !canSenderEdit) {
     return (
       <div className="rounded-lg border border-graphite-200 bg-graphite-50 px-4 py-5 text-center">
         <CheckCircle2 className="mx-auto mb-2 size-5 text-graphite-400" />
@@ -165,10 +174,10 @@ export function ActionPanel({
 
   return (
     <div className="space-y-2">
-      {["rascunho", "devolvido"].includes(expedient.estado) && perfilNavegacao === "remetente" && (
+      {canSenderEdit && (
         <Button asChild className="w-full justify-start">
           <Link href={`/expedientes/novo?rascunho=${expedient.id}`}>
-            <FileEdit className="size-3.5" /> {expedient.estado === "devolvido" ? "Corrigir e voltar a submeter" : "Continuar edição"}
+            <FileEdit className="size-3.5" /> {senderEditLabel}
           </Link>
         </Button>
       )}
