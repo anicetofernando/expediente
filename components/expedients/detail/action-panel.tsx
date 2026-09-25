@@ -782,10 +782,10 @@ function AprovarDialog({
               onClick={() => setModo("finalizar")}
               className={cn(
                 "flex items-start gap-3 border px-3.5 py-2.5 text-left transition-colors",
-                modo === "finalizar" ? "border-navy-700 bg-navy-50" : "border-graphite-200 bg-white hover:border-graphite-400 hover:bg-graphite-50",
+                modo === "finalizar" ? "border-cfm-700 bg-cfm-50" : "border-graphite-200 bg-white hover:border-graphite-400 hover:bg-graphite-50",
               )}
             >
-              <span className={cn("flex size-8 shrink-0 items-center justify-center border", modo === "finalizar" ? "border-navy-300 bg-white text-navy-800" : "border-graphite-200 bg-graphite-50 text-graphite-500")}>
+              <span className={cn("flex size-8 shrink-0 items-center justify-center border", modo === "finalizar" ? "border-cfm-300 bg-white text-cfm-800" : "border-graphite-200 bg-graphite-50 text-graphite-500")}>
                 <CheckCircle2 className="size-4" />
               </span>
               <span>
@@ -798,10 +798,10 @@ function AprovarDialog({
               onClick={() => setModo("cobertura")}
               className={cn(
                 "flex items-start gap-3 border px-3.5 py-2.5 text-left transition-colors",
-                modo === "cobertura" ? "border-navy-700 bg-navy-50" : "border-graphite-200 bg-white hover:border-graphite-400 hover:bg-graphite-50",
+                modo === "cobertura" ? "border-cfm-700 bg-cfm-50" : "border-graphite-200 bg-white hover:border-graphite-400 hover:bg-graphite-50",
               )}
             >
-              <span className={cn("flex size-8 shrink-0 items-center justify-center border", modo === "cobertura" ? "border-navy-300 bg-white text-navy-800" : "border-graphite-200 bg-graphite-50 text-graphite-500")}>
+              <span className={cn("flex size-8 shrink-0 items-center justify-center border", modo === "cobertura" ? "border-cfm-300 bg-white text-cfm-800" : "border-graphite-200 bg-graphite-50 text-graphite-500")}>
                 <FileEdit className="size-4" />
               </span>
               <span>

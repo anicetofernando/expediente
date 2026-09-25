@@ -53,11 +53,11 @@ export function Stepper({ steps, current, onStepChange }: StepperProps) {
                 aria-hidden="true"
                 className={cn(
                   "flex size-7 shrink-0 items-center justify-center border text-[11px] font-semibold tabular-nums",
-                  state === "done" && "border-navy-700 bg-navy-700 text-white",
-                  state === "active" && "border-navy-700 bg-white text-navy-800",
+                  state === "done" && "border-cfm-700 bg-cfm-700 text-white",
+                  state === "active" && "border-cfm-700 bg-white text-cfm-800",
                   state === "upcoming" && "border-graphite-300 bg-white text-graphite-500",
                   isNavigable &&
-                    "group-hover:border-navy-800 group-hover:bg-navy-800 group-focus-visible:outline group-focus-visible:outline-2 group-focus-visible:outline-offset-2 group-focus-visible:outline-navy-300"
+                    "group-hover:border-cfm-800 group-hover:bg-cfm-800 group-focus-visible:outline group-focus-visible:outline-2 group-focus-visible:outline-offset-2 group-focus-visible:outline-cfm-300"
                 )}
               >
                 {state === "done" ? <Check className="size-3.5" strokeWidth={2.25} /> : i + 1}
@@ -67,10 +67,10 @@ export function Stepper({ steps, current, onStepChange }: StepperProps) {
                 title={step.description ?? step.label}
                 className={cn(
                   "block min-w-0 overflow-hidden text-left text-[13px] font-medium leading-4 lg:text-center xl:text-left",
-                  state === "active" && "font-semibold text-navy-900",
+                  state === "active" && "font-semibold text-cfm-900",
                   state === "done" && "text-graphite-700",
                   state === "upcoming" && "text-graphite-500",
-                  isNavigable && "group-hover:text-navy-900"
+                  isNavigable && "group-hover:text-cfm-900"
                 )}
                 style={{
                   display: "-webkit-box",
@@ -95,9 +95,9 @@ export function Stepper({ steps, current, onStepChange }: StepperProps) {
                 <button
                   type="button"
                   className={cn(
-                    "group relative flex min-h-[58px] w-full items-center gap-2.5 px-3 py-2.5 focus-visible:z-10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-inset focus-visible:outline-navy-600",
+                    "group relative flex min-h-[58px] w-full items-center gap-2.5 px-3 py-2.5 focus-visible:z-10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-inset focus-visible:outline-cfm-600",
                     "lg:min-h-[68px] lg:flex-col lg:justify-center lg:gap-1.5 lg:px-2 xl:min-h-[58px] xl:flex-row xl:justify-start xl:gap-2.5 xl:px-3",
-                    state === "done" && "bg-navy-50/50 hover:bg-navy-50"
+                    state === "done" && "bg-cfm-50/50 hover:bg-cfm-50"
                   )}
                   aria-label={`Voltar à etapa ${i + 1}: ${step.label}`}
                   onClick={() => onStepChange?.(i)}
@@ -118,7 +118,7 @@ export function Stepper({ steps, current, onStepChange }: StepperProps) {
               )}
 
               {state === "active" && (
-                <span aria-hidden="true" className="absolute inset-x-0 bottom-0 h-0.5 bg-navy-700" />
+                <span aria-hidden="true" className="absolute inset-x-0 bottom-0 h-0.5 bg-cfm-700" />
               )}
             </li>
           );

@@ -33,18 +33,18 @@ export function StepDocumentOrigin({ state, update }: StepProps) {
               onClick={() => update({ origemDocumento: value })}
               aria-pressed={active}
               className={cn(
-                "relative flex min-h-20 items-center gap-3 border px-3.5 py-3 text-left transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-navy-500",
+                "relative flex min-h-20 items-center gap-3 border px-3.5 py-3 text-left transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-cfm-500",
                 active
-                  ? "border-navy-700 bg-navy-50"
+                  ? "border-cfm-700 bg-cfm-50"
                   : "border-graphite-200 bg-white hover:border-graphite-400 hover:bg-graphite-50"
               )}
             >
               {active && (
-                <span className="absolute right-2 top-2 flex size-4 items-center justify-center bg-navy-800 text-white">
+                <span className="absolute right-2 top-2 flex size-4 items-center justify-center bg-cfm-800 text-white">
                   <Check className="size-2.5" />
                 </span>
               )}
-              <span className={cn("flex size-8 shrink-0 items-center justify-center border", active ? "border-navy-300 bg-white text-navy-800" : "border-graphite-200 bg-graphite-50 text-graphite-500")}>
+              <span className={cn("flex size-8 shrink-0 items-center justify-center border", active ? "border-cfm-300 bg-white text-cfm-800" : "border-graphite-200 bg-graphite-50 text-graphite-500")}>
                 <Icon className="size-4" />
               </span>
               <span className="min-w-0 pr-2">

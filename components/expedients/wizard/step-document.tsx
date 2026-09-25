@@ -89,8 +89,8 @@ export function StepDocument({ state, update }: StepProps) {
     return (
       <div className="w-full">
         {!state.ficheiroNome ? (
-          <label className="flex min-h-52 cursor-pointer flex-col items-center justify-center gap-2.5 border border-dashed border-graphite-400 bg-graphite-50 px-6 py-10 text-center transition-colors hover:border-navy-600 hover:bg-navy-50/40 focus-within:outline focus-within:outline-2 focus-within:outline-offset-1 focus-within:outline-navy-500">
-            <span className="flex size-10 items-center justify-center border border-graphite-300 bg-white text-navy-700">
+          <label className="flex min-h-52 cursor-pointer flex-col items-center justify-center gap-2.5 border border-dashed border-graphite-400 bg-graphite-50 px-6 py-10 text-center transition-colors hover:border-cfm-600 hover:bg-cfm-50/40 focus-within:outline focus-within:outline-2 focus-within:outline-offset-1 focus-within:outline-cfm-500">
+            <span className="flex size-10 items-center justify-center border border-graphite-300 bg-white text-cfm-700">
               <UploadCloud className="size-5" />
             </span>
             <span className="text-[13px] font-medium text-graphite-700">Clique para carregar ou arraste o ficheiro</span>
@@ -114,14 +114,14 @@ export function StepDocument({ state, update }: StepProps) {
             </div>
             <div className="grid grid-cols-1 gap-3 px-3 py-3 sm:grid-cols-[minmax(0,1fr)_110px_140px] sm:items-center">
               <div className="flex min-w-0 items-center gap-2.5">
-                <span className="flex size-8 shrink-0 items-center justify-center border border-graphite-200 bg-graphite-50 text-navy-700"><FileText className="size-4" /></span>
+                <span className="flex size-8 shrink-0 items-center justify-center border border-graphite-200 bg-graphite-50 text-cfm-700"><FileText className="size-4" /></span>
                 <div className="min-w-0">
                   <p className="truncate text-[13px] font-medium text-graphite-900">{state.ficheiroNome}</p>
                   <p className="text-2xs text-graphite-500">{state.numPaginas} página(s)</p>
                 </div>
               </div>
               <span className="inline-flex items-center gap-1.5 text-xs text-graphite-600">
-                <CheckCircle2 className="size-3.5 text-navy-700" /> Validado
+                <CheckCircle2 className="size-3.5 text-cfm-700" /> Validado
               </span>
               <Button variant="secondary" size="sm" className="justify-self-start sm:justify-self-end" onClick={() => update({ ficheiro: undefined, ficheiroNome: "", numPaginas: 0 })}>
                 <RefreshCw className="size-3.5" /> Substituir

@@ -250,7 +250,6 @@ export function LivroBoard({ rows }: { rows: LivroRow[] }) {
                         <div className="flex items-center justify-center">
                           <Link
                             href={href}
-                            prefetch={false}
                             aria-label={`Abrir expediente ${row.protocolo}`}
                             title="Abrir expediente"
                             className="inline-flex size-7 items-center justify-center rounded-sm text-graphite-600 hover:bg-graphite-100 hover:text-cfm-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cfm-500"

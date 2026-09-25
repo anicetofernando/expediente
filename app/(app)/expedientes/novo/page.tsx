@@ -457,7 +457,7 @@ function NovoExpedienteContent() {
 
             <div className="flex flex-1 items-center justify-center px-5 py-10">
               <div className="w-full max-w-xl text-center">
-                <div className="mx-auto mb-4 flex size-12 items-center justify-center border border-navy-200 bg-navy-50 text-navy-800">
+                <div className="mx-auto mb-4 flex size-12 items-center justify-center border border-cfm-200 bg-cfm-50 text-cfm-800">
                   <CheckCircle2 className="size-6" />
                 </div>
                 <h2 className="text-lg font-semibold text-graphite-900">

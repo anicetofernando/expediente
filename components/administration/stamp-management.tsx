@@ -456,7 +456,7 @@ export function StampManagement() {
                             <button
                               type="button"
                               className={cn(
-                                "font-medium text-navy-700 underline-offset-2",
+                                "font-medium text-cfm-700 underline-offset-2",
                                 stamp.utilizacoes > 0
                                   ? "hover:underline"
                                   : "cursor-default text-graphite-400"

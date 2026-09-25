@@ -414,10 +414,10 @@ export function DespachoDialog({
               onClick={() => setModo("sistema")}
               className={cn(
                 "flex items-center gap-3 border px-3.5 py-2.5 text-left transition-colors",
-                modo === "sistema" ? "border-navy-700 bg-navy-50" : "border-graphite-200 bg-white hover:border-graphite-400 hover:bg-graphite-50",
+                modo === "sistema" ? "border-cfm-700 bg-cfm-50" : "border-graphite-200 bg-white hover:border-graphite-400 hover:bg-graphite-50",
               )}
             >
-              <span className={cn("flex size-8 shrink-0 items-center justify-center border", modo === "sistema" ? "border-navy-300 bg-white text-navy-800" : "border-graphite-200 bg-graphite-50 text-graphite-500")}>
+              <span className={cn("flex size-8 shrink-0 items-center justify-center border", modo === "sistema" ? "border-cfm-300 bg-white text-cfm-800" : "border-graphite-200 bg-graphite-50 text-graphite-500")}>
                 <FileEdit className="size-4" />
               </span>
               <span>
@@ -432,10 +432,10 @@ export function DespachoDialog({
               onClick={() => setModo("importado")}
               className={cn(
                 "flex items-center gap-3 border px-3.5 py-2.5 text-left transition-colors",
-                modo === "importado" ? "border-navy-700 bg-navy-50" : "border-graphite-200 bg-white hover:border-graphite-400 hover:bg-graphite-50",
+                modo === "importado" ? "border-cfm-700 bg-cfm-50" : "border-graphite-200 bg-white hover:border-graphite-400 hover:bg-graphite-50",
               )}
             >
-              <span className={cn("flex size-8 shrink-0 items-center justify-center border", modo === "importado" ? "border-navy-300 bg-white text-navy-800" : "border-graphite-200 bg-graphite-50 text-graphite-500")}>
+              <span className={cn("flex size-8 shrink-0 items-center justify-center border", modo === "importado" ? "border-cfm-300 bg-white text-cfm-800" : "border-graphite-200 bg-graphite-50 text-graphite-500")}>
                 <Upload className="size-4" />
               </span>
               <span>
@@ -453,7 +453,7 @@ export function DespachoDialog({
                 value={assunto}
                 onChange={(event) => setAssunto(event.target.value)}
                 placeholder="Escreva o assunto desta nota…"
-                className="mt-1 block w-full border border-graphite-300 px-3 py-1.5 text-[13px] text-graphite-800 outline-none focus:border-navy-500"
+                className="mt-1 block w-full border border-graphite-300 px-3 py-1.5 text-[13px] text-graphite-800 outline-none focus:border-cfm-500"
               />
             </div>
           )}

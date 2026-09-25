@@ -253,7 +253,6 @@ export function ExpedientTableClient({
                     <td className={cn("px-3 align-middle", cellPadding)} title={expedient.protocolo}>
                       <Link
                         href={href}
-                        prefetch={false}
                         className="block truncate font-semibold text-cfm-800 underline-offset-2 hover:text-cfm-950 hover:underline focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cfm-500/30"
                         aria-label={`Abrir expediente ${expedient.protocolo}`}
                       >
@@ -263,7 +262,6 @@ export function ExpedientTableClient({
                     <td className={cn("px-3 align-middle", cellPadding)} title={expedient.assunto}>
                       <Link
                         href={href}
-                        prefetch={false}
                         className="block max-w-[380px] truncate font-medium text-graphite-800 hover:text-cfm-800 hover:underline focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cfm-500/30"
                       >
                         {expedient.assunto}
@@ -300,10 +298,9 @@ export function ExpedientTableClient({
                     <td className={cn("hidden px-3 text-center align-middle md:table-cell", cellPadding)}>
                       <Link
                         href={href}
-                        prefetch={false}
                         title={`Consultar ${expedient.protocolo}`}
                         aria-label={`Consultar expediente ${expedient.protocolo}`}
-                        className="inline-flex size-7 items-center justify-center rounded-sm border border-transparent text-graphite-500 hover:border-graphite-300 hover:bg-graphite-50 hover:text-navy-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-navy-500/30"
+                        className="inline-flex size-7 items-center justify-center rounded-sm border border-transparent text-graphite-500 hover:border-graphite-300 hover:bg-graphite-50 hover:text-cfm-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cfm-500/30"
                       >
                         <Eye className="size-3.5" aria-hidden />
                       </Link>
