@@ -296,9 +296,9 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
             id: string; name: string; source: string; mime_type: string | null; size_bytes: string | number; page_count: number;
             storage_path: string | null; content_html: string | null; confidentiality: string;
             stamps_metadata: Array<Record<string, unknown>> | null; signatures_metadata: Array<Record<string, unknown>> | null;
-            template_metadata: Record<string, unknown> | null; created_for_unit_id: string | null;
+            template_metadata: Record<string, unknown> | null; created_for_unit_id: string | null; document_number: string | null;
           }>(
-            `SELECT id,name,source,mime_type,size_bytes,page_count,storage_path,content_html,confidentiality,stamps_metadata,signatures_metadata,template_metadata,created_for_unit_id
+            `SELECT id,name,source,mime_type,size_bytes,page_count,storage_path,content_html,confidentiality,stamps_metadata,signatures_metadata,template_metadata,created_for_unit_id,document_number
                FROM documents WHERE expedient_id=$1 AND document_kind='nota' ORDER BY created_at DESC LIMIT 1 FOR UPDATE`,
             [exp.id],
           );
@@ -314,11 +314,14 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
             const protocolStamps = [...(doc.stamps_metadata ?? []), stampEntry];
             const protocolSignatures = [...(doc.signatures_metadata ?? []), signatureEntry];
             await client.query(
-              `INSERT INTO documents(expedient_id,name,document_kind,source,mime_type,size_bytes,page_count,storage_path,content_html,confidentiality,created_by,template_metadata,stamp_id,stamped,signed,stamp_metadata,signature_metadata,stamps_metadata,signatures_metadata,created_for_unit_id)
-               VALUES($1,$2,'protocolo',$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb,$12,true,true,$13::jsonb,$14::jsonb,$15::jsonb,$16::jsonb,$17)`,
+              // document_number (copiado da nota) e' o que distingue este protocolo --
+              // o do expediente original nunca o tem -- para so' ficar visivel ao
+              // chefe que enviou a nota, nunca ao "protocolo" do primeiro remetente.
+              `INSERT INTO documents(expedient_id,name,document_kind,source,mime_type,size_bytes,page_count,storage_path,content_html,confidentiality,created_by,template_metadata,stamp_id,stamped,signed,stamp_metadata,signature_metadata,stamps_metadata,signatures_metadata,created_for_unit_id,document_number)
+               VALUES($1,$2,'protocolo',$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb,$12,true,true,$13::jsonb,$14::jsonb,$15::jsonb,$16::jsonb,$17,$18)`,
               [exp.id, `Protocolo - ${doc.name}`, doc.source, doc.mime_type, doc.size_bytes, doc.page_count, doc.storage_path, doc.content_html, doc.confidentiality,
                 session.user.id, doc.template_metadata ? JSON.stringify(doc.template_metadata) : null, stamp.id,
-                JSON.stringify(stampEntry), JSON.stringify(signatureEntry), JSON.stringify(protocolStamps), JSON.stringify(protocolSignatures), doc.created_for_unit_id ?? exp.origin_unit_id],
+                JSON.stringify(stampEntry), JSON.stringify(signatureEntry), JSON.stringify(protocolStamps), JSON.stringify(protocolSignatures), doc.created_for_unit_id ?? exp.origin_unit_id, doc.document_number],
             );
             if (stamp.imagemUrl && input.posicaoCarimbo) await rememberStampPosition(client, stamp.id, input.posicaoCarimbo);
             if (signature.imagemUrl && input.posicaoAssinatura) await rememberSignaturePosition(client, signature.id, input.posicaoAssinatura);
@@ -478,18 +481,26 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         if (!stamp) throw new Error("A sua unidade ainda nao tem um carimbo activo. Configure-o em Administracao > Carimbos.");
         const stampEntry = stampMetadataJson(stamp, session.user.nome, input.posicaoCarimbo ?? stamp.posicaoLivre);
         const stampEntries = [...(latestNota.rows[0].stamps_metadata ?? []), stampEntry];
+        // Depois de assinada e enviada, a nota deixa de ser "so' da unidade que
+        // respondeu" -- passa a ser a resposta partilhada entre as duas unidades,
+        // por isso fica visivel a ambas (created_for_unit_id=NULL), nao so' a
+        // quem a assinou.
         await client.query(
-          `UPDATE documents SET signed=true,stamped=true,signature_metadata=$2::jsonb,signatures_metadata=$3::jsonb,stamp_id=$4,stamp_metadata=$5::jsonb,stamps_metadata=$6::jsonb WHERE id=$1`,
+          `UPDATE documents SET signed=true,stamped=true,signature_metadata=$2::jsonb,signatures_metadata=$3::jsonb,stamp_id=$4,stamp_metadata=$5::jsonb,stamps_metadata=$6::jsonb,created_for_unit_id=NULL WHERE id=$1`,
           [latestNota.rows[0].id, JSON.stringify(signatureEntry), JSON.stringify(signatureEntries), stamp.id, JSON.stringify(stampEntry), JSON.stringify(stampEntries)],
         );
         if (stamp.imagemUrl && input.posicaoCarimbo) await rememberStampPosition(client, stamp.id, input.posicaoCarimbo);
         if (signature.imagemUrl && input.posicaoAssinatura) await rememberSignaturePosition(client, signature.id, input.posicaoAssinatura);
 
-        const requester = await client.query<{ user_id: string | null }>(
-          "SELECT user_id FROM timeline_events WHERE expedient_id=$1 AND event_type='parecer' ORDER BY created_at DESC LIMIT 1",
+        const requester = await client.query<{ user_id: string | null; unit_id: string | null }>(
+          "SELECT user_id,unit_id FROM timeline_events WHERE expedient_id=$1 AND event_type='parecer' ORDER BY created_at DESC LIMIT 1",
           [exp.id],
         );
         if (requester.rows[0]?.user_id) responsible = requester.rows[0].user_id;
+        // Devolve tambem a unidade ao lado de quem pediu -- senao a unidade que
+        // respondeu continuaria a ter acesso colectivo (e a ver accoes como
+        // Aprovar/Rejeitar) sobre um processo que ja nao lhe compete mais.
+        if (requester.rows[0]?.unit_id) recipient = requester.rows[0].unit_id;
         nextStep = "Parecer recebido -- analise pela unidade requerente";
       }
 
@@ -506,11 +517,15 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         // A resposta a um parecer/esclarecimento volta directamente para quem o
         // pediu -- nao fica com quem respondeu.
         const eventType = exp.status === "aguardando_parecer" ? "parecer" : "esclarecimento";
-        const requester = await client.query<{ user_id: string | null }>(
-          "SELECT user_id FROM timeline_events WHERE expedient_id=$1 AND event_type=$2 ORDER BY created_at DESC LIMIT 1",
+        const requester = await client.query<{ user_id: string | null; unit_id: string | null }>(
+          "SELECT user_id,unit_id FROM timeline_events WHERE expedient_id=$1 AND event_type=$2 ORDER BY created_at DESC LIMIT 1",
           [exp.id, eventType],
         );
         if (requester.rows[0]?.user_id) responsible = requester.rows[0].user_id;
+        // No caso de parecer (entre duas unidades), devolve tambem a unidade a
+        // quem pediu -- senao quem respondeu manteria acesso colectivo (e
+        // accoes como Aprovar/Rejeitar) sobre um processo que ja nao lhe compete.
+        if (eventType === "parecer" && requester.rows[0]?.unit_id) recipient = requester.rows[0].unit_id;
         // Volta para "encaminhado" (nao "em_analise") para que quem solicitou
         // continue no mesmo ciclo de notas -- exactamente como o despacho de
         // parecer (rota dedicada /resposta) ja faz.

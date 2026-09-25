@@ -105,14 +105,16 @@ const SENDER_RELEASED_DOCUMENT_STATUSES = new Set<ExpedientStatus>(["disponivel_
 
 function isVisibleDocumentForSession(
   session: AuthSession,
-  doc: { document_kind: ExpedientDocument["tipo"]; created_for_unit_id?: string | null },
+  doc: { document_kind: ExpedientDocument["tipo"]; created_for_unit_id?: string | null; document_number?: string | null },
   status: ExpedientStatus,
 ) {
   if (session.perfilNavegacao === "superior") {
     // Um "protocolo" so' e' visivel para o chefe da unidade a quem serve de
-    // comprovativo (ex.: quem encaminhou ou pediu parecer recebe o protocolo
-    // da nota de cobertura que enviou) -- nunca o de outra unidade.
-    if (doc.document_kind === "protocolo") return doc.created_for_unit_id === session.user.unidadeId;
+    // comprovativo -- e so' quando protocola uma nota de cobertura que ele
+    // proprio enviou (identificada por ter document_number, copiado da nota --
+    // o protocolo do expediente original, do primeiro remetente, nunca tem
+    // document_number e nunca e' visivel ao chefe, so' ao proprio remetente).
+    if (doc.document_kind === "protocolo") return Boolean(doc.document_number) && doc.created_for_unit_id === session.user.unidadeId;
     if (doc.document_kind === "nota") return doc.created_for_unit_id === null || doc.created_for_unit_id === session.user.unidadeId;
     return true;
   }
