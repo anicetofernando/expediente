@@ -63,7 +63,7 @@ function PdfPagePreview({
     const slowTimer = setTimeout(() => { if (!cancelled) setSlow(true); }, 4000);
     async function renderWithPdfJs(url: string) {
       const pdfjs = await loadPdfJsRuntime();
-      const response = await fetch(url, { cache: "no-store", credentials: "same-origin" });
+      const response = await fetch(url, { credentials: "same-origin" });
       if (!response.ok) throw new Error(`PDF preview fetch failed: ${response.status}`);
       const bytes = new Uint8Array(await response.arrayBuffer());
       if (bytes.length === 0) throw new Error("PDF preview is empty.");

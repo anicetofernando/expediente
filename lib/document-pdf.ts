@@ -463,11 +463,21 @@ async function bodyFromInput(input: PdfDocumentInput) {
   return `<pre style="white-space:pre-wrap">${escapeHtml(input.sourceFile.toString("utf8"))}</pre>`;
 }
 
-export async function createDocumentPdf(input: PdfDocumentInput) {
-  const key = createHash("sha256")
+/**
+ * Assinatura de conteudo do PDF final (texto/ficheiro + carimbos/assinaturas/
+ * modelo aplicados) -- identica sempre que nada disto mudou, o que permite
+ * tanto a cache em memoria abaixo como o ETag exposto pela rota HTTP (evita
+ * relancar o Chromium sem necessidade, que e' a parte lenta da geracao).
+ */
+export function pdfCacheKey(input: PdfDocumentInput) {
+  return createHash("sha256")
     .update(input.contentHtml ?? input.sourceFile ?? "")
     .update(JSON.stringify({ protocol: input.protocol, stamps: input.stamps, signatures: input.signatures, template: input.template, institutionName: input.institutionName, watermark: input.watermark, issuingUnit: input.issuingUnit, issuingParentUnit: input.issuingParentUnit, recipientUnit: input.recipientUnit, recipientParentUnit: input.recipientParentUnit, documentNumber: input.documentNumber, documentKind: input.documentKind, decisionNote: input.decisionNote, reference: input.reference }))
     .digest("hex");
+}
+
+export async function createDocumentPdf(input: PdfDocumentInput) {
+  const key = pdfCacheKey(input);
   const cached = outputCache.get(key);
   if (cached) return cached;
   const output = isPdfInput(input)

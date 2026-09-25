@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getCurrentSession } from "@/lib/auth";
 import { query } from "@/lib/db";
 import { loadFile } from "@/lib/file-storage";
-import { createDocumentPdf, type PdfReferenceMetadata, type PdfSignatureMetadata, type PdfStampMetadata } from "@/lib/document-pdf";
+import { createDocumentPdf, pdfCacheKey, type PdfDocumentInput, type PdfReferenceMetadata, type PdfSignatureMetadata, type PdfStampMetadata } from "@/lib/document-pdf";
 import { ensureDocumentReferenceMetadataColumn } from "@/lib/document-schema";
 import type { DocumentTemplate, FreePosition } from "@/types";
 
@@ -56,7 +56,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     const catalogs = await query<{ setting_value: { documentTemplates?: Partial<DocumentTemplate>[] } | null }>("SELECT setting_value FROM system_settings WHERE setting_key='catalogs'");
     const templates = catalogs.rows[0]?.setting_value?.documentTemplates ?? [];
     const liveTemplate = templates.find((item) => item.id === doc.template_metadata?.id) ?? templates.find((item) => item.estado === "activo") ?? doc.template_metadata;
-    const pdf = await createDocumentPdf({
+    const pdfInput: PdfDocumentInput = {
       name: doc.name, mimeType: doc.mime_type, contentHtml: doc.content_html, sourceFile,
       protocol: doc.protocol, subject: doc.own_subject ?? doc.subject, stamps: doc.stamps_metadata ?? [], signatures: doc.signatures_metadata ?? [],
       template: liveTemplate, institutionName, watermark: doc.document_kind === "protocolo" ? "Protocolo" : undefined,
@@ -67,10 +67,19 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       documentNumber: doc.document_number, documentKind: doc.document_kind,
       decisionNote: doc.decision_note,
       reference: doc.reference_metadata,
-    });
+    };
     const name = `${doc.name.replace(/\.[^.]+$/, "").replace(/["\r\n]/g, "")}.pdf`;
     const disposition = request.nextUrl.searchParams.get("download") === "1" ? "attachment" : "inline";
-    return new NextResponse(pdf, { headers: { "content-type": "application/pdf", "content-disposition": `${disposition}; filename="${name}"`, "content-length": String(pdf.length), "cache-control": "private, no-cache" } });
+    // O conteudo final (texto/ficheiro + carimbos/assinaturas/modelo) so' muda
+    // quando algo disto muda -- por isso o ETag permite ao browser reutilizar o
+    // PDF ja' obtido (304) em vez de esperar todo o processo de geracao outra
+    // vez, que e' a parte lenta (lanca um Chromium sem interface por baixo).
+    const etag = `"${pdfCacheKey(pdfInput)}"`;
+    if (request.headers.get("if-none-match") === etag) {
+      return new NextResponse(null, { status: 304, headers: { etag, "cache-control": "private, must-revalidate" } });
+    }
+    const pdf = await createDocumentPdf(pdfInput);
+    return new NextResponse(pdf, { headers: { "content-type": "application/pdf", "content-disposition": `${disposition}; filename="${name}"`, "content-length": String(pdf.length), "cache-control": "private, must-revalidate", etag } });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Nao foi possivel gerar o PDF." }, { status: 500 });
   }

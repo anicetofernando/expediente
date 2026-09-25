@@ -6,6 +6,11 @@ import { loadPdfJsRuntime, type PdfDocumentProxy } from "@/lib/pdfjs-runtime";
 import { Button } from "@/components/ui/button";
 
 const MAX_RENDER_WIDTH = 900;
+const MAX_ATTEMPTS = 3;
+
+function delay(ms: number) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
 
 /**
  * Mostra o PDF pagina a pagina, desenhado directamente em <canvas> via pdf.js
@@ -40,15 +45,29 @@ export function PdfCanvasViewer({ url }: { url: string }) {
     docRef.current = null;
     (async () => {
       const pdfjs = await loadPdfJsRuntime();
-      const response = await fetch(url, { cache: "no-store", credentials: "same-origin" });
-      if (!response.ok) throw new Error(`Falha ao obter o PDF: ${response.status}`);
-      const bytes = new Uint8Array(await response.arrayBuffer());
-      if (bytes.length === 0) throw new Error("PDF vazio.");
-      const doc = await pdfjs.getDocument({ data: bytes }).promise;
-      if (cancelled) return;
-      docRef.current = doc;
-      canvasRefs.current = new Array(doc.numPages).fill(null);
-      setPageCount(doc.numPages);
+      // Numa ligacao lenta/instavel (comum em mobile) uma falha isolada nao
+      // deve deixar o documento por abrir -- tenta mais duas vezes antes de
+      // mostrar o aviso com a alternativa de abrir num separador novo.
+      let lastError: unknown;
+      for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+        if (cancelled) return;
+        try {
+          const response = await fetch(url, { credentials: "same-origin" });
+          if (!response.ok) throw new Error(`Falha ao obter o PDF: ${response.status}`);
+          const bytes = new Uint8Array(await response.arrayBuffer());
+          if (bytes.length === 0) throw new Error("PDF vazio.");
+          const doc = await pdfjs.getDocument({ data: bytes }).promise;
+          if (cancelled) return;
+          docRef.current = doc;
+          canvasRefs.current = new Array(doc.numPages).fill(null);
+          setPageCount(doc.numPages);
+          return;
+        } catch (error) {
+          lastError = error;
+          if (attempt < MAX_ATTEMPTS) await delay(attempt * 800);
+        }
+      }
+      throw lastError;
     })().catch((error) => {
       console.warn("[pdf-canvas-viewer] load failed", error);
       if (!cancelled) setStatus("error");
@@ -107,7 +126,7 @@ export function PdfCanvasViewer({ url }: { url: string }) {
     <div ref={containerRef} className="flex h-full w-full flex-col items-center gap-3 overflow-auto py-2">
       {status === "loading" && (
         <div className="flex h-full min-h-[280px] flex-col items-center justify-center gap-2 text-[13px] text-graphite-500">
-          <span className="size-5 animate-spin rounded-full border-2 border-graphite-300 border-t-navy-700" />
+          <span className="size-5 animate-spin rounded-full border-2 border-graphite-300 border-t-cfm-700" />
           <span>A carregar documento…</span>
         </div>
       )}
