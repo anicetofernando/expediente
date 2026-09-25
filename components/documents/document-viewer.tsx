@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { SimpleTooltip } from "@/components/ui/tooltip";
+import { PdfCanvasViewer } from "@/components/documents/pdf-canvas-viewer";
 import { useSession } from "@/lib/session";
 import { hasPermission } from "@/lib/permissions";
 
@@ -95,19 +96,23 @@ export function DocumentViewer({ document: doc }: { document: ExpedientDocument 
     </div>
   );
 
+  const isImageOriginal = version === "original" && Boolean(doc.mimeType?.startsWith("image/"));
+
   const Canvas = (
     <div className="min-h-0 flex-1 bg-graphite-200/70 p-1.5 sm:p-3">
-      {viewUrl ? (
-        <iframe
-          key={`${version}-${viewUrl}`}
-          title={`Pré-visualização de ${doc.nome}`}
-          src={version === "pdf" ? `${viewUrl}#toolbar=1&navpanes=0&view=FitH` : viewUrl}
-          className="h-full min-h-[420px] w-full border border-graphite-300 bg-white shadow-sm sm:min-h-[620px] lg:min-h-[680px]"
-        />
-      ) : (
+      {!viewUrl ? (
         <div className="flex h-full min-h-[420px] flex-col items-center justify-center gap-3 border border-graphite-300 bg-white p-8 text-center sm:min-h-[620px] lg:min-h-[680px]">
           <FileText className="size-10 text-graphite-300" />
           <p className="text-[13px] font-medium text-graphite-600">Pré-visualização indisponível</p>
+        </div>
+      ) : isImageOriginal ? (
+        <div className="flex h-full min-h-[420px] items-center justify-center overflow-auto border border-graphite-300 bg-white sm:min-h-[620px] lg:min-h-[680px]">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={viewUrl} alt={doc.nome} className="max-h-full max-w-full object-contain" />
+        </div>
+      ) : (
+        <div className="h-full min-h-[420px] border border-graphite-300 bg-white shadow-sm sm:min-h-[620px] lg:min-h-[680px]">
+          <PdfCanvasViewer key={`${version}-${viewUrl}`} url={viewUrl} />
         </div>
       )}
     </div>
