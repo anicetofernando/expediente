@@ -506,7 +506,7 @@ function NovoExpedienteContent() {
   }
 
   return (
-    <div className="flex min-h-full flex-col">
+    <div className="flex h-full min-h-0 flex-col sm:h-auto sm:min-h-full">
       <PageHeader
           title={draftId ? "Editar rascunho" : "Novo expediente"}
           breadcrumb={[{ label: "Expediente" }, { label: draftId ? "Editar rascunho" : "Novo expediente" }]}
@@ -518,7 +518,7 @@ function NovoExpedienteContent() {
         }
       />
 
-      <div className="mx-auto flex w-full max-w-[1600px] flex-1 flex-col gap-3 px-3 py-3 sm:px-4 lg:px-5 lg:py-4 2xl:px-6">
+      <div className="mx-auto flex w-full min-h-0 max-w-[1600px] flex-1 flex-col gap-3 px-3 py-3 sm:px-4 lg:px-5 lg:py-4 2xl:px-6">
         {localDraftRestored && (
           <Alert
             variant="success"
@@ -533,7 +533,13 @@ function NovoExpedienteContent() {
             {formatDraftTimestamp(localDraftRestored.updatedAt) ? ` em ${formatDraftTimestamp(localDraftRestored.updatedAt)}.` : "."}
           </Alert>
         )}
-        <section className="flex h-[calc(100dvh-9rem)] w-full flex-col overflow-hidden border border-graphite-300 bg-white sm:h-auto sm:min-h-[520px] sm:overflow-visible">
+        {/* No mobile, esta caixa ocupa exactamente o espaco que sobra dentro de
+            <main> (via flex-1/min-h-0 em toda a cadeia, sem calculos de altura
+            fixos que dependiam de adivinhar a altura do cabecalho/barra de
+            comandos) -- so o conteudo do passo actual tem scroll proprio,
+            o rodape com os botoes fica sempre visivel. No desktop mantem-se o
+            comportamento original: a pagina toda pode crescer e rolar. */}
+        <section className="flex min-h-0 w-full flex-1 flex-col overflow-hidden border border-graphite-300 bg-white sm:flex-none sm:overflow-visible sm:min-h-[520px]">
           <WizardProgress current={step} onStepChange={setStep} />
 
           <div className="min-h-0 flex-1 overflow-y-auto px-3 py-4 sm:overflow-visible sm:px-6 sm:py-5 lg:px-8 lg:py-6 xl:px-10">
