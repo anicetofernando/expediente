@@ -22,7 +22,7 @@ import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { CatalogsProvider, useCatalogs } from "@/lib/catalogs";
 import { useSession } from "@/lib/session";
-import type { Confidentiality, Priority } from "@/types";
+import type { Confidentiality, ExpedientStatus, Priority } from "@/types";
 import {
   initialWizardState,
   type WizardState,
@@ -148,6 +148,7 @@ function NovoExpedienteContent() {
   const [saving, setSaving] = React.useState(false);
   const [draftLoading, setDraftLoading] = React.useState(Boolean(draftId));
   const [effectiveDraftId, setEffectiveDraftId] = React.useState(draftId);
+  const [editingStatus, setEditingStatus] = React.useState<ExpedientStatus | null>(null);
   const [remoteDraftLoaded, setRemoteDraftLoaded] = React.useState(!draftId);
   const [localDraftReady, setLocalDraftReady] = React.useState(false);
   const [localDraftRestored, setLocalDraftRestored] = React.useState<LocalExpedientDraft | null>(null);
@@ -248,6 +249,7 @@ function NovoExpedienteContent() {
 
   React.useEffect(() => {
     if (!draftId) {
+      setEditingStatus(null);
       setRemoteDraftLoaded(true);
       return;
     }
@@ -258,7 +260,10 @@ function NovoExpedienteContent() {
       .then(async (response) => {
         const result = await response.json();
         if (!response.ok) throw new Error(result.error ?? "Nao foi possivel abrir o rascunho.");
-        if (!cancelled) setState({ ...initialWizardState, ...result.draft });
+        if (!cancelled) {
+          setState({ ...initialWizardState, ...result.draft });
+          setEditingStatus((result.estado ?? null) as ExpedientStatus | null);
+        }
       })
       .catch((error) => {
         toast({ title: "Rascunho indisponivel", description: error instanceof Error ? error.message : "Erro inesperado.", variant: "destructive" });
@@ -398,7 +403,7 @@ function NovoExpedienteContent() {
       if (!response.ok) throw new Error(result.error ?? "Não foi possível guardar o expediente.");
       if (!effectiveDraftId) setEffectiveDraftId(result.id);
       await clearLocalDraft();
-      toast({ title: rascunho ? "Rascunho guardado" : "Expediente submetido", variant: "success" });
+      toast({ title: rascunho ? (editingSubmitted ? "Alterações guardadas" : "Rascunho guardado") : "Expediente submetido", variant: "success" });
       setSubmitted({ id: result.id, protocolo: result.protocolo, rascunho });
       setStep(6);
     } catch (error) {
@@ -439,6 +444,9 @@ function NovoExpedienteContent() {
           ? "Rascunho local não guardado"
           : "";
 
+  const editingSubmitted = editingStatus === "submetido";
+  const editingLabel = draftId ? (editingSubmitted ? "Editar expediente" : "Editar rascunho") : "Novo expediente";
+
   if (draftLoading) {
     return <div className="flex min-h-[520px] items-center justify-center text-sm text-graphite-500">A abrir o rascunho…</div>;
   }
@@ -447,8 +455,8 @@ function NovoExpedienteContent() {
     return (
       <div className="flex min-h-full flex-col">
         <PageHeader
-          title={draftId ? "Rascunho actualizado" : "Novo expediente"}
-          breadcrumb={[{ label: "Expediente" }, { label: draftId ? "Editar rascunho" : "Novo expediente" }]}
+          title={draftId ? (editingSubmitted ? "Expediente actualizado" : "Rascunho actualizado") : "Novo expediente"}
+          breadcrumb={[{ label: "Expediente" }, { label: editingLabel }]}
         />
 
         <div className="mx-auto flex w-full max-w-[1600px] flex-1 px-3 py-3 sm:px-4 lg:px-5 lg:py-4 2xl:px-6">
@@ -461,11 +469,13 @@ function NovoExpedienteContent() {
                   <CheckCircle2 className="size-6" />
                 </div>
                 <h2 className="text-lg font-semibold text-graphite-900">
-                  {submitted.rascunho ? "Rascunho guardado" : "Expediente submetido"}
+                  {submitted.rascunho ? (editingSubmitted ? "Alterações guardadas" : "Rascunho guardado") : "Expediente submetido"}
                 </h2>
                 <p className="mt-1.5 text-[13px] text-graphite-500">
                   {submitted.rascunho
-                    ? "Pode continuar a edição em Caixa de saída."
+                    ? editingSubmitted
+                      ? "O expediente continua submetido e aguardando recepção pela Secretaria."
+                      : "Pode continuar a edição em Caixa de saída."
                     : "O processo foi encaminhado para recepção e protocolo."}
                 </p>
                 <div className="mx-auto mt-5 inline-flex items-center gap-2 border border-graphite-200 bg-graphite-50 px-4 py-2.5">
@@ -508,8 +518,8 @@ function NovoExpedienteContent() {
   return (
     <div className="flex h-full min-h-0 flex-col sm:h-auto sm:min-h-full">
       <PageHeader
-          title={draftId ? "Editar rascunho" : "Novo expediente"}
-          breadcrumb={[{ label: "Expediente" }, { label: draftId ? "Editar rascunho" : "Novo expediente" }]}
+          title={editingLabel}
+          breadcrumb={[{ label: "Expediente" }, { label: editingLabel }]}
         actions={
           <Button variant="toolbar" size="sm" onClick={() => setCancelOpen(true)}>
             <X className="size-3.5" />
@@ -578,7 +588,7 @@ function NovoExpedienteContent() {
                 <>
                   <Button className="w-full sm:w-auto" variant="secondary" onClick={() => persist(true)} loading={saving} disabled={saving}>
                     <Save className="size-3.5" />
-                    Guardar rascunho
+                    {editingSubmitted ? "Guardar alterações" : "Guardar rascunho"}
                   </Button>
                   <Button className="w-full sm:w-auto" onClick={() => persist(false)} loading={saving} disabled={saving}>
                     <Send className="size-3.5" />

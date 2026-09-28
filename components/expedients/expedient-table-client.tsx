@@ -189,7 +189,7 @@ export function ExpedientTableClient({
         </div>
       ) : (
         <div className="min-h-0 flex-1 overflow-auto">
-          <table className="w-full table-fixed border-collapse text-left text-xs leading-5 md:table-auto md:min-w-[1110px]">
+          <table className="w-full min-w-[1110px] border-collapse text-left text-xs leading-5">
             <thead className="sticky top-0 z-10 border-b border-graphite-200 bg-graphite-50">
               <tr>
                 <SortableHeader
@@ -199,35 +199,35 @@ export function ExpedientTableClient({
                   onSort={changeSort}
                   className="w-[150px]"
                 />
-                <th scope="col" className="px-3 py-1.5 text-2xs font-semibold uppercase tracking-wide text-cfm-800 md:min-w-[300px]">
+                <th scope="col" className="min-w-[300px] px-3 py-1.5 text-2xs font-semibold uppercase tracking-wide text-cfm-800">
                   Assunto
                 </th>
-                <th scope="col" className="hidden w-[170px] px-3 py-1.5 text-2xs font-semibold uppercase tracking-wide text-cfm-800 md:table-cell">
+                <th scope="col" className="w-[170px] px-3 py-1.5 text-2xs font-semibold uppercase tracking-wide text-cfm-800">
                   Remetente
                 </th>
-                <th scope="col" className="hidden w-[190px] px-3 py-1.5 text-2xs font-semibold uppercase tracking-wide text-cfm-800 md:table-cell">
+                <th scope="col" className="w-[190px] px-3 py-1.5 text-2xs font-semibold uppercase tracking-wide text-cfm-800">
                   Responsável
                 </th>
-                <th scope="col" className="w-11 px-3 py-1.5 text-2xs font-semibold uppercase tracking-wide text-cfm-800 md:w-[160px]">
-                  <span className="sr-only md:not-sr-only">Estado</span>
+                <th scope="col" className="w-[160px] px-3 py-1.5 text-2xs font-semibold uppercase tracking-wide text-cfm-800">
+                  Estado
                 </th>
                 <SortableHeader
                   label="Entrada"
                   sortKey="dataEntrada"
                   sort={sort}
                   onSort={changeSort}
-                  className="hidden w-[112px] md:table-cell"
+                  className="w-[112px]"
                 />
                 <SortableHeader
                   label="Prazo"
                   sortKey="prazo"
                   sort={sort}
                   onSort={changeSort}
-                  className="hidden w-[112px] md:table-cell"
+                  className="w-[112px]"
                 />
                 <th
                   scope="col"
-                  className="hidden w-16 px-3 py-1.5 text-center text-2xs font-semibold uppercase tracking-wide text-cfm-800 md:table-cell"
+                  className="w-16 px-3 py-1.5 text-center text-2xs font-semibold uppercase tracking-wide text-cfm-800"
                 >
                   Acções
                 </th>
@@ -267,10 +267,10 @@ export function ExpedientTableClient({
                         {expedient.assunto}
                       </Link>
                     </td>
-                    <td className={cn("hidden px-3 align-middle text-graphite-600 md:table-cell", cellPadding)} title={expedient.remetente}>
+                    <td className={cn("px-3 align-middle text-graphite-600", cellPadding)} title={expedient.remetente}>
                       <span className="block max-w-[150px] truncate">{expedient.remetente}</span>
                     </td>
-                    <td className={cn("hidden px-3 align-middle text-graphite-600 md:table-cell", cellPadding)} title={expedient.responsavelActual}>
+                    <td className={cn("px-3 align-middle text-graphite-600", cellPadding)} title={expedient.responsavelActual}>
                       <span className="block max-w-[170px] truncate">{expedient.responsavelActual}</span>
                     </td>
                     <td className={cn("px-3 align-middle", cellPadding)}>
@@ -279,23 +279,22 @@ export function ExpedientTableClient({
                         title={status.description}
                       >
                         <span className={cn("size-1.5 shrink-0 rounded-full", status.dot)} aria-hidden="true" />
-                        <span className="hidden md:inline">{status.label}</span>
-                        <span className="sr-only md:hidden">{status.label}</span>
+                        {status.label}
                       </span>
                     </td>
-                    <td className={cn("hidden whitespace-nowrap px-3 align-middle tabular-nums text-graphite-500 md:table-cell", cellPadding)}>
+                    <td className={cn("whitespace-nowrap px-3 align-middle tabular-nums text-graphite-500", cellPadding)}>
                       {formatDate(expedient.dataEntrada)}
                     </td>
                     <td
                       className={cn(
-                        "hidden whitespace-nowrap px-3 align-middle tabular-nums md:table-cell",
+                        "whitespace-nowrap px-3 align-middle tabular-nums",
                         cellPadding,
                         expedient.atrasado ? "font-semibold text-crimson-700" : "text-graphite-500"
                       )}
                     >
                       {formatDate(expedient.prazo)}
                     </td>
-                    <td className={cn("hidden px-3 text-center align-middle md:table-cell", cellPadding)}>
+                    <td className={cn("px-3 text-center align-middle", cellPadding)}>
                       <Link
                         href={href}
                         title={`Consultar ${expedient.protocolo}`}
