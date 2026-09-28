@@ -14,8 +14,8 @@ export function AuthShell({
         className="absolute inset-0 h-dvh w-full object-cover object-[36%_center] lg:h-screen lg:object-center"
       />
       <div aria-hidden className="absolute inset-0 bg-cfm-900/55 lg:hidden" />
-      <div aria-hidden className="absolute inset-y-0 left-0 hidden w-[38%] bg-cfm-900/[0.72] lg:block" />
-      <div aria-hidden className="absolute inset-y-0 right-0 hidden left-[38%] bg-white/[0.84] lg:block" />
+      <div aria-hidden className="absolute inset-y-0 left-0 hidden w-[38%] bg-cfm-950/[0.64] lg:block" />
+      <div aria-hidden className="absolute inset-y-0 right-0 hidden left-[38%] bg-white/[0.70] lg:block" />
 
       <aside className="relative hidden items-center justify-center overflow-hidden lg:flex">
         {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -23,13 +23,13 @@ export function AuthShell({
       </aside>
 
       <main className="relative z-10 flex min-h-dvh items-center justify-center overflow-y-auto px-4 py-6 sm:px-5 sm:py-10 lg:min-h-screen lg:px-5 lg:py-10">
-        <div className="w-full max-w-[20.75rem] sm:max-w-sm lg:max-w-[34rem]">
+        <div className="w-full max-w-[20.75rem] sm:max-w-sm lg:max-w-[28rem]">
           <div className="mb-6 flex justify-center sm:mb-7 lg:hidden">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/cfm-white.webp" alt="CFM" className="h-auto w-40 sm:w-44" />
           </div>
 
-          <div className="border border-graphite-200 border-t-2 border-t-cfm-600 bg-white/95 p-5 backdrop-blur-sm sm:p-7 lg:p-10">
+          <div className="border border-graphite-200 border-t-2 border-t-cfm-600 bg-white/95 p-5 backdrop-blur-sm sm:p-7 lg:flex lg:min-h-[22rem] lg:flex-col lg:justify-center lg:p-9">
             {children}
           </div>
         </div>
