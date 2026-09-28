@@ -22,11 +22,11 @@ export function AuthShell({
         <img src="/cfm-white.webp" alt="CFM" className="relative z-10 h-auto w-56 xl:w-64" />
       </aside>
 
-      <main className="relative z-10 flex min-h-dvh flex-col justify-end overflow-y-auto pt-16 sm:pt-20 lg:min-h-screen lg:items-center lg:justify-center lg:px-5 lg:py-10">
-        <div className="w-full max-w-[24rem] sm:max-w-md lg:max-w-[34rem]">
-          <div className="mb-16 flex justify-center sm:mb-20 lg:hidden">
+      <main className="relative z-10 flex min-h-dvh items-center justify-center overflow-y-auto px-4 py-6 sm:px-5 sm:py-10 lg:min-h-screen lg:px-5 lg:py-10">
+        <div className="w-full max-w-[20.75rem] sm:max-w-sm lg:max-w-[34rem]">
+          <div className="mb-6 flex justify-center sm:mb-7 lg:hidden">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/cfm-white.webp" alt="CFM" className="h-auto w-52 sm:w-56" />
+            <img src="/cfm-white.webp" alt="CFM" className="h-auto w-40 sm:w-44" />
           </div>
 
           <div className="border border-graphite-200 border-t-2 border-t-cfm-600 bg-white/95 p-5 backdrop-blur-sm sm:p-7 lg:p-10">
