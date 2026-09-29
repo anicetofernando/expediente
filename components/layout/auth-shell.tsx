@@ -14,8 +14,8 @@ export function AuthShell({
         className="absolute inset-0 h-dvh w-full object-cover object-[36%_center] lg:h-screen lg:object-center"
       />
       <div aria-hidden className="absolute inset-0 bg-cfm-900/55 lg:hidden" />
-      <div aria-hidden className="absolute inset-y-0 left-0 hidden w-[38%] bg-cfm-950/[0.64] lg:block" />
-      <div aria-hidden className="absolute inset-y-0 right-0 hidden left-[38%] bg-white/[0.70] lg:block" />
+      <div aria-hidden className="absolute inset-y-0 left-0 hidden w-[38%] bg-cfm-950/[0.82] lg:block" />
+      <div aria-hidden className="absolute inset-y-0 right-0 hidden left-[38%] bg-white/[0.88] lg:block" />
 
       <aside className="relative hidden items-center justify-center overflow-hidden lg:flex">
         {/* eslint-disable-next-line @next/next/no-img-element */}
