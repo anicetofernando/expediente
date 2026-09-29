@@ -1,23 +1,38 @@
 "use client";
 
 import * as React from "react";
-import { ExternalLink } from "lucide-react";
+import { ExternalLink, FileText } from "lucide-react";
 import { loadPdfJsRuntime, type PdfDocumentProxy } from "@/lib/pdfjs-runtime";
+import { Button } from "@/components/ui/button";
 
 const MAX_RENDER_WIDTH = 900;
+const MAX_OUTPUT_SCALE = 2;
 const MAX_ATTEMPTS = 3;
 
 function delay(ms: number) {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
 
+function describeError(error: unknown) {
+  if (error instanceof Error) return error.message || error.name;
+  if (typeof error === "string") return error;
+  try {
+    return JSON.stringify(error);
+  } catch {
+    return "Erro desconhecido.";
+  }
+}
+
 /**
  * Mostra o PDF pagina a pagina, desenhado directamente em <canvas> via pdf.js
- * -- ao contrario de um <iframe> puro apontado para o visualizador nativo do
- * browser, que em muitos browsers moveis fica em branco ou nao abre. Se o
- * pdf.js falhar (ex.: browser sem suporte a "module workers", comum em
- * WebView Android mais antigo), cai automaticamente para o <iframe> nativo
- * como rede de seguranca, com um link directo como ultimo recurso.
+ * -- ao contrario de um <iframe> apontado para o visualizador nativo do
+ * browser, que nem sempre mostra o PDF embutido (alguns browsers moveis
+ * mostram so um botao "abrir" em vez do conteudo). Se o pdf.js falhar por
+ * qualquer motivo, a alternativa e' a mais fiavel de todas em mobile: uma
+ * ligacao directa que abre o PDF a serio (navegacao completa, nao embutida),
+ * em vez de insistir noutra forma de o embutir que pode falhar da mesma
+ * maneira. Mostra tambem o erro tecnico, para ser possivel diagnosticar se
+ * persistir.
  */
 export function PdfCanvasViewer({ url }: { url: string }) {
   const containerRef = React.useRef<HTMLDivElement>(null);
@@ -26,6 +41,7 @@ export function PdfCanvasViewer({ url }: { url: string }) {
   const [status, setStatus] = React.useState<"loading" | "ready" | "fallback">("loading");
   const [pageCount, setPageCount] = React.useState(0);
   const [width, setWidth] = React.useState(0);
+  const [errorDetail, setErrorDetail] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     const el = containerRef.current;
@@ -42,12 +58,13 @@ export function PdfCanvasViewer({ url }: { url: string }) {
     let cancelled = false;
     setStatus("loading");
     setPageCount(0);
+    setErrorDetail(null);
     docRef.current = null;
     (async () => {
       const pdfjs = await loadPdfJsRuntime();
       // Numa ligacao lenta/instavel (comum em mobile) uma falha isolada nao
       // deve deixar o documento por abrir -- tenta mais duas vezes antes de
-      // mostrar o aviso com a alternativa de abrir num separador novo.
+      // desistir.
       let lastError: unknown;
       for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
         if (cancelled) return;
@@ -69,13 +86,10 @@ export function PdfCanvasViewer({ url }: { url: string }) {
       }
       throw lastError;
     })().catch((error) => {
-      // Alguns browsers moveis reais (sobretudo WebView Android mais antigo)
-      // nao suportam "module workers", que o pdf.js exige -- isso nunca
-      // aparece a testar em emulacao no Chrome do computador (que suporta
-      // sempre), so' em dispositivos reais. Em vez de desistir, cai para um
-      // <iframe> directo ao PDF, que nao depende disso.
-      console.warn("[pdf-canvas-viewer] load failed, falling back to iframe", error);
-      if (!cancelled) setStatus("fallback");
+      console.warn("[pdf-canvas-viewer] load failed", error);
+      if (cancelled) return;
+      setErrorDetail(describeError(error));
+      setStatus("fallback");
     });
     return () => { cancelled = true; };
   }, [url]);
@@ -85,7 +99,7 @@ export function PdfCanvasViewer({ url }: { url: string }) {
     let cancelled = false;
     (async () => {
       const doc = docRef.current!;
-      const outputScale = window.devicePixelRatio || 1;
+      const outputScale = Math.min(window.devicePixelRatio || 1, MAX_OUTPUT_SCALE);
       const targetWidth = Math.min(width, MAX_RENDER_WIDTH);
       for (let pageNumber = 1; pageNumber <= doc.numPages; pageNumber++) {
         if (cancelled) return;
@@ -109,24 +123,23 @@ export function PdfCanvasViewer({ url }: { url: string }) {
       }
       if (!cancelled) setStatus("ready");
     })().catch((error) => {
-      console.warn("[pdf-canvas-viewer] render failed, falling back to iframe", error);
-      if (!cancelled) setStatus("fallback");
+      console.warn("[pdf-canvas-viewer] render failed", error);
+      if (cancelled) return;
+      setErrorDetail(describeError(error));
+      setStatus("fallback");
     });
     return () => { cancelled = true; };
   }, [pageCount, width]);
 
   if (status === "fallback") {
     return (
-      <div className="flex h-full min-h-[320px] w-full flex-col gap-2">
-        <a
-          href={url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="mx-auto inline-flex shrink-0 items-center gap-1.5 text-2xs font-medium text-cfm-700 underline-offset-2 hover:underline"
-        >
-          <ExternalLink className="size-3" /> Não consegue ver o documento abaixo? Abrir num separador novo
-        </a>
-        <iframe title="Pré-visualização do documento" src={url} className="min-h-0 w-full flex-1 border border-graphite-300 bg-white" />
+      <div className="flex h-full min-h-[320px] w-full flex-col items-center justify-center gap-3 p-6 text-center">
+        <FileText className="size-10 text-graphite-300" />
+        <p className="text-[13px] font-medium text-graphite-700">Não é possível mostrar a pré-visualização neste navegador.</p>
+        <Button asChild>
+          <a href={url} target="_blank" rel="noopener noreferrer"><ExternalLink className="size-4" /> Abrir documento</a>
+        </Button>
+        {errorDetail && <p className="mt-2 max-w-xs text-2xs text-graphite-400">Detalhe técnico: {errorDetail}</p>}
       </div>
     );
   }
