@@ -57,6 +57,9 @@ export default async function ExpedientDetailPage({ params }: { params: { id: st
           <MetaField icon={Building2} label="Unidade de origem" value={expedient.unidadeOrigem} />
           <MetaField icon={CalendarClock} label="Entrada" value={formatDate(expedient.dataEntrada)} />
           <MetaField icon={CalendarClock} label="Prazo" value={formatDate(expedient.prazo)} highlight={expedient.atrasado} />
+          <MetaField icon={User} label="Remetente" value={`${expedient.remetente.nome}${expedient.remetente.unidade ? ` · ${expedient.remetente.unidade}` : ""}`} />
+          <MetaField icon={Building2} label="Destinatário" value={expedient.destinatario} />
+          <MetaField icon={ArrowRight} label="Próxima etapa" value={expedient.proximaEtapa} />
         </div>
       </div>
 
@@ -73,12 +76,6 @@ export default async function ExpedientDetailPage({ params }: { params: { id: st
 
             <TabsContent value="visao-geral" className="pt-5">
               <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-x-4 gap-y-2 border-b border-graphite-150 pb-4 text-[13px] sm:gap-x-6 xl:grid-cols-4">
-                  <MetaField icon={User} label="Remetente" value={`${expedient.remetente.nome}${expedient.remetente.unidade ? ` · ${expedient.remetente.unidade}` : ""}`} />
-                  <MetaField icon={Building2} label="Destinatário" value={expedient.destinatario} />
-                  <MetaField icon={FileText} label="Tipo de expediente" value={expedient.tipoLabel} />
-                  <MetaField icon={ArrowRight} label="Próxima etapa" value={expedient.proximaEtapa} />
-                </div>
                 {(expedient.descricao || expedient.observacoes) && (
                   <dl className="grid grid-cols-1 gap-4 text-[13px] sm:grid-cols-2">
                     {expedient.descricao && <Field label="Descrição" value={expedient.descricao} block />}
@@ -96,7 +93,7 @@ export default async function ExpedientDetailPage({ params }: { params: { id: st
                     {expedient.processosRelacionados.map((r) => (
                       <li key={r.protocolo} className="flex items-center gap-2 border border-graphite-150 px-3 py-2 text-[13px]">
                         <FileText className="size-3.5 text-graphite-400" />
-                        <span className="font-medium text-navy-700">{r.protocolo}</span>
+                        <span className="font-medium text-cfm-700">{r.protocolo}</span>
                         <span className="truncate text-graphite-500">{r.assunto}</span>
                       </li>
                     ))}
