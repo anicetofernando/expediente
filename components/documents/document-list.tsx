@@ -20,25 +20,25 @@ export function DocumentList({ title, docs }: { title?: string; docs: Expedient[
             <button
               type="button"
               onClick={() => setPreview(doc)}
-              className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-graphite-50"
+              className="flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-graphite-50"
             >
               <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-graphite-100 text-graphite-500">
                 <FileText className="size-4" />
               </span>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-[13px] font-medium text-navy-700">
+              <div className="min-w-0 flex-1 space-y-1.5">
+                <p className="truncate text-[13px] font-medium text-cfm-700">
                   {doc.numero && <span className="mr-1.5 text-graphite-500">{doc.numero} ·</span>}
                   {doc.nome}
                 </p>
-                <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-2xs text-graphite-400">
-                  <span>{doc.paginas} pág.</span><span>·</span><span>{doc.tamanho}</span><span>·</span>
-                  <span>{doc.origem}</span><span>·</span>
-                  <span>{formatDate(doc.criadoEm)}</span>
+                <p className="text-2xs text-graphite-400">
+                  {doc.paginas} pág. · {doc.tamanho} · {doc.origem} · {formatDate(doc.criadoEm)}
+                </p>
+                <div className="flex flex-wrap items-center gap-1.5">
                   {doc.carimbado && <Badge variant="navy">Carimbado</Badge>}
                   {doc.assinado && <Badge variant="success">Assinado</Badge>}
-                </p>
+                  <ConfidentialityBadge level={doc.confidencialidade} />
+                </div>
               </div>
-              <ConfidentialityBadge level={doc.confidencialidade} />
             </button>
           </li>
         ))}

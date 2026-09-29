@@ -86,11 +86,11 @@ export function AttachmentsTable({ documents }: { documents: FlatDocument[] }) {
                       <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-graphite-100 text-graphite-500">
                         <Paperclip className="size-3.5" />
                       </span>
-                      <span className="truncate font-medium text-navy-700 hover:underline" title={doc.nome}>{doc.nome}</span>
+                      <span className="truncate font-medium text-cfm-700 hover:underline" title={doc.nome}>{doc.nome}</span>
                     </button>
                   </TableCell>
                   <TableCell className="whitespace-nowrap">
-                    <Link href={`/expedientes/${doc.expedienteId}`} className="font-medium text-navy-700 hover:underline">
+                    <Link href={`/expedientes/${doc.expedienteId}`} className="font-medium text-cfm-700 hover:underline">
                       {doc.protocolo}
                     </Link>
                   </TableCell>
