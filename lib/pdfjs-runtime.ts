@@ -1,7 +1,12 @@
 "use client";
 
 const PDFJS_LOADER_URL = "/pdfjs-loader.mjs";
-const PDFJS_WORKER_URL = "/pdf.worker.min.mjs";
+// Aponta para o wrapper (nao directamente para /pdf.worker.min.mjs) para que
+// o polyfill de Uint8Array.toHex/etc. (ver public/pdfjs-polyfill.mjs) seja
+// aplicado dentro da propria worker antes do codigo do pdf.js correr --
+// necessario porque a worker tem o seu proprio "realm" JS, separado da
+// pagina principal.
+const PDFJS_WORKER_URL = "/pdf-worker-wrapper.mjs";
 
 export type PdfViewport = { width: number; height: number };
 export type PdfPageProxy = {
