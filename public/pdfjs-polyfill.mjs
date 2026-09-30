@@ -42,3 +42,24 @@ if (typeof Uint8Array.fromBase64 !== "function") {
     return out;
   };
 }
+
+// Polyfill do Map/WeakMap.getOrInsert(Computed) (proposta TC39 "upsert"),
+// ainda mais recente que a dos Uint8Array acima -- mesma razao: o pdf.js ja
+// assume que existe, mas em muitos browsers moveis reais ainda nao existe.
+for (const Ctor of [Map, WeakMap]) {
+  if (typeof Ctor.prototype.getOrInsert !== "function") {
+    Ctor.prototype.getOrInsert = function getOrInsert(key, value) {
+      if (this.has(key)) return this.get(key);
+      this.set(key, value);
+      return value;
+    };
+  }
+  if (typeof Ctor.prototype.getOrInsertComputed !== "function") {
+    Ctor.prototype.getOrInsertComputed = function getOrInsertComputed(key, callbackfn) {
+      if (this.has(key)) return this.get(key);
+      const value = callbackfn(key);
+      this.set(key, value);
+      return value;
+    };
+  }
+}
