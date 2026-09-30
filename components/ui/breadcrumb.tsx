@@ -9,8 +9,8 @@ export interface BreadcrumbItem {
 
 export function Breadcrumb({ items, className }: { items: BreadcrumbItem[]; className?: string }) {
   return (
-    <nav aria-label="Breadcrumb" className={cn("min-w-0 text-2xs leading-4 text-graphite-500", className)}>
-      <ol className="flex min-w-0 items-center gap-1">
+    <nav aria-label="Breadcrumb" className={cn("min-w-0 overflow-hidden text-2xs leading-4 text-graphite-500", className)}>
+      <ol className="flex min-w-0 flex-nowrap items-center gap-1 overflow-hidden">
         <li className="flex shrink-0 items-center">
           <Link
             href="/painel"

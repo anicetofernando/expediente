@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import type { Expedient } from "@/types";
 import {
-  User, Building2, CalendarClock, FileText, ArrowRight, History as HistoryIcon,
+  User, Building2, CalendarClock, FileText, History as HistoryIcon,
 } from "lucide-react";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { StatusBadge, PriorityBadge, ConfidentialityBadge } from "@/components/ui/badge";
@@ -36,6 +36,10 @@ export default async function ExpedientDetailPage({ params }: { params: { id: st
   // ver lib/status.ts#remetenteDisplayStatus. Isto e so' para a etiqueta
   // apresentada; a logica de accoes usa sempre expedient.estado real.
   const displayEstado = session.perfilNavegacao === "remetente" ? remetenteDisplayStatus(expedient.estado) : expedient.estado;
+  // O remetente ja sabe que o processo e' dele -- so' precisa de acompanhar
+  // entrada/prazo/destinatario. Quem tramita (secretaria e outros perfis)
+  // tambem precisa de saber quem enviou.
+  const isRemetenteProfile = session.perfilNavegacao === "remetente";
 
   return (
     <CatalogsProvider>
@@ -53,13 +57,17 @@ export default async function ExpedientDetailPage({ params }: { params: { id: st
         </div>
 
         <div className="mt-2.5 grid grid-cols-2 gap-x-4 gap-y-2 border-t border-graphite-150 pt-2.5 sm:gap-x-6 lg:grid-cols-4">
-          <MetaField icon={FileText} label="Tipo" value={expedient.tipoLabel} />
-          <MetaField icon={Building2} label="Unidade de origem" value={expedient.unidadeOrigem} />
+          {!isRemetenteProfile && (
+            <MetaField
+              icon={User}
+              label="Remetente"
+              value={`${expedient.remetente.nome}${expedient.remetente.unidade ? ` · ${expedient.remetente.unidade}` : ""}`}
+              wrap
+            />
+          )}
           <MetaField icon={CalendarClock} label="Entrada" value={formatDate(expedient.dataEntrada)} />
           <MetaField icon={CalendarClock} label="Prazo" value={formatDate(expedient.prazo)} highlight={expedient.atrasado} />
-          <MetaField icon={User} label="Remetente" value={`${expedient.remetente.nome}${expedient.remetente.unidade ? ` · ${expedient.remetente.unidade}` : ""}`} />
-          <MetaField icon={Building2} label="Destinatário" value={expedient.destinatario} />
-          <MetaField icon={ArrowRight} label="Próxima etapa" value={expedient.proximaEtapa} />
+          <MetaField icon={Building2} label="Destinatário" value={expedient.destinatario} wrap />
         </div>
       </div>
 
@@ -188,11 +196,11 @@ export default async function ExpedientDetailPage({ params }: { params: { id: st
   );
 }
 
-function MetaField({ icon: Icon, label, value, highlight }: { icon: React.ComponentType<{ className?: string }>; label: string; value: string; highlight?: boolean }) {
+function MetaField({ icon: Icon, label, value, highlight, wrap }: { icon: React.ComponentType<{ className?: string }>; label: string; value: string; highlight?: boolean; wrap?: boolean }) {
   return (
-    <div>
+    <div className="min-w-0">
       <p className="flex items-center gap-1 text-2xs uppercase tracking-wide text-graphite-400"><Icon className="size-3" /> {label}</p>
-      <p className={`mt-0.5 truncate text-[13px] font-medium ${highlight ? "text-crimson-600" : "text-graphite-800"}`}>{value}</p>
+      <p className={`mt-0.5 text-[13px] font-medium ${wrap ? "break-words" : "truncate"} ${highlight ? "text-crimson-600" : "text-graphite-800"}`}>{value}</p>
     </div>
   );
 }
