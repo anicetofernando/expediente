@@ -46,16 +46,16 @@ export default function LoginPage() {
 
   return (
     <AuthShell>
-      <h1 className="text-[28px] font-semibold leading-9 tracking-tight text-cfm-900 sm:text-xl sm:leading-7">Iniciar sessão</h1>
+      <h1 className="text-[25px] font-semibold leading-8 tracking-tight text-cfm-900 sm:text-xl sm:leading-7">Iniciar sessão</h1>
 
-      <form onSubmit={handleSubmit} className="mt-6 space-y-5 sm:mt-5 sm:space-y-4">
+      <form onSubmit={handleSubmit} className="mt-4 space-y-4 sm:mt-5 sm:space-y-4">
         {error && <Alert variant="destructive">{error}</Alert>}
 
         <div>
           <Label htmlFor="email" required className="text-[13px] leading-5">E-mail</Label>
           <div className="relative">
             <Mail className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-graphite-400" />
-            <Input id="email" type="email" placeholder="nome.apelido@cfm.co.mz" className="h-12 pl-11 text-[16px] sm:h-8 sm:pl-9 sm:text-[13px]" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="username" />
+            <Input id="email" type="email" placeholder="nome.apelido@cfm.co.mz" className="h-11 pl-10 text-[15px] sm:h-8 sm:pl-9 sm:text-[13px]" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="username" />
           </div>
         </div>
 
@@ -67,7 +67,7 @@ export default function LoginPage() {
               id="password"
               type={showPassword ? "text" : "password"}
               placeholder="••••••••••"
-              className="h-12 pl-11 pr-11 text-[16px] sm:h-8 sm:pl-9 sm:pr-9 sm:text-[13px]"
+              className="h-11 pl-10 pr-10 text-[15px] sm:h-8 sm:pl-9 sm:pr-9 sm:text-[13px]"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               autoComplete="current-password"
@@ -81,7 +81,7 @@ export default function LoginPage() {
               {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
             </button>
           </div>
-          <Link href="/recuperar-acesso" className="mt-2 inline-flex text-[13px] font-medium leading-5 text-cfm-700 underline-offset-3 hover:text-cfm-900 hover:underline">
+          <Link href="/recuperar-acesso" className="mt-1.5 inline-flex text-[13px] font-medium leading-5 text-cfm-700 underline-offset-3 hover:text-cfm-900 hover:underline">
             Esqueci a palavra-passe
           </Link>
         </div>
@@ -89,7 +89,7 @@ export default function LoginPage() {
         <button
           type="submit"
           disabled={loading}
-          className="inline-flex h-12 w-full select-none items-center justify-center gap-2 rounded-sm border border-cfm-700 border-b-cfm-500 bg-cfm-700 px-4 text-[16px] font-semibold text-white transition-colors duration-100 hover:border-cfm-800 hover:border-b-cfm-600 hover:bg-cfm-800 active:border-cfm-900 active:bg-cfm-900 disabled:cursor-not-allowed disabled:border-graphite-200 disabled:bg-graphite-200 disabled:text-graphite-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-cfm-500 sm:h-8 sm:text-[13px]"
+          className="inline-flex h-11 w-full select-none items-center justify-center gap-2 rounded-sm border border-cfm-700 border-b-cfm-500 bg-cfm-700 px-4 text-[15px] font-semibold text-white transition-colors duration-100 hover:border-cfm-800 hover:border-b-cfm-600 hover:bg-cfm-800 active:border-cfm-900 active:bg-cfm-900 disabled:cursor-not-allowed disabled:border-graphite-200 disabled:bg-graphite-200 disabled:text-graphite-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-cfm-500 sm:h-8 sm:text-[13px]"
           aria-busy={loading || undefined}
         >
           {loading && (
